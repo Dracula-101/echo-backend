@@ -22,10 +22,16 @@ type Builder struct {
 	earlyMiddleware    []Middleware
 	lateMiddleware     []Middleware
 	systemEndpoints    []Endpoint
+	routeGroups        []routeGroupRegistration
 	notFoundHandler    Handler
 	notAllowedHandler  Handler
 	enableSystemRoutes bool
 	logger             logger.Logger
+}
+
+type routeGroupRegistration struct {
+	prefix    string
+	registrar func(*RouteGroup)
 }
 
 func NewBuilder() *Builder {
@@ -41,10 +47,11 @@ func NewBuilder() *Builder {
 	}
 	log.Debug("Router builder logger initialized")
 	return &Builder{
-		router:             &Router{mux: mux.NewRouter()},
+		router:             New(),
 		earlyMiddleware:    make([]Middleware, 0),
 		lateMiddleware:     make([]Middleware, 0),
 		systemEndpoints:    make([]Endpoint, 0),
+		routeGroups:        make([]routeGroupRegistration, 0),
 		enableSystemRoutes: true,
 		logger:             log,
 	}
@@ -81,7 +88,7 @@ func (b *Builder) WithHealthEndpoint(path string, handler Handler) *Builder {
 		Handler: http.HandlerFunc(handler),
 		Method:  http.MethodGet,
 	})
-	b.logger.Debug("Health endpoint registered", logger.String("path", path))
+	b.logger.Debug("Health endpoint queued", logger.String("path", path))
 	return b
 }
 
@@ -91,7 +98,7 @@ func (b *Builder) WithMetricsEndpoint(path string, handler Handler) *Builder {
 		Handler: http.HandlerFunc(handler),
 		Method:  http.MethodGet,
 	})
-	b.logger.Debug("Metrics endpoint registered", logger.String("path", path))
+	b.logger.Debug("Metrics endpoint queued", logger.String("path", path))
 	return b
 }
 
@@ -101,7 +108,7 @@ func (b *Builder) WithVersionEndpoint(path string, handler Handler) *Builder {
 		Handler: http.HandlerFunc(handler),
 		Method:  http.MethodGet,
 	})
-	b.logger.Debug("Version endpoint registered", logger.String("path", path))
+	b.logger.Debug("Version endpoint queued", logger.String("path", path))
 	return b
 }
 
@@ -111,19 +118,19 @@ func (b *Builder) WithStatusEndpoint(path string, handler Handler) *Builder {
 		Handler: http.HandlerFunc(handler),
 		Method:  http.MethodGet,
 	})
-	b.logger.Debug("Status endpoint registered", logger.String("path", path))
+	b.logger.Debug("Status endpoint queued", logger.String("path", path))
 	return b
 }
 
 func (b *Builder) WithNotFoundHandler(handler Handler) *Builder {
 	b.notFoundHandler = handler
-	b.logger.Debug("Not Found handler added")
+	b.logger.Debug("Not Found handler queued")
 	return b
 }
 
 func (b *Builder) WithMethodNotAllowedHandler(handler Handler) *Builder {
 	b.notAllowedHandler = handler
-	b.logger.Debug("Method Not Allowed handler added")
+	b.logger.Debug("Method Not Allowed handler queued")
 	return b
 }
 
@@ -132,17 +139,22 @@ func (b *Builder) DisableSystemRoutes() *Builder {
 	return b
 }
 
-func (b *Builder) Build() *Router {
-	b.logger.Debug("Building router with middleware chain")
-	for _, mw := range b.earlyMiddleware {
-		b.router.Use(mux.MiddlewareFunc(mw))
-		b.logger.Debug("Applied early middleware", logger.String("middleware", getFunctionName(mw)))
-	}
+func (b *Builder) WithRoutes(registrar func(*Router)) *Builder {
+	registrar(b.router)
+	return b
+}
 
-	for _, mw := range b.lateMiddleware {
-		b.router.Use(mux.MiddlewareFunc(mw))
-		b.logger.Debug("Applied late middleware", logger.String("middleware", getFunctionName(mw)))
-	}
+func (b *Builder) WithRoutesGroup(prefix string, registrar func(*RouteGroup)) *Builder {
+	b.routeGroups = append(b.routeGroups, routeGroupRegistration{
+		prefix:    prefix,
+		registrar: registrar,
+	})
+	b.logger.Debug("Route group queued", logger.String("prefix", prefix))
+	return b
+}
+
+func (b *Builder) Build() *Router {
+	b.logger.Debug("Building router - registering routes in priority order")
 
 	if b.enableSystemRoutes {
 		for _, endpoint := range b.systemEndpoints {
@@ -150,24 +162,42 @@ func (b *Builder) Build() *Router {
 			b.logger.Debug("System endpoint registered",
 				logger.String("path", endpoint.Path),
 				logger.String("method", endpoint.Method),
-				logger.String("handler", getFunctionName(endpoint.Handler)),
 			)
 		}
 	}
 
+	for _, rg := range b.routeGroups {
+		group := b.router.Group(rg.prefix)
+		rg.registrar(group)
+		b.logger.Debug("Route group registered", logger.String("prefix", rg.prefix))
+	}
+
+	for _, mw := range b.earlyMiddleware {
+		b.router.Use(mux.MiddlewareFunc(mw))
+		b.logger.Debug("Applied early middleware", logger.String("name", getFunctionName(mw)))
+	}
+
+	for _, mw := range b.lateMiddleware {
+		b.router.Use(mux.MiddlewareFunc(mw))
+		b.logger.Debug("Applied late middleware", logger.String("name", getFunctionName(mw)))
+	}
+
 	if b.notFoundHandler != nil {
-		b.logger.Debug("Not Found handler registered with middleware chain")
 		b.router.Mux().NotFoundHandler = http.HandlerFunc(b.notFoundHandler)
-	} else {
-		b.logger.Warn("No Not Found handler registered")
+		b.logger.Debug("Not Found handler registered")
 	}
 
 	if b.notAllowedHandler != nil {
-		b.logger.Debug("Method Not Allowed handler registered with middleware chain")
 		b.router.Mux().MethodNotAllowedHandler = http.HandlerFunc(b.notAllowedHandler)
-	} else {
-		b.logger.Warn("No Method Not Allowed handler registered")
+		b.logger.Debug("Method Not Allowed handler registered")
 	}
+
+	b.logger.Info("Router built successfully",
+		logger.Int("system_endpoints", len(b.systemEndpoints)),
+		logger.Int("route_groups", len(b.routeGroups)),
+		logger.Int("early_middleware", len(b.earlyMiddleware)),
+		logger.Int("late_middleware", len(b.lateMiddleware)),
+	)
 
 	return b.router
 }
@@ -196,17 +226,4 @@ func DefaultSystemEndpointsConfig() *SystemEndpointsConfig {
 		VersionPath:   "/version",
 		StatusPath:    "/status",
 	}
-}
-
-type RouteRegistrar func(*Router)
-
-func (b *Builder) WithRoutes(registrar RouteRegistrar) *Builder {
-	registrar(b.router)
-	return b
-}
-
-func (b *Builder) WithRoutesGroup(prefix string, registrar func(*RouteGroup)) *Builder {
-	group := b.router.Group(prefix)
-	registrar(group)
-	return b
 }

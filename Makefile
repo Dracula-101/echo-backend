@@ -5,8 +5,7 @@
 .PHONY: test setup
 
 # Docker Compose files
-COMPOSE_FILE = docker-compose.yml
-AUTH_COMPOSE_FILE = services/auth-service/docker-compose.auth.yml
+COMPOSE_FILE = infra/docker/docker-compose.dev.yml
 
 # Default target
 .DEFAULT_GOAL := help

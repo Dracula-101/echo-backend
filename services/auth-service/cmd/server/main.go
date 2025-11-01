@@ -130,7 +130,7 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 
 func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering auth routes")
-	builder.WithRoutes(func(r *router.Router) {
+	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/register", h.Register)
 		r.Post("/login", h.Login)
 		r.Post("/logout", h.Logout)
