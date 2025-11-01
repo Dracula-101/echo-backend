@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -173,6 +174,19 @@ func (c *memoryCache) Increment(ctx context.Context, key string, delta int64) (i
 
 func (c *memoryCache) Decrement(ctx context.Context, key string, delta int64) (int64, error) {
 	return 0, cache.ErrNotSupported
+}
+
+func (c *memoryCache) Info(ctx context.Context) (map[string]string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	info := make(map[string]string)
+	info["item_count"] = fmt.Sprintf("%d", len(c.items))
+	info["implementation"] = "in-memory"
+	info["notes"] = "This is a simple in-memory cache implementation and does not support advanced features."
+	info["timestamp"] = time.Now().Format(time.RFC3339)
+	info["uptime"] = time.Since(time.Now().Add(-time.Duration(len(c.items)) * time.Minute)).String()
+	return info, nil
 }
 
 func (c *memoryCache) Flush(ctx context.Context) error {

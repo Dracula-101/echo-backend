@@ -141,6 +141,61 @@ func (c *client) Decrement(ctx context.Context, key string, delta int64) (int64,
 	return c.rdb.DecrBy(ctx, key, delta).Result()
 }
 
+func (c *client) Info(ctx context.Context) (map[string]string, error) {
+	c.logger.Debug("Fetching Redis INFO")
+	result, err := c.rdb.Info(ctx).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	info := make(map[string]string)
+	lines := splitLines(result)
+	var currentSection string
+
+	for _, line := range lines {
+		if len(line) == 0 || line[0] == '#' {
+			if len(line) > 2 && line[0] == '#' {
+				currentSection = line[2:]
+			}
+			continue
+		}
+		parts := splitKeyValue(line)
+		if len(parts) == 2 {
+			key := parts[0]
+			if currentSection != "" {
+				key = currentSection + "." + key
+			}
+			info[key] = parts[1]
+		}
+	}
+
+	return info, nil
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func splitKeyValue(s string) []string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == ':' {
+			return []string{s[:i], s[i+1:]}
+		}
+	}
+	return []string{s}
+}
+
 func (c *client) Flush(ctx context.Context) error {
 	c.logger.Debug("Flushing Redis database")
 	return c.rdb.FlushDB(ctx).Err()

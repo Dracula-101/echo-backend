@@ -3,6 +3,8 @@ package main
 import (
 	"auth-service/internal/config"
 	"auth-service/internal/handler"
+	"auth-service/internal/health"
+	"auth-service/internal/health/checkers"
 	repository "auth-service/internal/repo"
 	"auth-service/internal/service"
 	"context"
@@ -128,6 +130,23 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
+func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
+	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
+
+	// Register database health checker
+	if dbClient != nil {
+		healthMgr.RegisterChecker(checkers.NewDatabaseChecker(dbClient))
+	}
+
+	// Register cache health checker
+	if cacheClient != nil && cfg.Cache.Enabled {
+		healthMgr.RegisterChecker(checkers.NewCacheChecker(cacheClient))
+		healthMgr.RegisterChecker(checkers.NewCachePerformanceChecker(cacheClient))
+	}
+
+	return healthMgr
+}
+
 func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering auth routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
@@ -144,11 +163,9 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 	return builder
 }
 
-func createRouter(h *handler.AuthHandler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
 	builder := router.NewBuilder().
-		WithHealthEndpoint("/health", func(w http.ResponseWriter, r *http.Request) {
-			response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Health endpoint", nil)
-		}).
+		WithHealthEndpoint("/health", healthHandler.Health).
 		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
 			response.RouteNotFoundError(r.Context(), r, w)
 		}).
@@ -162,6 +179,13 @@ func createRouter(h *handler.AuthHandler, log logger.Logger) (*router.Router, er
 			router.Middleware(coreMiddleware.Recovery(log)),
 			router.Middleware(coreMiddleware.RequestCompletedLogger(log)),
 		)
+
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/live", healthHandler.Liveness)
+		r.Get("/ready", healthHandler.Readiness)
+		r.Get("/health/liveness", healthHandler.Liveness)
+		r.Get("/health/readiness", healthHandler.Readiness)
+	})
 
 	builder = setupRoutes(builder, h, log)
 	r := builder.Build()
@@ -257,7 +281,11 @@ func main() {
 	authService := service.NewAuthService(authRepo, cacheClient, cfg, log)
 	authHandler := handler.NewAuthHandler(authService, log)
 
-	routerInstance, err := createRouter(authHandler, log)
+	// Setup health checks
+	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
+	healthHandler := health.NewHandler(healthMgr)
+
+	routerInstance, err := createRouter(authHandler, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

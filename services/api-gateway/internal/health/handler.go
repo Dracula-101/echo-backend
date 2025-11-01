@@ -2,6 +2,7 @@ package health
 
 import (
 	"net/http"
+	"shared/server/env"
 	"shared/server/response"
 )
 
@@ -10,26 +11,36 @@ type Handler struct {
 }
 
 func NewHandler(manager *Manager) *Handler {
-	return &Handler{manager: manager}
+	return &Handler{
+		manager: manager,
+	}
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	includeChecks := r.URL.Query().Get("checks") == "true"
-	resp := h.manager.Health(r.Context(), includeChecks)
-	response.JSONWithMessage(r.Context(), r, w, h.manager.HTTPStatus(resp.Status), "Health status", resp)
-}
+	isDev := env.IsDevelopment()
+	liveness := h.manager.Liveness(r.Context())
+	readiness := h.manager.Readiness(r.Context())
 
-func (h *Handler) Liveness(w http.ResponseWriter, r *http.Request) {
-	resp := h.manager.Liveness(r.Context())
-	response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Liveness status", resp)
-}
+	var detailed Response
+	if isDev {
+		detailed = h.manager.Detailed(r.Context())
+	} else {
+		detailed = h.manager.Health(r.Context(), false)
+	}
 
-func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
-	resp := h.manager.Readiness(r.Context())
-	response.JSONWithMessage(r.Context(), r, w, h.manager.HTTPStatus(resp.Status), "Readiness status", resp)
-}
+	resp := map[string]interface{}{
+		"health":    detailed,
+		"liveness":  liveness,
+		"readiness": readiness,
+	}
 
-func (h *Handler) Detailed(w http.ResponseWriter, r *http.Request) {
-	resp := h.manager.Detailed(r.Context())
-	response.JSONWithMessage(r.Context(), r, w, h.manager.HTTPStatus(resp.Status), "Detailed status", resp)
+	status := h.manager.HTTPStatus(detailed.Status)
+	if h.manager.HTTPStatus(readiness.Status) > status {
+		status = h.manager.HTTPStatus(readiness.Status)
+	}
+	if h.manager.HTTPStatus(detailed.Status) > status {
+		status = h.manager.HTTPStatus(detailed.Status)
+	}
+
+	response.JSONWithMessage(r.Context(), r, w, status, "Combined health status", resp)
 }
