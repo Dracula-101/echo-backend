@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README.md
+docs/
+.vscode/
+.idea/
+
+# Build artifacts
+**/bin/
+**/dist/
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+
+# Test files
+**/*_test.go
+**/test/
+**/tests/
+**/testdata/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Environment files (except the ones we explicitly copy)
+.env
+.env.*
+!.env.docker
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# Infra files (not needed in container)
+infra/terraform/
+infra/kubernetes/
+infra/scripts/
+
+# Migration files (handled separately)
+migrations/
+
+# Database files
+database/

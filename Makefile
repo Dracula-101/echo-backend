@@ -284,10 +284,12 @@ health:
 	@echo "$(GREEN)🏥 Checking service health...$(NC)"
 	@echo ""
 	@echo "$(BLUE)API Gateway:$(NC)"
-	@curl -s http://localhost:8080/health | jq -r '.message // "OK"' 2>/dev/null || echo "$(RED)✗ Not responding$(NC)"
+	@curl -f http://localhost:8080/health >/dev/null 2>&1 && \
+		echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Not responding$(NC)"
 	@echo ""
 	@echo "$(BLUE)Auth Service:$(NC)"
-	@docker exec echo-api-gateway wget -qO- http://auth-service:8081/login 2>/dev/null | jq -r '.message // "OK"' 2>/dev/null || echo "$(RED)✗ Not responding$(NC)"
+	@docker exec echo-api-gateway curl -f http://auth-service:8081/health >/dev/null 2>&1 && \
+		echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Not responding$(NC)"
 	@echo ""
 	@echo "$(BLUE)PostgreSQL:$(NC)"
 	@docker exec echo-postgres pg_isready -U echo 2>/dev/null && echo "$(GREEN)✓ Ready$(NC)" || echo "$(RED)✗ Not ready$(NC)"

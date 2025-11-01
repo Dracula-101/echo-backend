@@ -11,11 +11,9 @@ RUN apk add --no-cache \
 
 WORKDIR /build
 
-# Copy shared module first
-COPY shared/ shared/
-
-# Copy api-gateway module
-COPY services/api-gateway/ api-gateway/
+# Copy only go.mod and go.sum files first for better caching
+COPY shared/go.mod shared/go.sum shared/
+COPY services/api-gateway/go.mod services/api-gateway/go.sum api-gateway/
 
 # Set working directory to api-gateway
 WORKDIR /build/api-gateway
@@ -23,8 +21,19 @@ WORKDIR /build/api-gateway
 # Replace the shared module path to use local copy
 RUN go mod edit -replace shared=../shared
 
-# Download dependencies (cached if go.mod/go.sum unchanged)
+# Download dependencies (this layer will be cached if go.mod/go.sum don't change)
 RUN go mod download
+
+# Now copy the actual source code
+WORKDIR /build
+COPY shared/ shared/
+COPY services/api-gateway/ api-gateway/
+
+# Set working directory back to api-gateway
+WORKDIR /build/api-gateway
+
+# Re-apply the replace directive after copying source (since go.mod was overwritten)
+RUN go mod edit -replace shared=../shared
 
 # Build the binary with optimizations
 RUN CGO_ENABLED=0 \

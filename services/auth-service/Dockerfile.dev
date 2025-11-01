@@ -11,11 +11,9 @@ RUN apk add --no-cache \
 
 WORKDIR /build
 
-# Copy shared module first
-COPY shared/ shared/
-
-# Copy auth-service module
-COPY services/auth-service/ auth-service/
+# Copy only go.mod and go.sum files first for better caching
+COPY shared/go.mod shared/go.sum shared/
+COPY services/auth-service/go.mod auth-service/
 
 # Set working directory to auth-service
 WORKDIR /build/auth-service
@@ -23,8 +21,19 @@ WORKDIR /build/auth-service
 # Replace the shared module path to use local copy
 RUN go mod edit -replace shared=../shared
 
-# Add shared as a requirement and download all dependencies
+# Add shared as a requirement and download all dependencies (this layer will be cached)
 RUN go get shared && go mod tidy && go mod download
+
+# Now copy the actual source code
+WORKDIR /build
+COPY shared/ shared/
+COPY services/auth-service/ auth-service/
+
+# Set working directory back to auth-service
+WORKDIR /build/auth-service
+
+# Re-apply the replace directive and sync dependencies after copying source
+RUN go mod edit -replace shared=../shared && go get shared && go mod tidy
 
 # Build the binary with optimizations
 RUN CGO_ENABLED=0 \
