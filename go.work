@@ -1,0 +1,13 @@
+go 1.25.0
+
+use (
+	./services/analytics-service
+	./services/api-gateway
+	./services/auth-service
+	./services/media-service
+	./services/message-service
+	./services/notification-service
+	./services/presence-service
+	./services/user-service
+	./shared
+)

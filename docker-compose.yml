@@ -1,0 +1,132 @@
+version: '3.8'
+
+# =============================================================================
+# Echo Backend - API Gateway + Auth Service
+# =============================================================================
+# This compose file runs the API Gateway and Auth Service together
+# with their required dependencies (PostgreSQL and Redis)
+# =============================================================================
+
+networks:
+  echo-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+services:
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: echo-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schemas:/docker-entrypoint-initdb.d/schemas:ro
+    networks:
+      - echo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # =============================================================================
+  # Redis Cache
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: echo-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - echo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # =============================================================================
+  # Auth Service
+  # =============================================================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    container_name: echo-auth-service
+    image: auth-service:latest
+    # Port 8081 is only accessible within the Docker network (not exposed to host)
+    expose:
+      - "8081"
+    volumes:
+      - ./services/auth-service/.env:/app/.env:ro
+    environment:
+      # These will override .env file values for local development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-echo}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-echo_password}
+      - DB_NAME=${POSTGRES_DB:-echo_db}
+      - DB_SSL_MODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
+      - REDIS_DB=0
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # =============================================================================
+  # API Gateway
+  # =============================================================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: echo-api-gateway
+    image: api-gateway:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./services/api-gateway/.env:/app/.env:ro
+    environment:
+      - AUTH_SERVICE_ADDR=auth-service:8081
+      - AUTH_SERVICE_URL=http://auth-service:8081
+    networks:
+      - echo-network
+    depends_on:
+      - auth-service
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped

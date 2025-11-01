@@ -1,0 +1,41 @@
+# Go build artifacts
+bin/
+build/
+dist/
+*.test
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Coverage & profiling
+*.out
+*.prof
+*.coverprofile
+coverage/
+
+# Module/vendor caches
+vendor/
+.gocache/
+.gopath/
+tmp/
+
+# Logs
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Containers & local env
+.env
+docker-compose.override.yml
+
+# Tooling
+coverage.txt
+cmd/**/mock_*.go
+
+.env
+.env.prod

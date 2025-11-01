@@ -1,0 +1,197 @@
+version: '3.8'
+
+# =============================================================================
+# Auth Service Docker Compose Configuration
+# =============================================================================
+# This file sets up the auth service with its required dependencies:
+#   - PostgreSQL (database)
+#   - Redis (cache)
+#   - Auth Service (production & development)
+#
+# For full infrastructure (Kafka, monitoring, etc.), use:
+#   docker-compose -f infra/docker/docker-compose.yml up
+# =============================================================================
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: echo-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../database/schemas:/docker-entrypoint-initdb.d/schemas:ro
+      - ../../database/functions:/docker-entrypoint-initdb.d/functions:ro
+      - ../../database/triggers:/docker-entrypoint-initdb.d/triggers:ro
+    networks:
+      - echo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: echo-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - echo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Auth Service (Production)
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-1.0.0}
+        BUILD_TIME: ${BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+    container_name: echo-auth-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"   # HTTP/REST API
+      - "50051:50051" # gRPC
+    environment:
+      # Server Configuration
+      APP_ENV: ${APP_ENV:-production}
+      HTTP_PORT: 8080
+      GRPC_PORT: 50051
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # Database Configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-25}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-5}
+      DB_CONN_MAX_LIFETIME: ${DB_CONN_MAX_LIFETIME:-5m}
+      
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: ${REDIS_DB:-0}
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_ACCESS_TOKEN_EXPIRY: ${JWT_ACCESS_TOKEN_EXPIRY:-15m}
+      JWT_REFRESH_TOKEN_EXPIRY: ${JWT_REFRESH_TOKEN_EXPIRY:-7d}
+      
+      # Security
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      OTP_EXPIRY: ${OTP_EXPIRY:-5m}
+      MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS:-5}
+      ACCOUNT_LOCKOUT_DURATION: ${ACCOUNT_LOCKOUT_DURATION:-15m}
+      
+      # Rate Limiting
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1m}
+      
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+    networks:
+      - echo-network
+    volumes:
+      - auth_logs:/app/logs
+      - auth_keys:/app/keys
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  # Auth Service (Development with Hot Reload)
+  auth-service-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: echo-auth-service-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8081:8080"   # HTTP/REST API (different port to avoid conflict)
+      - "50052:50051" # gRPC (different port to avoid conflict)
+      - "2345:2345"   # Delve debugger
+    environment:
+      # Server Configuration
+      APP_ENV: development
+      HTTP_PORT: 8080
+      GRPC_PORT: 50051
+      LOG_LEVEL: debug
+      
+      # Database Configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
+      
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: 0
+      
+      # JWT Configuration
+      JWT_SECRET: dev-secret-key-not-for-production
+      JWT_ACCESS_TOKEN_EXPIRY: 1h
+      JWT_REFRESH_TOKEN_EXPIRY: 30d
+      
+      # Development Settings
+      GIN_MODE: debug
+      AUTO_MIGRATE: "true"
+      ENABLE_SWAGGER: "true"
+    networks:
+      - echo-network
+    volumes:
+      - .:/app
+      - auth_dev_cache:/go/pkg/mod
+    command: air -c .air.toml
+    profiles:
+      - dev
+
+networks:
+  echo-network:
+    driver: bridge
+    name: echo-network
+
+volumes:
+  postgres_data:
+    name: echo_postgres_data
+  redis_data:
+    name: echo_redis_data
+  auth_logs:
+    name: echo_auth_logs
+  auth_keys:
+    name: echo_auth_keys
+  auth_dev_cache:
+    name: echo_auth_dev_cache

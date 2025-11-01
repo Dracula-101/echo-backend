@@ -1,0 +1,48 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echo-ingress
+  namespace: echo-backend
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  tls:
+  - hosts:
+    - api.echo.com
+    - ws.echo.com
+    secretName: echo-tls-secret
+  rules:
+  - host: api.echo.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway-service
+            port:
+              number: 80
+  - host: ws.echo.com
+    http:
+      paths:
+      - path: /ws/messages
+        pathType: Prefix
+        backend:
+          service:
+            name: message-service
+            port:
+              number: 9000
+      - path: /ws/presence
+        pathType: Prefix
+        backend:
+          service:
+            name: presence-service
+            port:
+              number: 9001

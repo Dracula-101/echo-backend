@@ -1,0 +1,213 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../../services/api-gateway
+      dockerfile: Dockerfile.dev
+    container_name: echo-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+    volumes:
+      - ../../services/api-gateway:/app
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ../../services/auth-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-auth-service
+    ports:
+      - "50051:50051"
+      - "8081:8081"
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - GRPC_PORT=50051
+      - HTTP_PORT=8081
+    volumes:
+      - ../../services/auth-service:/app
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # User Service
+  user-service:
+    build:
+      context: ../../services/user-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-user-service
+    ports:
+      - "50052:50052"
+      - "8082:8082"
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - GRPC_PORT=50052
+      - HTTP_PORT=8082
+    volumes:
+      - ../../services/user-service:/app
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # Message Service
+  message-service:
+    build:
+      context: ../../services/message-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-message-service
+    ports:
+      - "50053:50053"
+      - "8083:8083"
+      - "9000:9000"  # WebSocket
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - GRPC_PORT=50053
+      - HTTP_PORT=8083
+      - WS_PORT=9000
+    volumes:
+      - ../../services/message-service:/app
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # Media Service
+  media-service:
+    build:
+      context: ../../services/media-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-media-service
+    ports:
+      - "8084:8084"
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - HTTP_PORT=8084
+    volumes:
+      - ../../services/media-service:/app
+      - media_uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ../../services/notification-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-notification-service
+    ports:
+      - "50054:50054"
+      - "8085:8085"
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - GRPC_PORT=50054
+      - HTTP_PORT=8085
+    volumes:
+      - ../../services/notification-service:/app
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # Presence Service
+  presence-service:
+    build:
+      context: ../../services/presence-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-presence-service
+    ports:
+      - "50055:50055"
+      - "9001:9001"  # WebSocket
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - GRPC_PORT=50055
+      - WS_PORT=9001
+    volumes:
+      - ../../services/presence-service:/app
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: ../../services/analytics-service
+      dockerfile: Dockerfile.dev
+    container_name: echo-analytics-service
+    ports:
+      - "50056:50056"
+      - "8086:8086"
+    environment:
+      - ENV=development
+      - LOG_LEVEL=debug
+      - TIMESCALE_HOST=timescaledb
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:29092
+      - GRPC_PORT=50056
+      - HTTP_PORT=8086
+    volumes:
+      - ../../services/analytics-service:/app
+    depends_on:
+      - timescaledb
+      - redis
+      - kafka
+    networks:
+      - echo-network
+
+volumes:
+  media_uploads:
+
+networks:
+  echo-network:
+    external: true

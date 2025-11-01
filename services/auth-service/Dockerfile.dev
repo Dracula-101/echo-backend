@@ -1,0 +1,60 @@
+# ============================================
+# Development Dockerfile with hot reload
+# ============================================
+
+FROM golang:1.22-alpine
+
+# Install development tools
+RUN apk add --no-cache \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    ca-certificates \
+    tzdata \
+    curl \
+    bash \
+    protobuf \
+    protobuf-dev
+
+# Install Air for hot reload
+RUN go install github.com/cosmtrek/air@latest
+
+# Install migrate tool
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+# Install protoc-gen-go and protoc-gen-go-grpc
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Install grpcurl for testing
+RUN go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
+# Install mockgen for generating mocks
+RUN go install github.com/golang/mock/mockgen@latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Expose ports
+EXPOSE 8080 50051 2345
+
+# Create directories
+RUN mkdir -p /app/keys /app/logs
+
+# Set environment for development
+ENV GIN_MODE=debug \
+    LOG_LEVEL=debug \
+    AIR_CONFIG=.air.toml
+
+# Run with Air for hot reload
+CMD ["air", "-c", ".air.toml"]
