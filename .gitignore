@@ -39,3 +39,5 @@ cmd/**/mock_*.go
 
 .env
 .env.prod
+.env.local
+.env.docker

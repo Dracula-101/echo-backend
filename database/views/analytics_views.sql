@@ -8,7 +8,7 @@ SELECT
     DATE(created_at) as date,
     COUNT(DISTINCT user_id) as active_users
 FROM analytics.events
-WHERE event_type IN ('login', 'message_sent', 'profile_viewed')
+WHERE event_name IN ('login', 'message_sent', 'profile_viewed')
 AND created_at >= CURRENT_DATE - INTERVAL '90 days'
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
@@ -19,7 +19,7 @@ SELECT
     DATE_TRUNC('month', created_at) as month,
     COUNT(DISTINCT user_id) as active_users
 FROM analytics.events
-WHERE event_type IN ('login', 'message_sent', 'profile_viewed')
+WHERE event_name IN ('login', 'message_sent', 'profile_viewed')
 AND created_at >= CURRENT_DATE - INTERVAL '12 months'
 GROUP BY DATE_TRUNC('month', created_at)
 ORDER BY month DESC;
@@ -150,7 +150,7 @@ user_activity AS (
         user_id,
         DATE_TRUNC('month', created_at) as activity_month
     FROM analytics.events
-    WHERE event_type IN ('login', 'message_sent')
+    WHERE event_name IN ('login', 'message_sent')
 )
 SELECT 
     c.cohort_month,

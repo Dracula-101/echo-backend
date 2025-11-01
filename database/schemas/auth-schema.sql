@@ -208,6 +208,36 @@ CREATE TABLE auth.rate_limits (
     UNIQUE(identifier, identifier_type, action_type)
 );
 
+-- API Keys (for service-to-service authentication)
+CREATE TABLE auth.api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Key details
+    key_name VARCHAR(255) NOT NULL,
+    key_hash VARCHAR(255) NOT NULL UNIQUE, -- Hashed API key
+    key_prefix VARCHAR(20) NOT NULL, -- First few chars for identification
+    
+    -- Owner
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    service_name VARCHAR(100), -- For service-to-service auth
+    
+    -- Permissions
+    scopes TEXT[], -- Array of permission scopes
+    rate_limit_per_hour INTEGER DEFAULT 1000,
+    
+    -- Status
+    is_active BOOLEAN DEFAULT TRUE,
+    expires_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    
+    -- Metadata
+    description TEXT,
+    metadata JSONB,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX idx_auth_users_email ON auth.users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_auth_users_phone ON auth.users(phone_number) WHERE deleted_at IS NULL;
@@ -222,3 +252,7 @@ CREATE INDEX idx_auth_security_events_user ON auth.security_events(user_id);
 CREATE INDEX idx_auth_security_events_created ON auth.security_events(created_at);
 CREATE INDEX idx_auth_login_history_user ON auth.login_history(user_id);
 CREATE INDEX idx_auth_login_history_created ON auth.login_history(created_at);
+CREATE INDEX idx_auth_api_keys_user ON auth.api_keys(user_id);
+CREATE INDEX idx_auth_api_keys_key_hash ON auth.api_keys(key_hash);
+CREATE INDEX idx_auth_api_keys_active ON auth.api_keys(is_active);
+CREATE INDEX idx_auth_api_keys_expires ON auth.api_keys(expires_at);

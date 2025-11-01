@@ -1,60 +1,84 @@
-# ============================================
-# Development Dockerfile with hot reload
-# ============================================
+# =============================================================================
+# Build Stage - Compile the Go application
+# =============================================================================
+FROM golang:1.25-alpine AS builder
 
-FROM golang:1.22-alpine
-
-# Install development tools
+# Install build dependencies
 RUN apk add --no-cache \
     git \
-    make \
-    gcc \
-    musl-dev \
+    ca-certificates \
+    tzdata
+
+WORKDIR /build
+
+# Copy shared module first
+COPY shared/ shared/
+
+# Copy auth-service module
+COPY services/auth-service/ auth-service/
+
+# Set working directory to auth-service
+WORKDIR /build/auth-service
+
+# Replace the shared module path to use local copy
+RUN go mod edit -replace shared=../shared
+
+# Add shared as a requirement and download all dependencies
+RUN go get shared && go mod tidy && go mod download
+
+# Build the binary with optimizations
+RUN CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64 \
+    go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a \
+    -installsuffix cgo \
+    -o /bin/auth-service \
+    ./cmd/server
+
+
+# =============================================================================
+# Final Stage - Minimal runtime image
+# =============================================================================
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add \
     ca-certificates \
     tzdata \
-    curl \
-    bash \
-    protobuf \
-    protobuf-dev
+    curl 
 
-# Install Air for hot reload
-RUN go install github.com/cosmtrek/air@latest
+# Create non-root user for security
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
 
-# Install migrate tool
-RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-
-# Install protoc-gen-go and protoc-gen-go-grpc
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
-    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-# Install grpcurl for testing
-RUN go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
-
-# Install mockgen for generating mocks
-RUN go install github.com/golang/mock/mockgen@latest
-
-# Set working directory
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy the binary from builder
+COPY --from=builder /bin/auth-service .
 
-# Download dependencies
-RUN go mod download
+# Copy configs directory
+COPY --from=builder /build/auth-service/configs ./configs
 
-# Copy source code
-COPY . .
+# Copy env file for development
+COPY --from=builder /build/auth-service/.env.docker .env
 
-# Expose ports
-EXPOSE 8080 50051 2345
+# Set proper ownership
+RUN chown -R appuser:appuser /app
 
-# Create directories
-RUN mkdir -p /app/keys /app/logs
+# Switch to non-root user
+USER appuser
 
-# Set environment for development
-ENV GIN_MODE=debug \
-    LOG_LEVEL=debug \
-    AIR_CONFIG=.air.toml
+# Expose application port
+EXPOSE 8081
 
-# Run with Air for hot reload
-CMD ["air", "-c", ".air.toml"]
+# Health check endpoint
+HEALTHCHECK --interval=30s \
+    --timeout=3s \
+    --start-period=5s \
+    --retries=3 \
+    CMD curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/health | grep -q "200" || exit 1
+
+# Run the application
+CMD ["./auth-service"]

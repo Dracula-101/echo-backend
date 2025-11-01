@@ -302,3 +302,112 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Update conversation activity timestamp
+CREATE OR REPLACE FUNCTION messages.update_conversation_activity()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE messages.conversations
+    SET last_activity_at = NOW()
+    WHERE id = NEW.conversation_id;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Validate email format
+CREATE OR REPLACE FUNCTION validate_email()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.email IS NOT NULL AND NEW.email !~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' THEN
+        RAISE EXCEPTION 'Invalid email format: %', NEW.email;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Hash sensitive data (placeholder - actual hashing should be done by application)
+CREATE OR REPLACE FUNCTION auth.hash_sensitive_data()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- This is a placeholder function
+    -- In production, password hashing should be done by the application layer
+    -- before inserting into the database
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Log failed login attempts
+CREATE OR REPLACE FUNCTION auth.log_failed_login()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO auth.login_history (
+        user_id,
+        ip_address,
+        user_agent,
+        login_successful,
+        created_at
+    ) VALUES (
+        NEW.id,
+        current_setting('request.ip_address', true)::inet,
+        current_setting('request.user_agent', true),
+        false,
+        NOW()
+    );
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Update media storage stats
+CREATE OR REPLACE FUNCTION media.update_storage_stats()
+RETURNS TRIGGER AS $$
+DECLARE
+    user_uuid UUID;
+    file_size_val BIGINT;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        user_uuid := NEW.uploader_user_id;
+        file_size_val := NEW.file_size_bytes;
+    ELSIF TG_OP = 'DELETE' THEN
+        user_uuid := OLD.uploader_user_id;
+        file_size_val := -OLD.file_size_bytes;
+    END IF;
+    
+    INSERT INTO media.storage_stats (user_id, total_size_bytes, file_count, last_updated)
+    VALUES (user_uuid, file_size_val, 1, NOW())
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+        total_size_bytes = media.storage_stats.total_size_bytes + file_size_val,
+        file_count = media.storage_stats.file_count + CASE WHEN TG_OP = 'INSERT' THEN 1 ELSE -1 END,
+        last_updated = NOW();
+    
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Auto-archive old notifications
+CREATE OR REPLACE FUNCTION notifications.auto_archive_old_notifications()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Archive notifications older than 30 days when marked as read
+    IF NEW.is_read = TRUE AND OLD.is_read = FALSE THEN
+        UPDATE notifications.notifications
+        SET metadata = jsonb_set(
+            COALESCE(metadata, '{}'::jsonb),
+            '{archived}',
+            'true'::jsonb
+        )
+        WHERE user_id = NEW.user_id
+        AND is_read = TRUE
+        AND created_at < NOW() - INTERVAL '30 days'
+        AND metadata->>'archived' IS NULL;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;

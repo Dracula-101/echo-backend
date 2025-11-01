@@ -1,3 +1,5 @@
+name: echo-backend-dev
+
 services:
   # =============================================================================
   # PostgreSQL Database
@@ -5,11 +7,14 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: echo-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ${PWD}/database/schemas:/docker-entrypoint-initdb.d/schemas:ro
     networks:
       - echo-network
     healthcheck:
@@ -18,6 +23,37 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  # =============================================================================
+  # Database Initializer
+  # =============================================================================
+  db-init:
+    image: postgres:15-alpine
+    container_name: echo-db-init
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-echo}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-echo_password}
+      - POSTGRES_DB=${POSTGRES_DB:-echo_db}
+    volumes:
+      - ${PWD}/infra/scripts:/scripts:ro
+      - ${PWD}/database:/database:ro
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh"]
+    command: >
+      -c "
+        apk add --no-cache bash &&
+        echo '[INFO] Waiting for postgres to be ready...' &&
+        sleep 2 &&
+        cd /scripts &&
+        bash init-db.sh
+      "
+    restart: "no"
 
   # =============================================================================
   # Redis Cache
@@ -51,6 +87,9 @@ services:
     expose:
       - "8081"
     environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8081
+      - APP_ENV=development
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=${POSTGRES_USER:-echo}
@@ -68,8 +107,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8081/health"]
+      test: ["CMD", "curl", "--spider", "--quiet", "http://localhost:8081/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -88,6 +129,9 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - APP_ENV=development
       - AUTH_SERVICE_ADDR=auth-service:8081
       - AUTH_SERVICE_URL=http://auth-service:8081
     networks:
@@ -95,7 +139,7 @@ services:
     depends_on:
       - auth-service
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--spider", "--quiet", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 10

@@ -270,21 +270,7 @@ CREATE TABLE media.access_log (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Stickers
-CREATE TABLE media.stickers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    creator_user_id UUID REFERENCES auth.users(id),
-    sticker_pack_id UUID REFERENCES media.sticker_packs(id) ON DELETE CASCADE,
-    file_id UUID NOT NULL REFERENCES media.files(id) ON DELETE CASCADE,
-    sticker_name VARCHAR(255),
-    emojis TEXT[], -- Related emojis
-    is_animated BOOLEAN DEFAULT FALSE,
-    usage_count BIGINT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Sticker Packs
+-- Sticker Packs (must be created before stickers table)
 CREATE TABLE media.sticker_packs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     creator_user_id UUID REFERENCES auth.users(id),
@@ -300,6 +286,20 @@ CREATE TABLE media.sticker_packs (
     install_count INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Stickers
+CREATE TABLE media.stickers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_user_id UUID REFERENCES auth.users(id),
+    sticker_pack_id UUID REFERENCES media.sticker_packs(id) ON DELETE CASCADE,
+    file_id UUID NOT NULL REFERENCES media.files(id) ON DELETE CASCADE,
+    sticker_name VARCHAR(255),
+    emojis TEXT[], -- Related emojis
+    is_animated BOOLEAN DEFAULT FALSE,
+    usage_count BIGINT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- User Installed Sticker Packs

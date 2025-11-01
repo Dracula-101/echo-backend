@@ -26,8 +26,8 @@ CREATE TRIGGER update_users_contacts_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_users_blocks_updated_at
-    BEFORE UPDATE ON users.blocks
+CREATE TRIGGER update_users_blocked_users_updated_at
+    BEFORE UPDATE ON users.blocked_users
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
@@ -42,8 +42,8 @@ CREATE TRIGGER update_messages_messages_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_messages_participants_updated_at
-    BEFORE UPDATE ON messages.participants
+CREATE TRIGGER update_messages_conversation_participants_updated_at
+    BEFORE UPDATE ON messages.conversation_participants
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
@@ -55,17 +55,17 @@ CREATE TRIGGER trigger_update_conversation_activity
 
 -- Apply conversation member count triggers
 CREATE TRIGGER trigger_update_conversation_member_count_insert
-    AFTER INSERT ON messages.participants
+    AFTER INSERT ON messages.conversation_participants
     FOR EACH ROW
     EXECUTE FUNCTION messages.update_conversation_member_count();
 
 CREATE TRIGGER trigger_update_conversation_member_count_update
-    AFTER UPDATE OF status ON messages.participants
+    AFTER UPDATE OF status ON messages.conversation_participants
     FOR EACH ROW
     EXECUTE FUNCTION messages.update_conversation_member_count();
 
 CREATE TRIGGER trigger_update_conversation_member_count_delete
-    AFTER DELETE ON messages.participants
+    AFTER DELETE ON messages.conversation_participants
     FOR EACH ROW
     EXECUTE FUNCTION messages.update_conversation_member_count();
 
