@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	locErrors "location-service/errors"
 	"location-service/model"
 	"location-service/service"
 	"net"
@@ -39,6 +40,10 @@ func NewServer(svc *service.LocationService, host string, port string, log *logg
 }
 
 func (s *Server) Start() error {
+	s.log.Info("Setting up HTTP routes",
+		logger.String("service", locErrors.ServiceName),
+	)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", s.handleHealth)
@@ -54,7 +59,13 @@ func (s *Server) Start() error {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	s.log.Info(fmt.Sprintf("Starting location service on port %s", s.port))
+	s.log.Info("Starting location service HTTP server",
+		logger.String("service", locErrors.ServiceName),
+		logger.String("host", s.host),
+		logger.String("port", s.port),
+		logger.String("address", server.Addr),
+	)
+
 	return server.ListenAndServe()
 }
 
@@ -74,33 +85,69 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
+	s.log.Info("Location lookup request received",
+		logger.String("service", locErrors.ServiceName),
+		logger.String("remote_addr", r.RemoteAddr),
+		logger.String("method", r.Method),
+	)
+
 	if r.Method != http.MethodGet {
+		s.log.Warn("Method not allowed",
+			logger.String("service", locErrors.ServiceName),
+			logger.String("method", r.Method),
+		)
 		respondError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	ipStr := r.URL.Query().Get("ip")
 	if ipStr == "" {
+		s.log.Warn("Missing IP parameter",
+			logger.String("service", locErrors.ServiceName),
+			logger.String("error_code", locErrors.CodeInvalidIP),
+		)
 		respondError(w, "IP parameter is required", http.StatusBadRequest)
 		return
 	}
 
 	if net.ParseIP(ipStr) == nil {
+		s.log.Warn("Invalid IP address format",
+			logger.String("service", locErrors.ServiceName),
+			logger.String("ip", ipStr),
+			logger.String("error_code", locErrors.CodeInvalidIP),
+		)
 		respondError(w, "Invalid IP address format", http.StatusBadRequest)
 		return
 	}
 
 	result, err := s.locationService.Lookup(ipStr)
 	if err != nil {
-		respondError(w, fmt.Sprintf("City lookup failed: %v", err), http.StatusInternalServerError)
+		s.log.Error("Location lookup failed",
+			logger.String("service", locErrors.ServiceName),
+			logger.String("ip", ipStr),
+			logger.Error(err),
+		)
+		statusCode := locErrors.HTTPStatus(locErrors.CodeLookupFailed)
+		respondError(w, fmt.Sprintf("Lookup failed: %v", err), statusCode)
 		return
 	}
-	s.log.Debug("Location lookup successful", logger.String("result", result.String()))
+
+	s.log.Debug("Building lookup response",
+		logger.String("service", locErrors.ServiceName),
+		logger.String("ip", ipStr),
+	)
+
 	var response *model.LookupResult = &model.LookupResult{}
 	if result.City != nil {
 		response.City = result.City.GetCityName("en")
 		response.State = result.City.GetSubdivisionName("en")
 		response.StateCode = result.City.GetSubdivisionISOCode()
+		if result.City.Location != nil {
+			response.Latitude = result.City.Location.Latitude
+			response.Longitude = result.City.Location.Longitude
+			response.Timezone = result.City.Location.TimeZone
+			response.PostalCode = result.City.Postal.Code
+		}
 	}
 	if result.Country != nil {
 		response.Country = result.Country.Country.Names["en"]
@@ -108,16 +155,17 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 		response.Continent = result.Country.Continent.Names["en"]
 		response.ContinentCode = result.Country.Continent.Code
 	}
-	if result.City.Location != nil {
-		response.Latitude = result.City.Location.Latitude
-		response.Longitude = result.City.Location.Longitude
-		response.Timezone = result.City.Location.TimeZone
-		response.PostalCode = result.City.Postal.Code
-	}
 	if result.ASN != nil {
 		response.ISP = result.ASN.AutonomousSystemOrganization
 	}
 	response.IP = ipStr
+
+	s.log.Info("Location lookup completed successfully",
+		logger.String("service", locErrors.ServiceName),
+		logger.String("ip", ipStr),
+		logger.String("city", response.City),
+		logger.String("country", response.Country),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -132,13 +180,15 @@ func respondError(w http.ResponseWriter, message string, statusCode int) {
 func loggingMiddleware(next http.Handler, log logger.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		log.Info("Received request:",
+		log.Debug("Received request",
+			logger.String("service", locErrors.ServiceName),
 			logger.String("method", r.Method),
 			logger.String("url", r.URL.String()),
 			logger.String("remote_addr", r.RemoteAddr),
 		)
 		next.ServeHTTP(w, r)
-		log.Info("Completed request:",
+		log.Debug("Completed request",
+			logger.String("service", locErrors.ServiceName),
 			logger.String("method", r.Method),
 			logger.String("url", r.URL.String()),
 			logger.String("remote_addr", r.RemoteAddr),
@@ -195,6 +245,7 @@ func main() {
 		CityDBPath:    cityDBPath,
 		ASNDBPath:     asnDBPath,
 		CountryDBPath: countryDBPath,
+		Logger:        log,
 	}
 
 	svc, err := service.NewLocationService(cfg)

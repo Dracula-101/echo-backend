@@ -1,6 +1,7 @@
 package repository
 
 import (
+	authErrors "auth-service/internal/errors"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -13,29 +14,67 @@ import (
 	"shared/pkg/logger"
 )
 
+// ============================================================================
+// Repository Definition
+// ============================================================================
+
 type AuthRepository struct {
 	db  database.Database
 	log logger.Logger
 }
 
 func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository {
+	if db == nil {
+		panic("Database is required for AuthRepository")
+	}
+	if log == nil {
+		panic("Logger is required for AuthRepository")
+	}
+
+	log.Info("Initializing AuthRepository",
+		logger.String("service", authErrors.ServiceName),
+	)
+
 	return &AuthRepository{
 		db:  db,
 		log: log,
 	}
 }
 
+// ============================================================================
+// Email Operations
+// ============================================================================
+
 func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+	r.log.Debug("Checking if email exists",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", email),
+	)
+
 	query := `SELECT EXISTS(SELECT 1 FROM auth.users WHERE email = $1)`
 	var exists bool
 	err := r.db.QueryRow(ctx, query, email).Scan(&exists)
 	if err != nil {
-		r.log.Error("Failed to check if user exists", logger.Error(err))
+		r.log.Error("Failed to check if user exists",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", email),
+			logger.Error(err),
+		)
 		return false, err
 	}
 
+	r.log.Debug("Email existence check completed",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", email),
+		logger.Bool("exists", exists),
+	)
+
 	return exists, nil
 }
+
+// ============================================================================
+// User Creation
+// ============================================================================
 
 type CreateUserParams struct {
 	Email             string
@@ -49,13 +88,40 @@ type CreateUserParams struct {
 }
 
 func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams) (string, error) {
+	if params.Email == "" {
+		r.log.Error("Email is required for user creation",
+			logger.String("service", authErrors.ServiceName),
+		)
+		return "", fmt.Errorf("email is required")
+	}
+	if params.PasswordHash == "" {
+		r.log.Error("Password hash is required for user creation",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", params.Email),
+		)
+		return "", fmt.Errorf("password hash is required")
+	}
+
+	r.log.Info("Creating user",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", params.Email),
+		logger.String("password_algorithm", params.PasswordAlgorithm),
+		logger.String("ip_address", params.IPAddress),
+	)
+
+	now := time.Now()
 	passwordHistory := fmt.Sprintf(`[{"hash":"%s","salt":"%s","algorithm":"%s","changed_at":"%s"}]`,
 		params.PasswordHash,
 		params.PasswordSalt,
 		params.PasswordAlgorithm,
-		time.Now().Format(time.RFC3339),
+		now.Format(time.RFC3339),
 	)
 	passwordHistoryJson := json.RawMessage(passwordHistory)
+
+	r.log.Debug("Inserting user record",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", params.Email),
+	)
 
 	id, err := r.db.Create(ctx, &models.AuthUser{
 		Email:                  params.Email,
@@ -76,18 +142,23 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams
 		LastFailedLoginAt:      nil,
 		RequiresPasswordChange: false,
 		DeletedAt:              nil,
-		CreatedAt:              time.Now(),
-		UpdatedAt:              time.Now(),
+		CreatedAt:              now,
+		UpdatedAt:              now,
 		PasswordHistory:        passwordHistoryJson,
 		CreatedByIP:            &params.IPAddress,
 		CreatedByUserAgent:     &params.UserAgent,
 	})
 	if err != nil {
-		r.log.Error("Failed to create user", logger.Error(err))
+		r.log.Error("Failed to create user in database",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", params.Email),
+			logger.Error(err),
+		)
 		return "", err
 	}
 
-	r.log.Debug("User created successfully",
+	r.log.Info("User created successfully",
+		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", id),
 		logger.String("email", params.Email),
 	)
@@ -95,54 +166,106 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams
 	return id, nil
 }
 
-var ErrAuthUserNotFound = errors.New("auth user not found")
+// ============================================================================
+// User Retrieval
+// ============================================================================
 
 func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*models.AuthUser, error) {
+	r.log.Debug("Fetching user by email",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", email),
+	)
+
 	query := `SELECT  * FROM auth.users WHERE email = $1 LIMIT 1`
 	row := r.db.QueryRow(ctx, query, email)
 	var user models.AuthUser
 	err := row.ScanOne(&user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrAuthUserNotFound
+			r.log.Debug("User not found by email",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("email", email),
+			)
+			return nil, nil
 		}
-		r.log.Error("Failed to get user by email", logger.Error(err))
+		r.log.Error("Failed to get user by email",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", email),
+			logger.Error(err),
+		)
 		return nil, err
 	}
+
+	r.log.Debug("User fetched successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", email),
+		logger.String("user_id", user.ID),
+		logger.String("account_status", user.AccountStatus),
+	)
 
 	return &user, nil
 }
 
+// ============================================================================
+// Login Tracking
+// ============================================================================
+
 func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) error {
-	query := `UPDATE auth.users 
-		SET failed_login_attempts = failed_login_attempts + 1, 
-		    last_failed_login_at = NOW(), 
-		    updated_at = NOW() 
+	r.log.Info("Recording failed login attempt",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET failed_login_attempts = failed_login_attempts + 1,
+		    last_failed_login_at = NOW(),
+		    updated_at = NOW()
 		WHERE id = $1`
-	_, err := r.db.Exec(ctx, query, userID)
+	result, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.log.Error("Failed to record failed login", logger.Error(err))
+		r.log.Error("Failed to record failed login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
 		return err
 	}
-	r.log.Debug("Failed login recorded successfully",
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("Failed login recorded successfully",
+		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
 	)
 	return nil
 }
 
 func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID string) error {
-	query := `UPDATE auth.users 
-		SET failed_login_attempts = 0, 
-		    last_failed_login_at = NULL, 
-		    updated_at = NOW() 
+	r.log.Info("Recording successful login",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET failed_login_attempts = 0,
+		    last_failed_login_at = NULL,
+		    updated_at = NOW()
 		WHERE id = $1`
-	_, err := r.db.Exec(ctx, query, userID)
+	result, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.log.Error("Failed to record successful login", logger.Error(err))
+		r.log.Error("Failed to record successful login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
 		return err
 	}
-	r.log.Debug("Successful login recorded successfully",
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("Successful login recorded",
+		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
 	)
 	return nil
 }

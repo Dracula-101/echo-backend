@@ -2,6 +2,7 @@ package service
 
 import (
 	"auth-service/internal/config"
+	authErrors "auth-service/internal/errors"
 	repository "auth-service/internal/repo"
 	serviceModels "auth-service/internal/service/models"
 	"context"
@@ -28,6 +29,17 @@ type SessionService struct {
 }
 
 func NewSessionService(repo *repository.SessionRepo, cache cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
+	if repo == nil {
+		panic("SessionRepo is required")
+	}
+	if log == nil {
+		panic("Logger is required")
+	}
+
+	log.Info("Initializing SessionService",
+		logger.String("service", authErrors.ServiceName),
+	)
+
 	return &SessionService{
 		repo:         repo,
 		cache:        cache,
@@ -40,6 +52,11 @@ func NewSessionService(repo *repository.SessionRepo, cache cache.Cache, token to
 func (s *SessionService) generateSessionToken(userID string) (string, error) {
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
+		s.log.Error("Failed to generate session nonce",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
 		return "", fmt.Errorf("generate session nonce: %w", err)
 	}
 
@@ -47,7 +64,15 @@ func (s *SessionService) generateSessionToken(userID string) (string, error) {
 	digest := sha256.Sum256(payload)
 
 	tokenBytes := append(append([]byte{}, nonce...), digest[:]...)
-	return base64.RawURLEncoding.EncodeToString(tokenBytes), nil
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
+
+	s.log.Debug("Generated session token",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int("token_length", len(token)),
+	)
+
+	return token, nil
 }
 
 func (s *SessionService) GenerateDeviceFingerprint(deviceID string, deviceOS string, deviceName string) string {
@@ -57,13 +82,37 @@ func (s *SessionService) GenerateDeviceFingerprint(deviceID string, deviceOS str
 }
 
 func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, error) {
+	s.log.Info("Creating session",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", input.UserID),
+		logger.String("device_os", input.Device.OS),
+		logger.String("ip_address", input.IP.IP),
+		logger.Bool("is_mobile", input.IsMobile),
+	)
+
 	sessionToken, err := s.generateSessionToken(input.UserID)
 	if err != nil {
+		s.log.Error("Failed to generate session token",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", input.UserID),
+			logger.String("error_code", authErrors.CodeSessionCreationFailed),
+			logger.Error(err),
+		)
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	err = s.repo.CreateSession(context.Background(), &models.AuthSession{
-		ID:                 uuid.NewString(),
+	sessionID := uuid.NewString()
+	pushEnabled := input.FCMToken != "" || input.APNSToken != ""
+
+	s.log.Debug("Storing session in database",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+		logger.String("user_id", input.UserID),
+		logger.Bool("push_enabled", pushEnabled),
+	)
+
+	err = s.repo.CreateSession(ctx, &models.AuthSession{
+		ID:                 sessionID,
 		UserID:             input.UserID,
 		SessionToken:       sessionToken,
 		RefreshToken:       &input.RefreshToken,
@@ -90,21 +139,50 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		FCMToken:           &input.FCMToken,
 		APNSToken:          &input.APNSToken,
 		SessionType:        input.SessionType,
-		PushEnabled:        input.FCMToken != "" || input.APNSToken != "",
+		PushEnabled:        pushEnabled,
 	})
 	if err != nil {
+		s.log.Error("Failed to store session in database",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("session_id", sessionID),
+			logger.String("user_id", input.UserID),
+			logger.String("error_code", authErrors.CodeSessionCreationFailed),
+			logger.Error(err),
+		)
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	// Cache the session token
-	key := fmt.Sprintf("session_token:%s", sessionToken)
-	value := []byte(input.UserID)
-	err = s.cache.Set(ctx, key, value, 24*60*60)
-	if err != nil {
-		return nil, fmt.Errorf("create session: %w", err)
+	if s.cache != nil {
+		key := fmt.Sprintf("session_token:%s", sessionToken)
+		value := []byte(input.UserID)
+		err = s.cache.Set(ctx, key, value, 24*60*60)
+		if err != nil {
+			s.log.Warn("Failed to cache session token (non-critical)",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("session_id", sessionID),
+				logger.String("user_id", input.UserID),
+				logger.Error(err),
+			)
+		} else {
+			s.log.Debug("Session token cached",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("session_id", sessionID),
+				logger.String("cache_key", key),
+			)
+		}
 	}
+
 	deviceFingerprint := s.GenerateDeviceFingerprint(input.Device.ID, input.Device.OS, input.Device.Name)
+
+	s.log.Info("Session created successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+		logger.String("user_id", input.UserID),
+		logger.String("device_fingerprint", deviceFingerprint),
+	)
+
 	return &serviceModels.CreateSessionOutput{
+		SessionId:         sessionID,
 		SessionToken:      sessionToken,
 		DeviceFingerprint: deviceFingerprint,
 	}, nil
@@ -112,24 +190,57 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 
 func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, error) {
 	s.log.Debug("Fetching session by user ID",
+		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 	)
+
 	session, err := s.repo.GetSessionByUserId(ctx, userID)
 	if err != nil && !database.IsNoRowsError(err) {
-		s.log.Error("Failed to get session by user ID", logger.Error(err))
+		s.log.Error("Failed to get session by user ID",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
 		return nil, err
 	}
+
+	if session == nil {
+		s.log.Debug("No active session found for user",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+		)
+		return nil, nil
+	}
+
+	s.log.Debug("Session found",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("session_id", session.ID),
+	)
+
 	return session, nil
 }
 
 func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string) error {
-	s.log.Debug("Deleting session by ID",
+	s.log.Info("Deleting session",
+		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
 	)
+
 	err := s.repo.DeleteSessionByID(ctx, sessionID)
 	if err != nil {
-		s.log.Error("Failed to delete session by ID", logger.Error(err))
+		s.log.Error("Failed to delete session",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("session_id", sessionID),
+			logger.Error(err),
+		)
 		return err
 	}
+
+	s.log.Info("Session deleted successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+	)
+
 	return nil
 }

@@ -12,14 +12,21 @@ type Error interface {
 	Details() map[string]interface{}
 	StackTrace() []string
 	Unwrap() error
+	Service() string
+	CorrelationID() string
+	WithService(service string) Error
+	WithCorrelationID(correlationID string) Error
+	WithDetail(key string, value interface{}) Error
 }
 
 type appError struct {
-	code       string
-	message    string
-	details    map[string]interface{}
-	stackTrace []string
-	wrapped    error
+	code          string
+	message       string
+	details       map[string]interface{}
+	stackTrace    []string
+	wrapped       error
+	service       string
+	correlationID string
 }
 
 func New(code, message string) Error {
@@ -46,10 +53,26 @@ func Wrap(err error, code, message string) Error {
 }
 
 func (e *appError) Error() string {
-	if e.wrapped != nil {
-		return fmt.Sprintf("%s: %s: %v", e.code, e.message, e.wrapped)
+	var prefix string
+	if e.service != "" {
+		prefix = fmt.Sprintf("[%s]", e.service)
 	}
-	return fmt.Sprintf("%s: %s", e.code, e.message)
+	if e.correlationID != "" {
+		if prefix != "" {
+			prefix = fmt.Sprintf("%s [%s]", prefix, e.correlationID)
+		} else {
+			prefix = fmt.Sprintf("[%s]", e.correlationID)
+		}
+	}
+
+	if prefix != "" {
+		prefix = prefix + " "
+	}
+
+	if e.wrapped != nil {
+		return fmt.Sprintf("%s%s: %s: %v", prefix, e.code, e.message, e.wrapped)
+	}
+	return fmt.Sprintf("%s%s: %s", prefix, e.code, e.message)
 }
 
 func (e *appError) Code() string {
@@ -70,6 +93,24 @@ func (e *appError) StackTrace() []string {
 
 func (e *appError) Unwrap() error {
 	return e.wrapped
+}
+
+func (e *appError) Service() string {
+	return e.service
+}
+
+func (e *appError) CorrelationID() string {
+	return e.correlationID
+}
+
+func (e *appError) WithService(service string) Error {
+	e.service = service
+	return e
+}
+
+func (e *appError) WithCorrelationID(correlationID string) Error {
+	e.correlationID = correlationID
+	return e
 }
 
 func (e *appError) WithDetail(key string, value interface{}) Error {

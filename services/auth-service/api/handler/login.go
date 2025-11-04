@@ -2,8 +2,8 @@ package handler
 
 import (
 	"auth-service/api/dto"
+	authErrors "auth-service/internal/errors"
 	repositoryModels "auth-service/internal/repo/models"
-	"auth-service/internal/service"
 	serviceModels "auth-service/internal/service/models"
 	"context"
 	"fmt"
@@ -16,7 +16,15 @@ import (
 )
 
 func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceInfo, locationInfo *request.IpAddressInfo, userID string, userAgent string, failureReason string) {
-	h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
+	h.log.Info("Logging failed login attempt",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("ip_address", locationInfo.IP),
+		logger.String("device_os", device.OS),
+		logger.String("reason", failureReason),
+	)
+
+	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
 		DeviceFingerprint: h.sessionService.GenerateDeviceFingerprint(device.ID, device.OS, device.Name),
 		DeviceInfo:        device,
 		IPInfo:            *locationInfo,
@@ -28,13 +36,43 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 		IsNewDevice:       utils.PtrBool(false),
 		IsNewLocation:     utils.PtrBool(false),
 	})
-	h.service.FailedLogin(ctx, userID)
-	h.log.Info("Failed login attempt", logger.String("user_id", userID), logger.String("reason", failureReason))
+	if err != nil {
+		h.log.Error("Failed to create login history record",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+	}
+
+	err = h.service.FailedLogin(ctx, userID)
+	if err != nil {
+		h.log.Error("Failed to record failed login counter",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+	}
 }
 
 func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceModels.CreateSessionOutput, device request.DeviceInfo, locationInfo *request.IpAddressInfo, userID string, userAgent string, failureReason string) {
-	h.service.SuccessLogin(ctx, userID)
-	h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
+	h.log.Info("Logging successful login",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("session_id", session.SessionId),
+		logger.String("ip_address", locationInfo.IP),
+		logger.String("device_os", device.OS),
+	)
+
+	err := h.service.SuccessLogin(ctx, userID)
+	if err != nil {
+		h.log.Error("Failed to record successful login counter",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+	}
+
+	err = h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
 		DeviceFingerprint: session.DeviceFingerprint,
 		DeviceInfo:        device,
 		IPInfo:            *locationInfo,
@@ -46,7 +84,15 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 		IsNewDevice:       utils.PtrBool(false),
 		IsNewLocation:     utils.PtrBool(false),
 	})
-	h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
+	if err != nil {
+		h.log.Error("Failed to create login history record",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+	}
+
+	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
 		UserID:          &userID,
 		SessionID:       &session.SessionId,
 		EventType:       "login_attempt",
@@ -62,52 +108,84 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 		IsSuspicious:    false,
 		Metadata:        nil,
 	})
-	h.log.Info("Successful login recorded", logger.String("user_id", userID))
+	if err != nil {
+		h.log.Error("Failed to log security event",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("session_id", session.SessionId),
+			logger.Error(err),
+		)
+	}
 }
 
-// ========================== Login Handler ==========================
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	// Validation and parsing
+	requestID := request.GetRequestID(r)
+	correlationID := request.GetCorrelationID(r)
+
+	h.log.Info("Login request received",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("request_id", requestID),
+		logger.String("correlation_id", correlationID),
+		logger.String("client_ip", request.GetClientIP(r)),
+	)
+
 	handler := request.NewHandler(r, w)
 	loginRequest := dto.NewLoginRequest()
 	if !handler.ParseValidateAndSend(loginRequest) {
+		h.log.Warn("Login request validation failed",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+		)
 		return
 	}
-	h.log.Info("Login attempt received",
-		logger.String("email", loginRequest.Email),
-		logger.String("client_ip", request.GetClientIP(r)),
-		logger.Any("device_info", request.GetDeviceInfo(r)),
-	)
 
-	// Extract request info
 	deviceInfo := request.GetDeviceInfo(r)
 	browserInfo := request.GetBrowserInfo(r)
 	userAgent := request.GetUserAgent(r)
 	clientIP := request.GetClientIP(r)
 
-	// Lookup location
-	h.log.Debug("Looking up location for IP", logger.String("ip", clientIP))
+	h.log.Debug("Extracting request metadata",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", loginRequest.Email),
+		logger.String("device_os", deviceInfo.OS),
+		logger.String("browser", browserInfo.Name),
+	)
+
 	locationInfo, err := h.locationService.Lookup(clientIP)
 	if err != nil {
-		h.log.Error("Failed to lookup location", logger.Error(err))
+		h.log.Error("Failed to lookup location",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("ip_address", clientIP),
+			logger.Error(err),
+		)
 	}
 
-	// Fetch user by email
 	user, authErr := h.service.GetUserByEmail(r.Context(), loginRequest.Email)
 	if authErr != nil {
-		h.log.Error("Failed to fetch user during login", logger.Error(authErr.Error))
+		h.log.Error("Failed to fetch user during login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("email", loginRequest.Email),
+			logger.String("error_code", authErr.Code),
+			logger.Error(authErr.Error),
+		)
 		response.InternalServerError(r.Context(), r, w, "Failed to process login", authErr.Error)
 		return
 	}
 	if user == nil {
+		h.log.Warn("Login attempt for non-existent user",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("email", loginRequest.Email),
+		)
 		response.BadRequestError(r.Context(), r, w, fmt.Sprintf("User does not exist with email %s", loginRequest.Email), nil)
 		return
 	}
 
-	// Authenticate user
 	userResult, authErr := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
 	if authErr != nil {
-		if authErr.Code == service.AuthErrorInvalidCredentials {
+		if authErr.Code == authErrors.CodeInvalidCredentials || authErr.Code == authErrors.CodeUserNotFound {
 			h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, authErr.Message)
 			response.BadRequestError(r.Context(), r, w, authErr.Message, nil)
 		} else {
@@ -120,7 +198,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create or fetch session
 	session := &serviceModels.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(r.Context(), user.ID)
 	if sessErr != nil {
@@ -128,12 +205,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		response.InternalServerError(r.Context(), r, w, "Failed to process login", sessErr)
 		return
 	}
-	if activeSession != nil {
-		h.log.Info("Active session found for user during login",
-			logger.String("user_id", user.ID),
-			logger.String("session_id", activeSession.ID),
-		)
-	}
+
 	if activeSession == nil {
 		session, err = h.sessionService.CreateSession(r.Context(), serviceModels.CreateSessionInput{
 			UserID:          userResult.User.ID,
@@ -165,8 +237,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		session.DeviceFingerprint = h.sessionService.GenerateDeviceFingerprint(*activeSession.DeviceID, *activeSession.DeviceOS, *activeSession.DeviceName)
 	}
 
-	// Log login attempt event
 	h.LogSuccessfulLogin(r.Context(), session, deviceInfo, locationInfo, userResult.User.ID, userAgent, "User logged in successfully")
+
+	h.log.Info("Login successful",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("request_id", requestID),
+		logger.String("user_id", userResult.User.ID),
+		logger.String("session_id", session.SessionId),
+	)
+
 	response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Login successful",
 		map[string]any{
 			"user":          userResult.User,
@@ -176,5 +255,4 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			"session_token": session.SessionToken,
 		},
 	)
-
 }

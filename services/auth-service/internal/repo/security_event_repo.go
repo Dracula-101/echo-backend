@@ -7,6 +7,10 @@ import (
 	"shared/pkg/logger"
 )
 
+// ============================================================================
+// Repository Definition
+// ============================================================================
+
 type SecurityEventRepo struct {
 	db  database.Database
 	log logger.Logger
@@ -18,6 +22,10 @@ func NewSecurityEventRepo(db database.Database, log logger.Logger) *SecurityEven
 		log: log,
 	}
 }
+
+// ============================================================================
+// Security Event Operations
+// ============================================================================
 
 func (r *SecurityEventRepo) LogSecurityEvent(ctx context.Context, event *models.SecurityEvent) error {
 	r.log.Debug("Logging security event",

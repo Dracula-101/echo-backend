@@ -6,12 +6,19 @@ import (
 	"shared/server/response"
 )
 
+// ============================================================================
+// Response Models
+// ============================================================================
+
 type VersionResponse struct {
 	Version string `json:"version"`
 	Service string `json:"service"`
 }
 
-// VersionHandler returns version information
+// ============================================================================
+// Handler Functions
+// ============================================================================
+
 func VersionHandler(version, service string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		versionData := VersionResponse{
@@ -28,7 +35,6 @@ func VersionHandler(version, service string) http.HandlerFunc {
 	}
 }
 
-// StatusHandler returns operational status
 func StatusHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := map[string]interface{}{
@@ -45,7 +51,6 @@ func StatusHandler() http.HandlerFunc {
 	}
 }
 
-// MetricsHandler returns metrics endpoint
 func MetricsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		response.Success().
@@ -56,14 +61,12 @@ func MetricsHandler() http.HandlerFunc {
 	}
 }
 
-// NotFoundHandler returns 404 for undefined routes
 func NotFoundHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		response.NotFoundError(r.Context(), r, w, "Resource")
 	}
 }
 
-// MethodNotAllowedHandler returns 405 for invalid methods
 func MethodNotAllowedHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		response.Error().

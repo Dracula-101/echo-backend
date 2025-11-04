@@ -76,6 +76,26 @@ func (b *AuthServiceBuilder) WithLogger(log logger.Logger) *AuthServiceBuilder {
 }
 
 func (b *AuthServiceBuilder) Build() *AuthService {
+	if b.repo == nil {
+		panic("AuthRepository is required")
+	}
+	if b.loginHistoryRepo == nil {
+		panic("LoginHistoryRepo is required")
+	}
+	if b.securityEventRepo == nil {
+		panic("SecurityEventRepo is required")
+	}
+	if b.cfg == nil {
+		panic("Config is required")
+	}
+	if b.log == nil {
+		panic("Logger is required")
+	}
+
+	b.log.Info("Building AuthService",
+		logger.String("service", "auth-service"),
+	)
+
 	return &AuthService{
 		repo:              b.repo,
 		LoginHistoryRepo:  b.loginHistoryRepo,

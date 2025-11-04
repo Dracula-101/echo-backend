@@ -7,6 +7,10 @@ import (
 	"shared/pkg/logger"
 )
 
+// ============================================================================
+// Repository Definition
+// ============================================================================
+
 type SessionRepo struct {
 	db  database.Database
 	log logger.Logger
@@ -18,6 +22,10 @@ func NewSessionRepo(db database.Database, log logger.Logger) *SessionRepo {
 		log: log,
 	}
 }
+
+// ============================================================================
+// Session Management
+// ============================================================================
 
 func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSession) error {
 	r.log.Debug("Creating new session",

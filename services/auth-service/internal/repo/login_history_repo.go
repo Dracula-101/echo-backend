@@ -8,6 +8,10 @@ import (
 	"shared/pkg/logger"
 )
 
+// ============================================================================
+// Repository Definition
+// ============================================================================
+
 type LoginHistoryRepo struct {
 	db  database.Database
 	log logger.Logger
@@ -19,6 +23,10 @@ func NewLoginHistoryRepo(db database.Database, log logger.Logger) *LoginHistoryR
 		log: log,
 	}
 }
+
+// ============================================================================
+// Login History Operations
+// ============================================================================
 
 func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) error {
 	r.log.Debug("Creating login history entry",
@@ -157,7 +165,10 @@ func (r *LoginHistoryRepo) DeleteLoginHistoryByID(ctx context.Context, id string
 	return nil
 }
 
-// Helper function to safely dereference string pointers for logging
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
 func safeDerefString(s *string) string {
 	if s == nil {
 		return ""
