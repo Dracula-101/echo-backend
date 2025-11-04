@@ -6,6 +6,7 @@
 -- AUTH SCHEMA TRIGGERS
 -- =====================================================
 
+
 -- 1. Update timestamp trigger
 CREATE OR REPLACE FUNCTION auth.update_updated_at_column()
 RETURNS TRIGGER AS $$

@@ -5,52 +5,34 @@
 -- Create Schema
 CREATE SCHEMA IF NOT EXISTS auth;
 
--- Users Authentication Table (Phone Number Primary)
+-- Users Authentication Table
 CREATE TABLE auth.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    phone_number VARCHAR(20) UNIQUE NOT NULL, -- Primary identifier (E.164 format: +1234567890)
-    phone_country_code VARCHAR(5) NOT NULL,   -- Country code (+1, +44, etc.)
-    phone_verified BOOLEAN DEFAULT FALSE,
-    phone_verified_at TIMESTAMPTZ,
-    email VARCHAR(255) UNIQUE,                -- Optional email
+    email VARCHAR(255) UNIQUE NOT NULL,
+    phone_number VARCHAR(20) UNIQUE,
+    phone_country_code VARCHAR(5),
     email_verified BOOLEAN DEFAULT FALSE,
-    email_verified_at TIMESTAMPTZ,
-    
-    -- Password is optional (WhatsApp doesn't use passwords for mobile)
-    password_hash TEXT,
-    password_salt TEXT,
+    phone_verified BOOLEAN DEFAULT FALSE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
     password_algorithm VARCHAR(50) DEFAULT 'bcrypt',
     password_last_changed_at TIMESTAMPTZ,
-    has_password BOOLEAN DEFAULT FALSE,       -- Track if user has set a password (for web)
-    
-    -- Two-factor (typically SMS OTP for phone-based auth)
     two_factor_enabled BOOLEAN DEFAULT FALSE,
     two_factor_secret TEXT,
     two_factor_backup_codes TEXT[],
-    
-    -- Account status
-    account_status VARCHAR(50) DEFAULT 'pending_verification', -- pending_verification, active, suspended, banned, deleted
+    account_status VARCHAR(50) DEFAULT 'active', -- active, suspended, banned, deleted, pending
     account_locked_until TIMESTAMPTZ,
     failed_login_attempts INTEGER DEFAULT 0,
     last_failed_login_at TIMESTAMPTZ,
     last_successful_login_at TIMESTAMPTZ,
-    
-    -- Security
     requires_password_change BOOLEAN DEFAULT FALSE,
-    password_history JSONB DEFAULT '[]'::JSONB,
+    password_history JSONB DEFAULT '[]'::JSONB, -- Store last 5 password hashes
     security_questions JSONB,
-    
-    -- Registration metadata
-    registration_method VARCHAR(50) DEFAULT 'phone', -- phone, email, oauth
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
     created_by_ip INET,
-    created_by_user_agent TEXT,
-    
-    -- Constraints
-    CONSTRAINT check_phone_format CHECK (phone_number ~ '^\+[1-9]\d{1,14}$'), -- E.164 format
-    CONSTRAINT check_has_identifier CHECK (phone_number IS NOT NULL OR email IS NOT NULL)
+    created_by_user_agent TEXT
 );
 
 -- Sessions Table
@@ -92,29 +74,25 @@ CREATE TABLE auth.sessions (
     metadata JSONB DEFAULT '{}'::JSONB
 );
 
--- OTP Verification Table (Primary authentication method)
+-- OTP Verification Table
 CREATE TABLE auth.otp_verifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    phone_number VARCHAR(20) NOT NULL,        -- Required for phone verification
-    country_code VARCHAR(5) NOT NULL,
+    identifier VARCHAR(255) NOT NULL, -- email or phone
+    identifier_type VARCHAR(20) NOT NULL, -- email, phone
     otp_code VARCHAR(10) NOT NULL,
     otp_hash TEXT NOT NULL,
-    purpose VARCHAR(50) NOT NULL,             -- registration, login, phone_verify, reauth, account_recovery
+    purpose VARCHAR(50) NOT NULL, -- registration, login, password_reset, phone_verify, email_verify, 2fa
     attempts INTEGER DEFAULT 0,
-    max_attempts INTEGER DEFAULT 3,           -- WhatsApp-like: 3 attempts per OTP
+    max_attempts INTEGER DEFAULT 5,
     is_verified BOOLEAN DEFAULT FALSE,
     verified_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ NOT NULL,          -- Typically 10 minutes
+    expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    sent_via VARCHAR(50) DEFAULT 'sms',       -- sms, voice, whatsapp (future)
+    sent_via VARCHAR(50), -- sms, email, voice
     ip_address INET,
     user_agent TEXT,
-    device_id VARCHAR(255),
-    metadata JSONB DEFAULT '{}'::JSONB,
-    
-    -- Constraints
-    CONSTRAINT check_otp_phone_format CHECK (phone_number ~ '^\+[1-9]\d{1,14}$')
+    metadata JSONB DEFAULT '{}'::JSONB
 );
 
 -- OAuth Providers Table
@@ -260,15 +238,14 @@ CREATE TABLE auth.api_keys (
 );
 
 -- Indexes for performance
+CREATE INDEX idx_auth_users_email ON auth.users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_auth_users_phone ON auth.users(phone_number) WHERE deleted_at IS NULL;
-CREATE INDEX idx_auth_users_email ON auth.users(email) WHERE deleted_at IS NULL AND email IS NOT NULL;
 CREATE INDEX idx_auth_users_status ON auth.users(account_status);
-CREATE INDEX idx_auth_users_phone_verified ON auth.users(phone_number, phone_verified) WHERE deleted_at IS NULL;
 CREATE INDEX idx_auth_sessions_user ON auth.sessions(user_id);
 CREATE INDEX idx_auth_sessions_token ON auth.sessions(session_token);
 CREATE INDEX idx_auth_sessions_device ON auth.sessions(device_id);
 CREATE INDEX idx_auth_sessions_expires ON auth.sessions(expires_at);
-CREATE INDEX idx_auth_otp_phone ON auth.otp_verifications(phone_number, purpose);
+CREATE INDEX idx_auth_otp_identifier ON auth.otp_verifications(identifier, identifier_type);
 CREATE INDEX idx_auth_otp_expires ON auth.otp_verifications(expires_at);
 CREATE INDEX idx_auth_security_events_user ON auth.security_events(user_id);
 CREATE INDEX idx_auth_security_events_created ON auth.security_events(created_at);
