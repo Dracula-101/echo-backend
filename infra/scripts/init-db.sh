@@ -61,6 +61,16 @@ else
     echo "[INFO] Database already exists: $POSTGRES_DB"
 fi
 
+# Check if schemas are already initialized (check for auth.users table)
+TABLE_EXISTS=$(PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -tAc "
+    SELECT 1 
+    FROM information_schema.tables 
+    WHERE table_schema = 'auth' AND table_name = 'users';" 2>/dev/null || echo "0")     
+if [ "$TABLE_EXISTS" = "1" ] && [ "$FORCE_RECREATE" = false ]; then
+    echo "[INFO] Database schemas already initialized. Use --force to reinitialize."
+    exit 0
+fi
+
 # Enable extensions
 echo "[INFO] Enabling PostgreSQL extensions..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB <<EOF

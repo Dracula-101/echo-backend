@@ -30,6 +30,7 @@ const (
 	XForwardedHost  = "X-Forwarded-Host"
 	XForwardedProto = "X-Forwarded-Proto"
 	XRealIP         = "X-Real-IP"
+	XCFConnectingIP = "CF-Connecting-IP"
 	Forwarded       = "Forwarded"
 
 	// ------------ Cache Control Headers ------------
@@ -120,13 +121,22 @@ const (
 	ApplicationPDF            = "application/pdf"
 
 	// ------------ Custom Application Headers ------------
-	XAPIKey        = "X-API-Key"
-	XAPIVersion    = "X-API-Version"
-	XClientID      = "X-Client-ID"
-	XClientVersion = "X-Client-Version"
-	XDeviceID      = "X-Device-ID"
-	XSessionID     = "X-Session-ID"
-	XTenantID      = "X-Tenant-ID"
+	XAPIKey             = "X-API-Key"
+	XAPIVersion         = "X-API-Version"
+	XClientID           = "X-Client-ID"
+	XClientVersion      = "X-Client-Version"
+	XDeviceID           = "X-Device-ID"
+	XDeviceName         = "X-Device-Name"
+	XDeviceType         = "X-Device-Type"
+	XDevicePlatform     = "X-Device-Platform"
+	XDeviceOS           = "X-Device-OS"
+	XDeviceOSVersion    = "X-Device-OS-Version"
+	XDeviceModel        = "X-Device-Model"
+	XDeviceManufacturer = "X-Device-Manufacturer"
+	XBrowserName        = "X-Browser-Name"
+	XBrowserVersion     = "X-Browser-Version"
+	XSessionID          = "X-Session-ID"
+	XTenantID           = "X-Tenant-ID"
 
 	// ------------ Response Time & Performance Headers ------------
 	XResponseTime = "X-Response-Time"

@@ -70,9 +70,15 @@ func RespondWithError(ctx context.Context, r *http.Request, w http.ResponseWrite
 }
 
 // BadRequestError creates a 400 Bad Request error response
-func BadRequestError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string) error {
+func BadRequestError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
 	err := errors.New(errors.CodeInvalidArgument, message)
 	errorDetails := ErrorDetailsFromError(err, false)
+	errorDetails.Type = ErrorTypeBadRequest
+	if reqError != nil {
+		errorDetails.InnerError = reqError.Error()
+	} else {
+		errorDetails.InnerError = ""
+	}
 	errorDetails.Description = "The request could not be understood or was missing required parameters."
 
 	return Error().
@@ -84,10 +90,15 @@ func BadRequestError(ctx context.Context, r *http.Request, w http.ResponseWriter
 }
 
 // UnauthorizedError creates a 401 Unauthorized error response
-func UnauthorizedError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string) error {
+func UnauthorizedError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
 	err := errors.New(errors.CodeUnauthenticated, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "Authentication is required and has failed or has not been provided."
+	if reqError != nil {
+		errorDetails.InnerError = reqError.Error()
+	} else {
+		errorDetails.InnerError = ""
+	}
 
 	return Error().
 		WithContext(ctx).
@@ -98,10 +109,11 @@ func UnauthorizedError(ctx context.Context, r *http.Request, w http.ResponseWrit
 }
 
 // ForbiddenError creates a 403 Forbidden error response
-func ForbiddenError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string) error {
+func ForbiddenError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
 	err := errors.New(errors.CodePermissionDenied, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "You do not have permission to access this resource."
+	errorDetails.InnerError = reqError.Error()
 
 	return Error().
 		WithContext(ctx).
@@ -131,10 +143,16 @@ func NotFoundError(ctx context.Context, r *http.Request, w http.ResponseWriter, 
 }
 
 // ConflictError creates a 409 Conflict error response
-func ConflictError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string) error {
+func ConflictError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
 	err := errors.New(errors.CodeConflict, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The request could not be completed due to a conflict."
+	errorDetails.Type = ErrorTypeConflict
+	if reqError != nil {
+		errorDetails.InnerError = reqError.Error()
+	} else {
+		errorDetails.InnerError = ""
+	}
 
 	return Error().
 		WithContext(ctx).
@@ -149,6 +167,7 @@ func ValidationError(ctx context.Context, r *http.Request, w http.ResponseWriter
 	err := errors.New(errors.CodeValidationFailed, "Validation failed")
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "One or more fields failed validation."
+	errorDetails.Type = ErrorTypeValidation
 	errorDetails.Fields = fieldErrors
 
 	return Error().
@@ -164,7 +183,7 @@ func RateLimitError(ctx context.Context, r *http.Request, w http.ResponseWriter,
 	err := errors.New(errors.CodeRateLimitExceeded, "Rate limit exceeded")
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "You have exceeded the rate limit. Please try again later."
-	errorDetails.RetryAfter = &retryAfter
+	errorDetails.Type = ErrorTypeRateLimit
 
 	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 
@@ -177,7 +196,7 @@ func RateLimitError(ctx context.Context, r *http.Request, w http.ResponseWriter,
 }
 
 // InternalServerError creates a 500 Internal Server Error response
-func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWriter, err error) error {
+func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, err error) error {
 	config := GetGlobalConfig()
 
 	var appErr errors.Error
@@ -193,6 +212,7 @@ func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWr
 
 	errorDetails := ErrorDetailsFromError(appErr, config.ShouldIncludeStackTrace())
 	errorDetails.Description = "An unexpected error occurred. Please try again later."
+	errorDetails.Type = ErrorTypeInternal
 
 	// Don't expose internal details in production
 	if config.IsProduction() {
@@ -205,7 +225,7 @@ func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWr
 		WithContext(ctx).
 		WithRequest(r).
 		WithError(errorDetails).
-		WithMessage("Internal server error").
+		WithMessage(fmt.Sprintf("Internal Server Error - %s", message)).
 		InternalServerError(w)
 }
 
@@ -214,8 +234,8 @@ func ServiceUnavailableError(ctx context.Context, r *http.Request, w http.Respon
 	message := fmt.Sprintf("%s is unavailable", service)
 	err := errors.New(errors.CodeUnavailable, message)
 	errorDetails := ErrorDetailsFromError(err, false)
+	errorDetails.Type = ErrorTypeServiceUnavailable
 	errorDetails.Description = "The service is temporarily unavailable. Please try again later."
-	errorDetails.RetryAfter = &retryAfter
 	errorDetails.Context = map[string]interface{}{
 		"service": service,
 	}
@@ -236,6 +256,7 @@ func GatewayTimeoutError(ctx context.Context, r *http.Request, w http.ResponseWr
 	err := errors.New(errors.CodeDeadlineExceeded, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The upstream service did not respond in time."
+	errorDetails.Type = ErrorTypeGatewayTimeout
 	errorDetails.Context = map[string]interface{}{
 		"service": service,
 	}
@@ -255,9 +276,6 @@ func CircuitOpenError(ctx context.Context, r *http.Request, w http.ResponseWrite
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Type = ErrorTypeCircuitOpen
 	errorDetails.Description = "The service is currently unavailable due to too many failures."
-	errorDetails.Retryable = true
-	retryAfter := 30
-	errorDetails.RetryAfter = &retryAfter
 	errorDetails.Context = map[string]interface{}{
 		"service":       service,
 		"circuit_state": "open",
@@ -277,8 +295,8 @@ func CircuitOpenError(ctx context.Context, r *http.Request, w http.ResponseWrite
 func TooManyRequestsError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, retryAfter int) error {
 	err := errors.New(errors.CodeRateLimitExceeded, message)
 	errorDetails := ErrorDetailsFromError(err, false)
+	errorDetails.Type = ErrorTypeRateLimit
 	errorDetails.Description = "You have sent too many requests in a given amount of time."
-	errorDetails.RetryAfter = &retryAfter
 
 	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 
@@ -295,6 +313,7 @@ func UnsupportedMediaTypeError(ctx context.Context, r *http.Request, w http.Resp
 	message := fmt.Sprintf("Unsupported media type: %s", mediaType)
 	err := errors.New(errors.CodeUnsupportedMediaType, message)
 	errorDetails := ErrorDetailsFromError(err, false)
+	errorDetails.Type = ErrorTypeUnsupportedMediaType
 	errorDetails.Description = "The request entity has a media type which the server or resource does not support."
 
 	return Error().
@@ -310,6 +329,7 @@ func ConflictResourceError(ctx context.Context, r *http.Request, w http.Response
 	err := errors.New(errors.CodeConflict, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = reason
+	errorDetails.Type = ErrorTypeConflictResource
 	errorDetails.Context = map[string]interface{}{
 		"resource": resource,
 	}
@@ -327,6 +347,7 @@ func ServiceDependencyError(ctx context.Context, r *http.Request, w http.Respons
 	err := errors.New(errors.CodeUnavailable, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = reason
+	errorDetails.Type = ErrorTypeServiceDependency
 	errorDetails.Context = map[string]interface{}{
 		"service": service,
 	}
@@ -343,7 +364,7 @@ func InvalidCredentialsError(ctx context.Context, r *http.Request, w http.Respon
 	err := errors.New(errors.CodeUnauthenticated, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The provided credentials are invalid."
-
+	errorDetails.Type = ErrorTypeInvalidCredentials
 	return Error().
 		WithContext(ctx).
 		WithRequest(r).
@@ -357,6 +378,7 @@ func RouteNotFoundError(ctx context.Context, r *http.Request, w http.ResponseWri
 	err := errors.New(errors.CodeNotFound, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The requested route does not exist."
+	errorDetails.Type = ErrorTypeNotFound
 	errorDetails.Context = map[string]interface{}{
 		"path":   r.URL.Path,
 		"method": r.Method,
@@ -374,6 +396,7 @@ func MethodNotAllowedError(ctx context.Context, r *http.Request, w http.Response
 	err := errors.New(errors.CodePermissionDenied, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The HTTP method used is not allowed for this route."
+	errorDetails.Type = ErrorTypeMethodNotAllowed
 	errorDetails.Context = map[string]interface{}{
 		"path":   r.URL.Path,
 		"method": r.Method,

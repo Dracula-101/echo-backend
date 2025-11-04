@@ -1,0 +1,37 @@
+# =============================================================================
+# Development Dockerfile
+# =============================================================================
+FROM golang:1.25-alpine
+
+# Install development dependencies
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata \
+    curl \
+    bash
+
+WORKDIR /app
+
+# Copy shared module completely (needed for module replacement to work)
+COPY shared ./shared
+
+# Copy go.mod files for dependency caching
+COPY services/location-service/go.mod services/location-service/go.sum ./services/location-service/
+
+# Set working directory to location-service
+WORKDIR /app/services/location-service
+
+# Replace the shared module path to use local copy
+RUN go mod edit -replace shared=../../shared
+
+# Download dependencies
+RUN go mod download
+
+# The source code will be mounted as a volume
+
+# Expose application port
+EXPOSE 8090
+
+# Run the application
+CMD ["go" , "run", "main.go"]

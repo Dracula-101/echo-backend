@@ -76,6 +76,11 @@ func (b *Builder) WithMessage(message string) *Builder {
 	return b
 }
 
+func (b *Builder) WithDetails(details map[string]any) *Builder {
+	b.response.Details = details
+	return b
+}
+
 func (b *Builder) WithData(data any) *Builder {
 	b.response.Data = data
 	return b
@@ -84,6 +89,11 @@ func (b *Builder) WithData(data any) *Builder {
 func (b *Builder) WithError(errorDetails *ErrorDetails) *Builder {
 	b.response.Error = errorDetails
 	b.response.Success = false
+	return b
+}
+
+func (b *Builder) WithFields(fields []FieldError) *Builder {
+	b.response.Error.Fields = fields
 	return b
 }
 
@@ -144,21 +154,8 @@ func (b *Builder) Send(w http.ResponseWriter, statusCode int) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
-	if b.response.Metadata != nil {
-		if b.response.Metadata.RequestID != "" {
-			w.Header().Set("X-Request-ID", b.response.Metadata.RequestID)
-		}
-		if b.response.Metadata.TraceID != "" {
-			w.Header().Set("X-Trace-ID", b.response.Metadata.TraceID)
-		}
-	}
-
 	if statusCode >= 400 {
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	}
-
-	if b.response.Error != nil && b.response.Error.RetryAfter != nil {
-		w.Header().Set("Retry-After", string(rune(*b.response.Error.RetryAfter)))
 	}
 
 	w.WriteHeader(statusCode)

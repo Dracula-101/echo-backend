@@ -121,7 +121,7 @@ func Recovery(log logger.Logger) Handler {
 
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusInternalServerError)
-					response.InternalServerError(r.Context(), r, w, errors.New(fmt.Sprint("internal server error: ", err)))
+					response.InternalServerError(r.Context(), r, w, "Internal server error", errors.New(fmt.Sprint(err)))
 				}
 			}()
 
@@ -465,6 +465,215 @@ func RateLimit(config RateLimitConfig) Handler {
 	}
 }
 
+func TokenBucketRateLimit(requests int, window time.Duration) Handler {
+	type bucket struct {
+		tokens        int
+		lastTokenTime time.Time
+		mu            sync.Mutex
+	}
+
+	buckets := make(map[string]*bucket)
+	var mu sync.Mutex
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := r.RemoteAddr
+			now := time.Now()
+
+			mu.Lock()
+			b, exists := buckets[key]
+			if !exists {
+				b = &bucket{
+					tokens:        requests,
+					lastTokenTime: now,
+				}
+				buckets[key] = b
+			}
+			mu.Unlock()
+
+			b.mu.Lock()
+			elapsed := now.Sub(b.lastTokenTime)
+			newTokens := int(elapsed / (window / time.Duration(requests)))
+			if newTokens > 0 {
+				b.tokens += newTokens
+				if b.tokens > requests {
+					b.tokens = requests
+				}
+				b.lastTokenTime = now
+			}
+
+			remaining := b.tokens
+			resetTime := b.lastTokenTime.Add(window)
+			b.mu.Unlock()
+
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", requests))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+
+			if remaining <= 0 {
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(window.Seconds())))
+				w.WriteHeader(http.StatusTooManyRequests)
+				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", int(window.Seconds()))
+				return
+			}
+
+			b.mu.Lock()
+			b.tokens--
+			b.mu.Unlock()
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func FixedWindowRateLimit(requests int, window time.Duration) Handler {
+	type windowData struct {
+		count     int
+		resetTime time.Time
+		mu        sync.Mutex
+	}
+	var clients = make(map[string]*windowData)
+	var mu sync.Mutex
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := r.RemoteAddr
+			now := time.Now()
+			mu.Lock()
+			data, exists := clients[key]
+			if !exists {
+				data = &windowData{
+					count:     0,
+					resetTime: now.Add(window),
+				}
+				clients[key] = data
+			}
+			mu.Unlock()
+			data.mu.Lock()
+			if now.After(data.resetTime) {
+				data.count = 0
+				data.resetTime = now.Add(window)
+			}
+			remaining := requests - data.count
+			resetTime := data.resetTime
+			data.mu.Unlock()
+
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", requests))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+
+			data.mu.Lock()
+			if data.count >= requests {
+				data.mu.Unlock()
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(resetTime.Sub(now).Seconds())))
+				w.WriteHeader(http.StatusTooManyRequests)
+				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", int(window.Seconds()))
+				return
+			}
+			data.count++
+			data.mu.Unlock()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func SlidingWindowRateLimit(requests int, window time.Duration) Handler {
+	type clientData struct {
+		timestamps []time.Time
+		mu         sync.Mutex
+	}
+
+	var clients = make(map[string]*clientData)
+	var mu sync.Mutex
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := r.RemoteAddr
+			now := time.Now()
+			mu.Lock()
+			data, exists := clients[key]
+			if !exists {
+				data = &clientData{
+					timestamps: make([]time.Time, 0),
+				}
+				clients[key] = data
+			}
+			mu.Unlock()
+			data.mu.Lock()
+			validTimestamps := make([]time.Time, 0)
+			for _, t := range data.timestamps {
+				if now.Sub(t) < window {
+					validTimestamps = append(validTimestamps, t)
+				}
+			}
+			data.timestamps = validTimestamps
+			remaining := requests - len(data.timestamps)
+			var resetTime time.Time
+			if len(data.timestamps) > 0 {
+				resetTime = data.timestamps[0].Add(window)
+			} else {
+				resetTime = now.Add(window)
+			}
+			data.mu.Unlock()
+
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", requests))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+
+			data.mu.Lock()
+			if len(data.timestamps) >= requests {
+				data.mu.Unlock()
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(resetTime.Sub(now).Seconds())))
+				w.WriteHeader(http.StatusTooManyRequests)
+				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", int(window.Seconds()))
+				return
+			}
+			data.timestamps = append(data.timestamps, now)
+			data.mu.Unlock()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func RoundRobinRateLimit(requestsPerInstance int, instanceCountFunc func() int) Handler {
+	var mu sync.Mutex
+	var requestCount int
+	var resetTime time.Time
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			instanceCount := instanceCountFunc()
+			if instanceCount <= 0 {
+				instanceCount = 1
+			}
+			totalRequests := requestsPerInstance * instanceCount
+
+			mu.Lock()
+			if resetTime.IsZero() || time.Now().After(resetTime) {
+				requestCount = 0
+				resetTime = time.Now().Add(time.Minute)
+			}
+			remaining := totalRequests - requestCount
+			mu.Unlock()
+
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", totalRequests))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+
+			mu.Lock()
+			if requestCount >= totalRequests {
+				mu.Unlock()
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(time.Until(resetTime).Seconds())))
+				w.WriteHeader(http.StatusTooManyRequests)
+				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", 60)
+				return
+			}
+			requestCount++
+			mu.Unlock()
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 type CompressionConfig struct {
 	Level        int
 	MinSize      int
@@ -520,7 +729,7 @@ func ContentTypeValidator(allowedTypes []string) Handler {
 				contentType := r.Header.Get("Content-Type")
 				if contentType == "" {
 					w.WriteHeader(http.StatusBadRequest)
-					response.BadRequestError(r.Context(), r, w, "Content-Type header required")
+					response.BadRequestError(r.Context(), r, w, "Content-Type header required", errors.New("missing content type"))
 					return
 				}
 
@@ -583,7 +792,7 @@ func Auth(config AuthConfig) Handler {
 		config.OnAuthFailed = func(w http.ResponseWriter, r *http.Request, err error) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			response.UnauthorizedError(r.Context(), r, w, "authentication failed")
+			response.UnauthorizedError(r.Context(), r, w, "Authentication failed", err)
 		}
 	}
 

@@ -39,4 +39,7 @@ logs/
 tmp/
 temp/
 
+# Air build artifacts
+build-errors.log
+
 *.pem

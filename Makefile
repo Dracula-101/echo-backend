@@ -28,13 +28,13 @@ help:
 	@echo "  make down             - Stop all services"
 	@echo "  make restart          - Restart all services"
 	@echo "  make build            - Build all service images"
-	@echo "  make rebuild          - Rebuild all services (no cache)"
 	@echo "  make logs             - View logs from all services"
 	@echo "  make status           - Show status of all services"
 	@echo "  make ps               - Show running containers"
 	@echo "  make clean            - Stop and remove everything (including volumes)"	@echo "$(GREEN)🌐 API Gateway:$(NC)"
 	@echo "  make gateway-up       - Start API Gateway"
 	@echo "  make gateway-down     - Stop API Gateway"
+	@echo "  make gateway-rerun    - Rerun API Gateway"
 	@echo "  make gateway-restart  - Restart API Gateway"
 	@echo "  make gateway-build    - Rebuild API Gateway"
 	@echo "  make gateway-logs     - View API Gateway logs"
@@ -42,9 +42,18 @@ help:
 	@echo "$(GREEN)🔐 Auth Service:$(NC)"
 	@echo "  make auth-up          - Start Auth Service"
 	@echo "  make auth-down        - Stop Auth Service"
+	@echo "  make auth-rerun       - Rerun Auth Service"
 	@echo "  make auth-restart     - Restart Auth Service"
 	@echo "  make auth-build       - Rebuild Auth Service"
 	@echo "  make auth-logs        - View Auth Service logs"
+	@echo ""
+	@echo "$(YELLOW)🔍 Location Service:$(NC)"
+	@echo "  make location-up          - Start Location Service"
+	@echo "  make location-down        - Stop Location Service"
+	@echo "  make location-rerun       - Rerun Location Service"
+	@echo "  make location-restart     - Restart Location Service"
+	@echo "  make location-build       - Rebuild Location Service"
+	@echo "  make location-logs        - View Location Service logs"
 	@echo ""
 	@echo "$(GREEN)💾 Database:$(NC)"
 	@echo "  make db-init          - Initialize database schemas"
@@ -102,11 +111,13 @@ build:
 	docker-compose -f $(COMPOSE_FILE) build
 	@echo "$(GREEN)✓ Build complete$(NC)"
 
-## rebuild: Rebuild all services (no cache)
-rebuild:
-	@echo "$(GREEN)🔨 Rebuilding all services (no cache)...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) build --no-cache
-	@echo "$(GREEN)✓ Rebuild complete$(NC)"
+## rerun: Rerun all services
+rerun:
+	@echo "$(YELLOW)Rerunning all services...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) down
+	docker-compose -f $(COMPOSE_FILE) build
+	docker-compose -f $(COMPOSE_FILE) up -d
+	@echo "$(GREEN)✓ Services rerun complete$(NC)"
 
 ## logs: View logs from all services
 logs:
@@ -120,7 +131,25 @@ ps:
 status:
 	@echo "$(GREEN)📊 Service Status:$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) ps
+	@echo "$(BLUE)API Gateway:$(NC)"
+	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-api-gateway)" = "true" ]; then echo "✅"; else echo "❌"; fi)
+	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-api-gateway)
+	@echo ""
+	@echo "$(BLUE)Auth Service:$(NC)"
+	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-auth-service)" = "true" ]; then echo "✅"; else echo "❌"; fi)
+	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-auth-service)
+	@echo ""
+	@echo "$(BLUE)Location Service:$(NC)"
+	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-location-service)" = "true" ]; then echo "✅"; else echo "❌"; fi)
+	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-location-service)
+	@echo ""
+	@echo "$(BLUE)PostgreSQL:$(NC)"
+	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-postgres)" = "true" ]; then echo "✅"; else echo "❌"; fi)
+	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-postgres)
+	@echo ""
+	@echo "$(BLUE)Redis:$(NC)"
+	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-redis)" = "true" ]; then echo "✅"; else echo "❌"; fi)
+	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-redis)
 	@echo ""
 
 ## clean: Stop and remove everything (including volumes)
@@ -151,6 +180,13 @@ gateway-down:
 	@echo "$(YELLOW)Stopping API Gateway...$(NC)"
 	docker-compose -f $(COMPOSE_FILE) stop api-gateway
 	@echo "$(GREEN)✓ API Gateway stopped$(NC)"
+
+## gateway-rerun: Rerun API Gateway
+gateway-rerun:
+	@echo "$(YELLOW)Rerunning API Gateway...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) stop api-gateway
+	docker-compose -f $(COMPOSE_FILE) up -d api-gateway
+	@echo "$(GREEN)✓ API Gateway rerun complete$(NC)"
 
 ## gateway-restart: Restart API Gateway
 gateway-restart:
@@ -184,6 +220,19 @@ auth-down:
 	docker-compose -f $(COMPOSE_FILE) stop auth-service
 	@echo "$(GREEN)✓ Auth Service stopped$(NC)"
 
+## auth-rerun: Rerun Auth Service
+auth-rerun: 
+	@echo "$(YELLOW)Rerunning Auth Service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) stop auth-service
+	docker-compose -f $(COMPOSE_FILE) up -d auth-service
+	@echo "$(GREEN)✓ Auth Service rerun complete$(NC)"
+
+## auth-rebuild: Rebuild Auth Service
+auth-rebuild:
+	@echo "$(GREEN)🔨 Rebuilding Auth Service (no cache)...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) build --no-cache auth-service
+	@echo "$(GREEN)✓ Rebuild complete$(NC)"
+
 ## auth-restart: Restart Auth Service
 auth-restart:
 	@echo "$(YELLOW)🔄 Restarting Auth Service...$(NC)"
@@ -199,6 +248,38 @@ auth-build:
 ## auth-logs: View Auth Service logs
 auth-logs:
 	docker-compose -f $(COMPOSE_FILE) logs -f auth-service
+
+# =============================================================================
+# Location Service
+# =============================================================================
+location-up:
+	@echo "$(GREEN)🌐 Starting Location Service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@echo "$(GREEN)✓ Location Service started$(NC)"
+
+location-down:
+	@echo "$(YELLOW)Stopping Location Service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) stop location-service
+	@echo "$(GREEN)✓ Location Service stopped$(NC)"
+
+location-rerun:
+	@echo "$(YELLOW)Rerunning Location Service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) stop location-service
+	docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@echo "$(GREEN)✓ Location Service rerun complete$(NC)"
+
+location-restart:
+	@echo "$(YELLOW)🔄 Restarting Location Service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) restart location-service
+	@echo "$(GREEN)✓ Location Service restarted$(NC)"
+
+location-build:
+	@echo "$(GREEN)🔨 Rebuilding Location Service...$(NC)"
+	docker-compose -f $(COMPOSE_FILE) build --no-cache location-service
+	@echo "$(GREEN)✓ Build complete$(NC)"	
+
+location-logs:
+	docker-compose -f $(COMPOSE_FILE) logs -f location-service
 
 # =============================================================================
 # Database
@@ -303,7 +384,8 @@ test:
 	@echo "$(GREEN)🧪 Running tests...$(NC)"
 	@cd services/auth-service && go test -v ./...
 	@cd services/api-gateway && go test -v ./...
-
+	@cd shared/ && go test -v ./...
+	@echo "$(GREEN)✓ Tests completed$(NC)"
 # =============================================================================
 # Utility Commands
 # =============================================================================

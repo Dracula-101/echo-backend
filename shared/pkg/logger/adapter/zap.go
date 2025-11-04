@@ -49,7 +49,7 @@ const (
 	routePathColumnWidth = 25
 
 	minTerminalWidth     = 80
-	defaultTerminalWidth = 140
+	defaultTerminalWidth = 200
 	columnSeparatorWidth = 3
 	boxBorderWidth       = 2
 
@@ -150,7 +150,7 @@ func padPlain(s string, target int) string {
 	if target < 0 {
 		target = 0
 	}
-	
+
 	visible := utf8.RuneCountInString(s)
 	if visible == target {
 		return s
@@ -158,7 +158,7 @@ func padPlain(s string, target int) string {
 	if visible < target {
 		return s + strings.Repeat(" ", target-visible)
 	}
-	
+
 	// Handle truncation
 	if target > truncationMinWidth {
 		runes := []rune(s)
@@ -168,7 +168,7 @@ func padPlain(s string, target int) string {
 		}
 		return string(runes[:truncateAt]) + truncationSuffix
 	}
-	
+
 	// If target is too small for truncation suffix, just truncate
 	if target <= 0 {
 		return ""

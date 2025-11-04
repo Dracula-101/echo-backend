@@ -1,93 +1,43 @@
 # =============================================================================
-# Build Stage - Compile the Go application
+# Development Dockerfile with Air for Hot Reload
 # =============================================================================
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-alpine
 
-# Install build dependencies
+# Install development dependencies including Air
 RUN apk add --no-cache \
     git \
     ca-certificates \
-    tzdata
-
-WORKDIR /build
-
-# Copy only go.mod and go.sum files first for better caching
-COPY shared/go.mod shared/go.sum shared/
-COPY services/auth-service/go.mod auth-service/
-
-# Set working directory to auth-service
-WORKDIR /build/auth-service
-
-# Replace the shared module path to use local copy
-RUN go mod edit -replace shared=../shared
-
-# Add shared as a requirement and download all dependencies (this layer will be cached)
-RUN go get shared && go mod tidy && go mod download
-
-# Now copy the actual source code
-WORKDIR /build
-COPY shared/ shared/
-COPY services/auth-service/ auth-service/
-
-# Set working directory back to auth-service
-WORKDIR /build/auth-service
-
-# Re-apply the replace directive and sync dependencies after copying source
-RUN go mod edit -replace shared=../shared && go get shared && go mod tidy
-
-# Build the binary with optimizations
-RUN CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64 \
-    go build \
-    -ldflags='-w -s -extldflags "-static"' \
-    -a \
-    -installsuffix cgo \
-    -o /bin/auth-service \
-    ./cmd/server
-
-
-# =============================================================================
-# Final Stage - Minimal runtime image
-# =============================================================================
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk --no-cache add \
-    ca-certificates \
     tzdata \
-    curl 
+    curl \
+    bash
 
-# Create non-root user for security
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# Install Air for live reloading (compatible with Go 1.25)
+RUN go install github.com/air-verse/air@v1.52.3
 
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /bin/auth-service .
+# Copy go.mod files for dependency caching
+COPY shared/go.mod shared/go.sum ./shared/
+COPY services/auth-service/go.mod services/auth-service/go.sum ./services/auth-service/
 
-# Copy configs directory
-COPY --from=builder /build/auth-service/configs ./configs
+# Set working directory to auth-service
+WORKDIR /app/services/auth-service
 
-# Copy env file for development
-COPY --from=builder /build/auth-service/.env.docker .env
+# Replace the shared module path to use local copy
+RUN go mod edit -replace shared=../../shared
 
-# Set proper ownership
-RUN chown -R appuser:appuser /app
+# Download dependencies
+RUN go mod download
 
-# Switch to non-root user
-USER appuser
+# Copy Air config
+COPY services/auth-service/.air.toml .
+COPY services/auth-service/.env.docker .env
+
+# The source code will be mounted as a volume
+# This allows for live reloading when files change
 
 # Expose application port
 EXPOSE 8081
 
-# Health check endpoint
-HEALTHCHECK --interval=30s \
-    --timeout=3s \
-    --start-period=5s \
-    --retries=3 \
-    CMD curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/health | grep -q "200" || exit 1
-
-# Run the application
-CMD ["./auth-service"]
+# Run Air for live reloading
+CMD ["air", "-c", ".air.toml"]

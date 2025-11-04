@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       POSTGRES_DB: ${POSTGRES_DB:-echo_db}
     ports:
-      - "5432:5432"
+      - "0.0.0.0:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -100,6 +100,15 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
       - REDIS_DB=0
+      - LOCATION_SERVICE_ENDPOINT=http://location-service:8090/lookup
+      - CONFIG_PATH=/app/services/auth-service/configs/config.yaml
+    volumes:
+      # Mount source code for Air hot reload
+      - ${PWD}/services/auth-service:/app/services/auth-service
+      - ${PWD}/shared:/app/shared
+      # Cache for go modules and build artifacts
+      - auth-service-go-cache:/go/pkg/mod
+      - auth-service-build-cache:/app/services/auth-service/tmp
     networks:
       - echo-network
     depends_on:
@@ -109,6 +118,8 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
+      location-service:
+        condition: service_started
     restart: unless-stopped
 
   # =============================================================================
@@ -128,12 +139,53 @@ services:
       - APP_ENV=development
       - AUTH_SERVICE_ADDR=auth-service:8081
       - AUTH_SERVICE_URL=http://auth-service:8081
+      - CONFIG_PATH=/app/services/api-gateway/configs/config.yaml
+    volumes:
+      # Mount source code for Air hot reload
+      - ${PWD}/services/api-gateway:/app/services/api-gateway
+      - ${PWD}/shared:/app/shared
+      # Cache for go modules and build artifacts
+      - api-gateway-go-cache:/go/pkg/mod
+      - api-gateway-build-cache:/app/services/api-gateway/tmp
     networks:
       - echo-network
     depends_on:
       - auth-service
     restart: unless-stopped
 
+  # =============================================================================
+  # Location Service
+  # =============================================================================
+  location-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/location-service/Dockerfile.dev
+    container_name: location-service
+    image: location-service:latest
+    ports:
+      - "8090:8090"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8090
+      - LOG_LEVEL=debug
+    volumes:
+      # Mount source code for Air hot reload
+      - ${PWD}/services/location-service:/app/services/location-service
+      - ${PWD}/shared:/app/shared
+      # Mount data directory
+      - ${PWD}/services/location-service/data:/app/data:ro
+      # Cache for go modules and build artifacts
+      - location-service-go-cache:/go/pkg/mod
+      - location-service-build-cache:/app/services/location-service/tmp
+    networks:
+      - echo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 networks:
   echo-network:
@@ -143,4 +195,16 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  auth-service-go-cache:
+    driver: local
+  auth-service-build-cache:
+    driver: local
+  api-gateway-go-cache:
+    driver: local
+  api-gateway-build-cache:
+    driver: local
+  location-service-go-cache:
+    driver: local
+  location-service-build-cache:
     driver: local

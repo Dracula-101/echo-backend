@@ -4,17 +4,18 @@ import "time"
 
 // Config represents the complete application configuration
 type Config struct {
-	Service       ServiceConfig       `yaml:"service" mapstructure:"service"`
-	Server        ServerConfig        `yaml:"server" mapstructure:"server"`
-	Database      DatabaseConfig      `yaml:"database" mapstructure:"database"`
-	Cache         CacheConfig         `yaml:"cache" mapstructure:"cache"`
-	Auth          AuthConfig          `yaml:"auth" mapstructure:"auth"`
-	Security      SecurityConfig      `yaml:"security" mapstructure:"security"`
-	Logging       LoggingConfig       `yaml:"logging" mapstructure:"logging"`
-	Email         EmailConfig         `yaml:"email" mapstructure:"email"`
-	Observability ObservabilityConfig `yaml:"observability" mapstructure:"observability"`
-	Shutdown      ShutdownConfig      `yaml:"shutdown" mapstructure:"shutdown"`
-	Features      FeaturesConfig      `yaml:"features" mapstructure:"features"`
+	Service         ServiceConfig         `yaml:"service" mapstructure:"service"`
+	Server          ServerConfig          `yaml:"server" mapstructure:"server"`
+	Database        DatabaseConfig        `yaml:"database" mapstructure:"database"`
+	Cache           CacheConfig           `yaml:"cache" mapstructure:"cache"`
+	LocationService LocationServiceConfig `yaml:"location_service" mapstructure:"location_service"`
+	Auth            AuthConfig            `yaml:"auth" mapstructure:"auth"`
+	Security        SecurityConfig        `yaml:"security" mapstructure:"security"`
+	Logging         LoggingConfig         `yaml:"logging" mapstructure:"logging"`
+	Email           EmailConfig           `yaml:"email" mapstructure:"email"`
+	Observability   ObservabilityConfig   `yaml:"observability" mapstructure:"observability"`
+	Shutdown        ShutdownConfig        `yaml:"shutdown" mapstructure:"shutdown"`
+	Features        FeaturesConfig        `yaml:"features" mapstructure:"features"`
 }
 
 // ServiceConfig contains service metadata
@@ -78,6 +79,11 @@ type RedisConfig struct {
 	RedisPoolTimeout  time.Duration `yaml:"pool_timeout" mapstructure:"pool_timeout"`
 }
 
+type LocationServiceConfig struct {
+	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`
+	Endpoint string `yaml:"endpoint" mapstructure:"endpoint"`
+}
+
 // AuthConfig contains authentication configuration
 type AuthConfig struct {
 	JWT               JWTConfig               `yaml:"jwt" mapstructure:"jwt"`
@@ -85,6 +91,8 @@ type AuthConfig struct {
 	EmailVerification EmailVerificationConfig `yaml:"email_verification" mapstructure:"email_verification"`
 	PasswordReset     PasswordResetConfig     `yaml:"password_reset" mapstructure:"password_reset"`
 	Session           SessionConfig           `yaml:"session" mapstructure:"session"`
+	Encryption        EncryptionConfig        `yaml:"encryption" mapstructure:"encryption"`
+	Hash              HashConfig              `yaml:"hash" mapstructure:"hash"`
 }
 
 // JWTConfig contains JWT configuration
@@ -94,6 +102,7 @@ type JWTConfig struct {
 	SecretKey       string        `yaml:"secret_key" mapstructure:"secret_key"`
 	Issuer          string        `yaml:"issuer" mapstructure:"issuer"`
 	Audience        string        `yaml:"audience" mapstructure:"audience"`
+	Leeway          time.Duration `yaml:"leeway" mapstructure:"leeway"`
 }
 
 // PasswordConfig contains password policy configuration
@@ -124,6 +133,23 @@ type SessionConfig struct {
 	MaxActiveSessions int           `yaml:"max_active_sessions" mapstructure:"max_active_sessions"`
 	IdleTimeout       time.Duration `yaml:"idle_timeout" mapstructure:"idle_timeout"`
 	AbsoluteTimeout   time.Duration `yaml:"absolute_timeout" mapstructure:"absolute_timeout"`
+}
+
+type EncryptionConfig struct {
+	Algorithm     string `yaml:"algorithm" mapstructure:"algorithm"`
+	Key           string `yaml:"key" mapstructure:"key"`
+	Salt          string `yaml:"salt" mapstructure:"salt"`
+	Iterations    int    `yaml:"iterations" mapstructure:"iterations"`
+	KeyDerivation string `yaml:"key_derivation" mapstructure:"key_derivation"`
+}
+
+type HashConfig struct {
+	Default    string `yaml:"default" mapstructure:"default"`
+	Algorithm  string `yaml:"algorithm" mapstructure:"algorithm"`
+	Iterations int    `yaml:"iterations" mapstructure:"iterations"`
+	SaltLength int    `yaml:"salt_length" mapstructure:"salt_length"`
+	KeyLength  int    `yaml:"key_length" mapstructure:"key_length"`
+	Cost       int    `yaml:"cost" mapstructure:"cost"`
 }
 
 // SecurityConfig contains security configuration

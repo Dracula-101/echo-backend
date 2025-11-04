@@ -41,3 +41,5 @@ cmd/**/mock_*.go
 .env.prod
 .env.local
 .env.docker
+
+*.mmdb

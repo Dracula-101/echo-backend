@@ -21,9 +21,6 @@ func ErrorDetailsFromError(err error, includeStackTrace bool) *ErrorDetails {
 		details.Code = appErr.Code()
 		details.Message = appErr.Message()
 
-		details.Type, details.Severity = MapErrorCodeToTypeAndSeverity(appErr.Code())
-		details.Retryable = IsRetryable(appErr.Code())
-
 		if includeStackTrace && appErr.StackTrace() != nil {
 			stackTrace := make([]string, len(appErr.StackTrace()))
 			for i, frame := range appErr.StackTrace() {
@@ -44,8 +41,6 @@ func ErrorDetailsFromError(err error, includeStackTrace bool) *ErrorDetails {
 	} else {
 		details.Code = errors.CodeInternal
 		details.Type = ErrorTypeInternal
-		details.Severity = SeverityHigh
-		details.Retryable = false
 	}
 
 	return details

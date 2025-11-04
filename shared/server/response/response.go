@@ -5,10 +5,11 @@ import "time"
 // Response represents the standard API response envelope
 // This structure is returned for all API responses
 type Response struct {
-	Success bool          `json:"success"`
-	Message string        `json:"message,omitempty"`
-	Data    any           `json:"data,omitempty"`
-	Error   *ErrorDetails `json:"error,omitempty"`
+	Success bool           `json:"success"`
+	Message string         `json:"message,omitempty"`
+	Data    any            `json:"data,omitempty"`
+	Details map[string]any `json:"details,omitempty"`
+	Error   *ErrorDetails  `json:"error,omitempty"`
 
 	Metadata   *Metadata       `json:"metadata"`
 	Pagination *PaginationInfo `json:"pagination,omitempty"`
@@ -45,9 +46,6 @@ type ErrorDetails struct {
 	Type        ErrorType              `json:"type"`
 	Message     string                 `json:"message"`
 	Description string                 `json:"description,omitempty"`
-	Severity    ErrorSeverity          `json:"severity"`
-	Retryable   bool                   `json:"retryable"`
-	RetryAfter  *int                   `json:"retry_after,omitempty"` // seconds
 	Fields      []FieldError           `json:"fields,omitempty"`
 	StackTrace  []string               `json:"stack_trace,omitempty"`
 	InnerError  string                 `json:"inner_error,omitempty"`
@@ -59,20 +57,40 @@ type ErrorDetails struct {
 type ErrorType string
 
 const (
-	ErrorTypeValidation     ErrorType = "validation_error"
-	ErrorTypeAuthentication ErrorType = "authentication_error"
-	ErrorTypeAuthorization  ErrorType = "authorization_error"
-	ErrorTypeNotFound       ErrorType = "not_found_error"
-	ErrorTypeConflict       ErrorType = "conflict_error"
-	ErrorTypeRateLimit      ErrorType = "rate_limit_error"
-	ErrorTypeInternal       ErrorType = "internal_error"
-	ErrorTypeService        ErrorType = "service_error"
-	ErrorTypeNetwork        ErrorType = "network_error"
-	ErrorTypeTimeout        ErrorType = "timeout_error"
-	ErrorTypeUnavailable    ErrorType = "unavailable_error"
-	ErrorTypeBadRequest     ErrorType = "bad_request_error"
-	ErrorTypeCircuitOpen    ErrorType = "circuit_open_error"
-	ErrorTypeDependency     ErrorType = "dependency_error"
+	// Authentication & Authorization
+	ErrorTypeAuthentication     ErrorType = "authentication_error"
+	ErrorTypeInvalidCredentials ErrorType = "invalid_credentials_error"
+	ErrorTypeAuthorization      ErrorType = "authorization_error"
+	ErrorTypeMethodNotAllowed   ErrorType = "method_not_allowed_error"
+
+	// Validation & Bad Request
+	ErrorTypeValidation           ErrorType = "validation_error"
+	ErrorTypeBadRequest           ErrorType = "bad_request_error"
+	ErrorTypeUnsupportedMediaType ErrorType = "unsupported_media_type_error"
+
+	// Resource & Conflict
+	ErrorTypeNotFound         ErrorType = "not_found_error"
+	ErrorTypeConflict         ErrorType = "conflict_error"
+	ErrorTypeConflictResource ErrorType = "conflict_resource_error"
+
+	// Rate Limiting & Availability
+	ErrorTypeRateLimit          ErrorType = "rate_limit_error"
+	ErrorTypeUnavailable        ErrorType = "unavailable_error"
+	ErrorTypeServiceUnavailable ErrorType = "service_unavailable_error"
+	ErrorTypeGatewayTimeout     ErrorType = "gateway_timeout_error"
+	ErrorTypeTimeout            ErrorType = "timeout_error"
+	ErrorTypeCircuitOpen        ErrorType = "circuit_open_error"
+
+	// Service & Dependency
+	ErrorTypeService           ErrorType = "service_error"
+	ErrorTypeServiceDependency ErrorType = "service_dependency_error"
+	ErrorTypeDependency        ErrorType = "dependency_error"
+
+	// Network
+	ErrorTypeNetwork ErrorType = "network_error"
+
+	// Internal
+	ErrorTypeInternal ErrorType = "internal_error"
 )
 
 // ErrorSeverity indicates error severity for monitoring
@@ -91,7 +109,7 @@ type FieldError struct {
 	Field       string `json:"field"`
 	Message     string `json:"message"`
 	Code        string `json:"code"`
-	Value       any    `json:"value,omitempty"`
+	Value       string `json:"value,omitempty"`
 	Constraints string `json:"constraints,omitempty"`
 }
 

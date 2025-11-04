@@ -6,21 +6,50 @@ import (
 	"time"
 )
 
+type Model interface {
+	TableName() string
+	PrimaryKey() interface{}
+}
+
 type Database interface {
+	Create(ctx context.Context, model Model) (id string, err error)
+	FindByID(ctx context.Context, model Model, id interface{}) error
+	Update(ctx context.Context, model Model) error
+	Delete(ctx context.Context, model Model) error
+	HardDelete(ctx context.Context, model Model) error
+
+	FindOne(ctx context.Context, model Model, query string, args ...interface{}) error
+	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, error)
+	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, error)
+
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
 	QueryRow(ctx context.Context, query string, args ...interface{}) Row
 	Exec(ctx context.Context, query string, args ...interface{}) (Result, error)
+
 	Begin(ctx context.Context) (Transaction, error)
 	BeginTx(ctx context.Context, opts *TxOptions) (Transaction, error)
+	WithTransaction(ctx context.Context, fn func(tx Transaction) error) error
+
 	Close() error
 	Ping(ctx context.Context) error
 	Stats() Stats
 }
 
 type Transaction interface {
+	Create(ctx context.Context, model Model) error
+	FindByID(ctx context.Context, model Model, id interface{}) error
+	Update(ctx context.Context, model Model) error
+	Delete(ctx context.Context, model Model) error
+	HardDelete(ctx context.Context, model Model) error
+
+	FindOne(ctx context.Context, model Model, query string, args ...interface{}) error
+	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
 	QueryRow(ctx context.Context, query string, args ...interface{}) Row
 	Exec(ctx context.Context, query string, args ...interface{}) (Result, error)
+
 	Commit() error
 	Rollback() error
 }
@@ -34,6 +63,7 @@ type Rows interface {
 
 type Row interface {
 	Scan(dest ...interface{}) error
+	ScanOne(model Model) error
 }
 
 type Result interface {
@@ -70,3 +100,5 @@ type Config struct {
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
 }
+
+//

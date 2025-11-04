@@ -1,8 +1,8 @@
 package main
 
 import (
+	"auth-service/api/handler"
 	"auth-service/internal/config"
-	"auth-service/internal/handler"
 	"auth-service/internal/health"
 	"auth-service/internal/health/checkers"
 	repository "auth-service/internal/repo"
@@ -19,6 +19,8 @@ import (
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
+	"shared/server/common/hashing"
+	"shared/server/common/token"
 
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
@@ -57,7 +59,6 @@ func loadConfig() (*config.Config, error) {
 
 	var cfg *config.Config
 	var err error
-
 	if configPath != "" {
 		if env != "" {
 			log.Debug("Loading config with environment", logger.String("env", env))
@@ -152,12 +153,6 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/register", h.Register)
 		r.Post("/login", h.Login)
-		r.Post("/logout", h.Logout)
-		r.Post("/refresh", h.RefreshToken)
-		r.Post("/verify-email", h.VerifyEmail)
-		r.Post("/resend-verification", h.ResendVerification)
-		r.Post("/forgot-password", h.ForgotPassword)
-		r.Post("/reset-password", h.ResetPassword)
 	})
 	log.Debug("Auth routes registered successfully")
 	return builder
@@ -235,6 +230,56 @@ func waitForShutdown(shutdownMgr *shutdown.Manager) <-chan struct{} {
 	return done
 }
 
+func createTokenManager(cfg config.Config, log logger.Logger) *token.JWTTokenService {
+	log.Debug("Creating Token service")
+	key, err := token.NewStaticKeySet([]byte(cfg.Auth.JWT.SecretKey))
+	if err != nil {
+		log.Fatal("Failed to create Token KeySet", logger.Error(err))
+	}
+	tokenService, err := token.NewJWTTokenService(token.Config{
+		KeySet:          key,
+		Issuer:          cfg.Auth.JWT.Issuer,
+		Audience:        []string{cfg.Auth.JWT.Audience},
+		AccessTokenTTL:  cfg.Auth.JWT.AccessTokenTTL,
+		RefreshTokenTTL: cfg.Auth.JWT.RefreshTokenTTL,
+		Leeway:          cfg.Auth.JWT.Leeway,
+	})
+	if err != nil {
+		log.Fatal("Failed to create Token service", logger.Error(err))
+	}
+	log.Info("Token Service created successfully")
+	return tokenService
+}
+
+func createHashingService(cfg config.Config, log logger.Logger) *hashing.HashingService {
+	log.Debug("Creating Hashing service")
+	hashingService, err := hashing.NewService(hashing.Config{
+		Default: hashing.Algorithm(cfg.Auth.Hash.Default),
+		Argon2: hashing.Argon2Config{
+			SaltLength: uint32(cfg.Auth.Hash.SaltLength),
+			Time:       uint32(cfg.Auth.Hash.Iterations),
+			Memory:     uint32(64 * 1024), // 64 MB
+			Threads:    uint8(4),
+			KeyLength:  uint32(cfg.Auth.Hash.KeyLength),
+		},
+		Bcrypt: hashing.BcryptConfig{
+			Cost: cfg.Auth.Hash.Cost,
+		},
+		Scrypt: hashing.ScryptConfig{
+			SaltLength: cfg.Auth.Hash.SaltLength,
+			N:          1 << uint8(cfg.Auth.Hash.Iterations),
+			R:          8,
+			P:          1,
+			KeyLength:  cfg.Auth.Hash.KeyLength,
+		},
+	})
+	if err != nil {
+		log.Fatal("Failed to create Hashing service", logger.Error(err))
+	}
+	log.Info("Hashing Service created successfully")
+	return hashingService
+}
+
 func main() {
 	loadenv()
 
@@ -277,11 +322,31 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
-	authRepo := repository.NewAuthRepository(dbClient, log)
-	authService := service.NewAuthService(authRepo, cacheClient, cfg, log)
-	authHandler := handler.NewAuthHandler(authService, log)
+	tokenService := createTokenManager(*cfg, log)
+	hashingService := createHashingService(*cfg, log)
 
-	// Setup health checks
+	locationService := service.NewLocationService(cfg.LocationService.Endpoint, log)
+
+	loginHistoryRepo := repository.NewLoginHistoryRepo(dbClient, log)
+	securityEventRepo := repository.NewSecurityEventRepo(dbClient, log)
+
+	sessionRepo := repository.NewSessionRepo(dbClient, log)
+	sessionService := service.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
+
+	authRepo := repository.NewAuthRepository(dbClient, log)
+	authService := service.NewAuthServiceBuilder().
+		WithRepo(authRepo).
+		WithLoginHistoryRepo(loginHistoryRepo).
+		WithSecurityEventRepo(securityEventRepo).
+		WithTokenService(*tokenService).
+		WithHashingService(*hashingService).
+		WithCache(cacheClient).
+		WithConfig(&cfg.Auth).
+		WithLogger(log).
+		Build()
+
+	authHandler := handler.NewAuthHandler(authService, sessionService, locationService, log)
+
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 

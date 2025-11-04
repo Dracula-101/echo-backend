@@ -71,7 +71,6 @@ CREATE TABLE auth.sessions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     revoked_at TIMESTAMPTZ,
     revoked_reason TEXT,
-    parent_session_id UUID REFERENCES auth.sessions(id),
     metadata JSONB DEFAULT '{}'::JSONB
 );
 

@@ -213,7 +213,7 @@ ratelimit:
   redis_db: ${REDIS_DB:0}
   
   global:
-    requests: 10000
+    requests: 100000
     window: 1m
     strategy: token_bucket
   
