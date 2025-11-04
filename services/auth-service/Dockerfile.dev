@@ -1,43 +1,28 @@
-# =============================================================================
-# Development Dockerfile with Air for Hot Reload
-# =============================================================================
-FROM golang:1.25-alpine
+FROM golang:1.25-alpine AS builder
 
-# Install development dependencies including Air
-RUN apk add --no-cache \
-    git \
-    ca-certificates \
-    tzdata \
-    curl \
-    bash
+RUN apk add --no-cache git ca-certificates tzdata curl bash
 
-# Install Air for live reloading (compatible with Go 1.25)
+# Install Air for hot reload
 RUN go install github.com/air-verse/air@v1.52.3
 
 WORKDIR /app
 
-# Copy go.mod files for dependency caching
+# Copy dependencies
 COPY shared/go.mod shared/go.sum ./shared/
 COPY services/auth-service/go.mod services/auth-service/go.sum ./services/auth-service/
 
-# Set working directory to auth-service
 WORKDIR /app/services/auth-service
 
-# Replace the shared module path to use local copy
+# Setup module replacement
 RUN go mod edit -replace shared=../../shared
-
-# Download dependencies
 RUN go mod download
 
-# Copy Air config
-COPY services/auth-service/.air.toml .
-COPY services/auth-service/.env.docker .env
+# Copy Air configuration
+COPY services/auth-service/.air.toml .air.toml
 
-# The source code will be mounted as a volume
-# This allows for live reloading when files change
+# Copy environment file
+COPY services/auth-service/.env .env
 
-# Expose application port
-EXPOSE 8081
+EXPOSE 8081 9091
 
-# Run Air for live reloading
 CMD ["air", "-c", ".air.toml"]

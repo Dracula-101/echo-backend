@@ -1,41 +1,96 @@
 name: echo-backend-dev
 
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  echo-network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  # Database volumes
+  postgres_data:
+    driver: local
+
+  # Cache volumes
+  redis_data:
+    driver: local
+
+  # Message broker volumes
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local
+
+  # Service build cache volumes
+  api-gateway-build-cache:
+    driver: local
+  auth-service-build-cache:
+    driver: local
+  location-service-build-cache:
+    driver: local
+  message-service-build-cache:
+    driver: local
+
+  # Go module cache volume
+  auth-service-go-cache:
+    driver: local
+  api-gateway-go-cache:
+    driver: local
+  message-service-go-cache:
+    driver: local
+  location-service-go-cache:
+    driver: local
+
+# =============================================================================
+# SERVICES
+# =============================================================================
 services:
-  # =============================================================================
+
+  # ===========================================================================
+  # INFRASTRUCTURE LAYER
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
   # PostgreSQL Database
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
     container_name: echo-postgres
+    ports:
+      - "0.0.0.0:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-echo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       POSTGRES_DB: ${POSTGRES_DB:-echo_db}
-    ports:
-      - "0.0.0.0:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - echo-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echo}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echo}" ]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   # Database Initializer
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   db-init:
     image: postgres:15-alpine
     container_name: echo-db-init
     environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-echo}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-echo_password}
-      - POSTGRES_DB=${POSTGRES_DB:-echo_db}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
     volumes:
       - ${PWD}/infra/scripts:/scripts:ro
       - ${PWD}/database:/database:ro
@@ -44,7 +99,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["/bin/sh"]
+    entrypoint: [ "/bin/sh" ]
     command: >
       -c "
         apk add --no-cache bash &&
@@ -55,29 +110,130 @@ services:
       "
     restart: "no"
 
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   # Redis Cache
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: echo-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
     volumes:
       - redis_data:/data
     networks:
       - echo-network
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
     restart: unless-stopped
 
-  # =============================================================================
+  # ---------------------------------------------------------------------------
+  # Zookeeper (Kafka Dependency)
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: echo-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - echo-network
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Kafka Message Broker
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: echo-kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - echo-network
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # APPLICATION LAYER
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # API Gateway
+  # ---------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: ${PWD}
+      dockerfile: services/api-gateway/Dockerfile.dev
+    container_name: echo-api-gateway
+    image: api-gateway:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      APP_ENV: development
+      CONFIG_PATH: /app/services/api-gateway/configs/config.yaml
+
+      # Downstream Service URLs
+      AUTH_SERVICE_ADDR: auth-service:8081
+      AUTH_SERVICE_URL: http://auth-service:8081
+      USER_SERVICE_ADDR: user-service:8082
+      USER_SERVICE_URL: http://user-service:8082
+      MESSAGE_SERVICE_ADDR: message-service:8083
+      MESSAGE_SERVICE_URL: http://message-service:8083
+    volumes:
+      # Source code (hot reload)
+      - ${PWD}/services/api-gateway:/app/services/api-gateway
+      - ${PWD}/shared:/app/shared
+      # Build cache
+      - api-gateway-go-cache:/go/pkg/mod
+      - api-gateway-build-cache:/app/services/api-gateway/tmp
+    networks:
+      - echo-network
+    depends_on:
+      - auth-service
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Auth Service
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   auth-service:
     build:
       context: ${PWD}
@@ -87,26 +243,33 @@ services:
     expose:
       - "8081"
     environment:
-      - SERVER_HOST=0.0.0.0
-      - SERVER_PORT=8081
-      - APP_ENV=development
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:-echo}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-echo_password}
-      - DB_NAME=${POSTGRES_DB:-echo_db}
-      - DB_SSL_MODE=disable
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
-      - REDIS_DB=0
-      - LOCATION_SERVICE_ENDPOINT=http://location-service:8090/lookup
-      - CONFIG_PATH=/app/services/auth-service/configs/config.yaml
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8081
+      APP_ENV: development
+      CONFIG_PATH: /app/services/auth-service/configs/config.yaml
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSL_MODE: disable
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: 0
+
+      # External Services
+      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
     volumes:
-      # Mount source code for Air hot reload
+      # Source code (hot reload)
       - ${PWD}/services/auth-service:/app/services/auth-service
       - ${PWD}/shared:/app/shared
-      # Cache for go modules and build artifacts
+      # Build cache
       - auth-service-go-cache:/go/pkg/mod
       - auth-service-build-cache:/app/services/auth-service/tmp
     networks:
@@ -122,40 +285,73 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # =============================================================================
-  # API Gateway
-  # =============================================================================
-  api-gateway:
+  # ---------------------------------------------------------------------------
+  # Message Service
+  # ---------------------------------------------------------------------------
+  message-service:
     build:
       context: ${PWD}
-      dockerfile: services/api-gateway/Dockerfile.dev
-    container_name: echo-api-gateway
-    image: api-gateway:latest
+      dockerfile: services/message-service/Dockerfile.dev
+    container_name: echo-message-service
+    image: message-service:latest
     ports:
-      - "8080:8080"
+      - "8083:8083"
     environment:
-      - SERVER_HOST=0.0.0.0
-      - SERVER_PORT=8080
-      - APP_ENV=development
-      - AUTH_SERVICE_ADDR=auth-service:8081
-      - AUTH_SERVICE_URL=http://auth-service:8081
-      - CONFIG_PATH=/app/services/api-gateway/configs/config.yaml
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8083
+      APP_ENV: development
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSLMODE: disable
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: 0
+
+      # Kafka Configuration
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: messages
+      KAFKA_NOTIFICATION_TOPIC: notifications
+      KAFKA_CONSUMER_GROUP: message-service
     volumes:
-      # Mount source code for Air hot reload
-      - ${PWD}/services/api-gateway:/app/services/api-gateway
+      # Source code (hot reload)
+      - ${PWD}/services/message-service:/app/services/message-service
       - ${PWD}/shared:/app/shared
-      # Cache for go modules and build artifacts
-      - api-gateway-go-cache:/go/pkg/mod
-      - api-gateway-build-cache:/app/services/api-gateway/tmp
+      # Build cache
+      - message-service-go-cache:/go/pkg/mod
+      - message-service-build-cache:/app/services/message-service/tmp
     networks:
       - echo-network
     depends_on:
-      - auth-service
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   # Location Service
-  # =============================================================================
+  # ---------------------------------------------------------------------------
   location-service:
     build:
       context: ${PWD}
@@ -165,46 +361,25 @@ services:
     ports:
       - "8090:8090"
     environment:
-      - HOST=0.0.0.0
-      - PORT=8090
-      - LOG_LEVEL=debug
+      # Server Configuration
+      HOST: 0.0.0.0
+      PORT: 8090
+      LOG_LEVEL: debug
     volumes:
-      # Mount source code for Air hot reload
+      # Source code (hot reload)
       - ${PWD}/services/location-service:/app/services/location-service
       - ${PWD}/shared:/app/shared
-      # Mount data directory
+      # Data directory
       - ${PWD}/services/location-service/data:/app/data:ro
-      # Cache for go modules and build artifacts
+      # Build cache
       - location-service-go-cache:/go/pkg/mod
       - location-service-build-cache:/app/services/location-service/tmp
     networks:
       - echo-network
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health" ]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
-
-networks:
-  echo-network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  auth-service-go-cache:
-    driver: local
-  auth-service-build-cache:
-    driver: local
-  api-gateway-go-cache:
-    driver: local
-  api-gateway-build-cache:
-    driver: local
-  location-service-go-cache:
-    driver: local
-  location-service-build-cache:
-    driver: local
+    restart: unless-stopped

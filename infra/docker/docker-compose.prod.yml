@@ -1,227 +1,532 @@
-version: '3.8'
+name: echo-backend-prod
 
-services:
-  # API Gateway
-  api-gateway:
-    image: ${REGISTRY}/echo-api-gateway:${VERSION:-latest}
-    container_name: echo-api-gateway
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-      replicas: 3
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - echo-network
-
-  # Auth Service
-  auth-service:
-    image: ${REGISTRY}/echo-auth-service:${VERSION:-latest}
-    container_name: echo-auth-service
-    restart: always
-    ports:
-      - "50051:50051"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRY=${JWT_EXPIRY:-24h}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-      replicas: 3
-    healthcheck:
-      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - echo-network
-
-  # User Service
-  user-service:
-    image: ${REGISTRY}/echo-user-service:${VERSION:-latest}
-    container_name: echo-user-service
-    restart: always
-    ports:
-      - "50052:50052"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - REDIS_HOST=${REDIS_HOST}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-      replicas: 3
-    networks:
-      - echo-network
-
-  # Message Service
-  message-service:
-    image: ${REGISTRY}/echo-message-service:${VERSION:-latest}
-    container_name: echo-message-service
-    restart: always
-    ports:
-      - "50053:50053"
-      - "9000:9000"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - REDIS_HOST=${REDIS_HOST}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 1G
-      replicas: 4
-    networks:
-      - echo-network
-
-  # Media Service
-  media-service:
-    image: ${REGISTRY}/echo-media-service:${VERSION:-latest}
-    container_name: echo-media-service
-    restart: always
-    ports:
-      - "8084:8084"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - REDIS_HOST=${REDIS_HOST}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
-      - R2_ACCESS_KEY=${R2_ACCESS_KEY}
-      - R2_SECRET_KEY=${R2_SECRET_KEY}
-      - R2_BUCKET=${R2_BUCKET}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 1G
-      replicas: 3
-    networks:
-      - echo-network
-
-  # Notification Service
-  notification-service:
-    image: ${REGISTRY}/echo-notification-service:${VERSION:-latest}
-    container_name: echo-notification-service
-    restart: always
-    ports:
-      - "50054:50054"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - REDIS_HOST=${REDIS_HOST}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - FCM_CREDENTIALS=${FCM_CREDENTIALS}
-      - APNS_KEY=${APNS_KEY}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-      replicas: 3
-    networks:
-      - echo-network
-
-  # Presence Service
-  presence-service:
-    image: ${REGISTRY}/echo-presence-service:${VERSION:-latest}
-    container_name: echo-presence-service
-    restart: always
-    ports:
-      - "50055:50055"
-      - "9001:9001"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - REDIS_HOST=${REDIS_HOST}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-      replicas: 4
-    networks:
-      - echo-network
-
-  # Analytics Service
-  analytics-service:
-    image: ${REGISTRY}/echo-analytics-service:${VERSION:-latest}
-    container_name: echo-analytics-service
-    restart: always
-    ports:
-      - "50056:50056"
-    environment:
-      - ENV=production
-      - LOG_LEVEL=info
-      - TIMESCALE_HOST=${TIMESCALE_HOST}
-      - REDIS_HOST=${REDIS_HOST}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-      replicas: 2
-    networks:
-      - echo-network
-
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
   echo-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  # Database volumes
+  postgres_data:
+    driver: local
+
+  # Cache volumes
+  redis_data:
+    driver: local
+
+  # Message broker volumes
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local
+
+  # Application logs
+  api-gateway-logs:
+    driver: local
+  auth-service-logs:
+    driver: local
+  location-service-logs:
+    driver: local
+  message-service-logs:
+    driver: local
+
+# =============================================================================
+# SERVICES
+# =============================================================================
+services:
+
+  # ===========================================================================
+  # INFRASTRUCTURE LAYER
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: echo-postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - echo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Database Initializer
+  # ---------------------------------------------------------------------------
+  db-init:
+    image: postgres:15-alpine
+    container_name: echo-db-init
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ${PWD}/infra/scripts:/scripts:ro
+      - ${PWD}/database:/database:ro
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: [ "/bin/sh" ]
+    command: >
+      -c "
+        apk add --no-cache bash &&
+        echo '[INFO] Waiting for postgres to be ready...' &&
+        sleep 2 &&
+        cd /scripts &&
+        bash init-db.sh
+      "
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: echo-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: >
+      redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 512mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000
+    volumes:
+      - redis_data:/data
+    networks:
+      - echo-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Zookeeper (Kafka Dependency)
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: echo-zookeeper
+    ports:
+      - "127.0.0.1:2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - echo-network
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Kafka Message Broker
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: echo-kafka
+    ports:
+      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_NETWORK_THREADS: 8
+      KAFKA_NUM_IO_THREADS: 8
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - echo-network
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
+  # APPLICATION LAYER
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # API Gateway
+  # ---------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: ${PWD}
+      dockerfile: services/api-gateway/Dockerfile
+      args:
+        BUILD_ENV: production
+    container_name: echo-api-gateway
+    image: echo/api-gateway:${VERSION:-latest}
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      APP_ENV: production
+      CONFIG_PATH: /app/configs/config.yaml
+
+      # Downstream Service URLs
+      AUTH_SERVICE_ADDR: auth-service:8081
+      AUTH_SERVICE_URL: http://auth-service:8081
+      USER_SERVICE_ADDR: user-service:8082
+      USER_SERVICE_URL: http://user-service:8082
+      MESSAGE_SERVICE_ADDR: message-service:8083
+      MESSAGE_SERVICE_URL: http://message-service:8083
+
+      # Performance
+      GOMAXPROCS: 4
+      GOGC: 100
+    volumes:
+      - api-gateway-logs:/var/log/api-gateway
+    networks:
+      - echo-network
+    depends_on:
+      - auth-service
+      - message-service
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Auth Service
+  # ---------------------------------------------------------------------------
+  auth-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/auth-service/Dockerfile
+      args:
+        BUILD_ENV: production
+    container_name: echo-auth-service
+    image: echo/auth-service:${VERSION:-latest}
+    expose:
+      - "8081"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8081
+      APP_ENV: production
+      CONFIG_PATH: /app/configs/config.yaml
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_SSL_MODE: disable
+      DB_MAX_OPEN_CONNS: 25
+      DB_MAX_IDLE_CONNS: 5
+      DB_CONN_MAX_LIFETIME: 300s
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 0
+      REDIS_MAX_RETRIES: 3
+      REDIS_POOL_SIZE: 10
+
+      # External Services
+      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+
+      # Security
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: 24h
+      REFRESH_TOKEN_EXPIRY: 168h
+
+      # Performance
+      GOMAXPROCS: 4
+      GOGC: 100
+    volumes:
+      - auth-service-logs:/var/log/auth-service
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      location-service:
+        condition: service_started
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Message Service
+  # ---------------------------------------------------------------------------
+  message-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/message-service/Dockerfile
+      args:
+        BUILD_ENV: production
+    container_name: echo-message-service
+    image: echo/message-service:${VERSION:-latest}
+    ports:
+      - "8083:8083"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8083
+      APP_ENV: production
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_SSLMODE: disable
+      DB_MAX_OPEN_CONNS: 25
+      DB_MAX_IDLE_CONNS: 5
+      DB_CONN_MAX_LIFETIME: 300s
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 0
+      REDIS_MAX_RETRIES: 3
+      REDIS_POOL_SIZE: 10
+
+      # Kafka Configuration
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: messages
+      KAFKA_NOTIFICATION_TOPIC: notifications
+      KAFKA_CONSUMER_GROUP: message-service
+      KAFKA_SESSION_TIMEOUT: 10s
+      KAFKA_HEARTBEAT_INTERVAL: 3s
+
+      # WebSocket Configuration
+      WS_READ_BUFFER_SIZE: 1024
+      WS_WRITE_BUFFER_SIZE: 1024
+      WS_MAX_MESSAGE_SIZE: 512
+
+      # Performance
+      GOMAXPROCS: 4
+      GOGC: 100
+    volumes:
+      - message-service-logs:/var/log/message-service
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Location Service
+  # ---------------------------------------------------------------------------
+  location-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/location-service/Dockerfile
+      args:
+        BUILD_ENV: production
+    container_name: location-service
+    image: echo/location-service:${VERSION:-latest}
+    expose:
+      - "8090"
+    environment:
+      # Server Configuration
+      HOST: 0.0.0.0
+      PORT: 8090
+      LOG_LEVEL: info
+
+      # Performance
+      GOMAXPROCS: 2
+      GOGC: 100
+    volumes:
+      - location-service-logs:/var/log/location-service
+    networks:
+      - echo-network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"

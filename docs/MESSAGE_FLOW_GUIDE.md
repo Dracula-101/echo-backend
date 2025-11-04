@@ -33,7 +33,7 @@ Complete guide for implementing message sending from phone clients and broadcast
 │   (Port 8080)       │
 │   • Auth validation │
 │   • Rate limiting   │
-└──────┬──────────────┘
+└──────┬──────────────┘a
        │ 2. Forward to Message Service
        ▼
 ┌─────────────────────┐

@@ -1,0 +1,530 @@
+package repo
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+
+	"echo-backend/services/message-service/internal/model"
+
+	"shared/pkg/database"
+
+	"github.com/google/uuid"
+	"github.com/lib/pq"
+)
+
+type MessageRepository interface {
+	// Core message operations
+	CreateMessage(ctx context.Context, msg *model.Message) error
+	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*model.Message, error)
+	GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) ([]model.Message, error)
+	UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) error
+	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
+
+	// Delivery tracking
+	CreateDeliveryStatus(ctx context.Context, messageID uuid.UUID, userIDs []uuid.UUID) error
+	UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) error
+	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error
+	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) error
+	GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]model.DeliveryStatus, error)
+
+	// Conversation operations
+	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]model.ConversationParticipant, error)
+	GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error)
+	ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, error)
+	UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) error
+	UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) error
+	ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) error
+
+	// Typing indicators
+	SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) error
+	GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error)
+}
+
+type messageRepository struct {
+	db database.Database
+}
+
+func NewMessageRepository(db database.Database) MessageRepository {
+	return &messageRepository{db: db}
+}
+
+// CreateMessage creates a new message in the database
+func (r *messageRepository) CreateMessage(ctx context.Context, msg *model.Message) error {
+	query := `
+		INSERT INTO messages.messages (
+			id, conversation_id, sender_user_id, parent_message_id,
+			content, message_type, status, mentions, metadata, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, created_at, updated_at
+	`
+
+	mentionsJSON, err := json.Marshal(msg.Mentions)
+	if err != nil {
+		return fmt.Errorf("failed to marshal mentions: %w", err)
+	}
+
+	metadataJSON, err := json.Marshal(msg.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	row := r.db.QueryRow(ctx, query,
+		msg.ID,
+		msg.ConversationID,
+		msg.SenderUserID,
+		msg.ParentMessageID,
+		msg.Content,
+		msg.MessageType,
+		msg.Status,
+		mentionsJSON,
+		metadataJSON,
+		msg.CreatedAt,
+		msg.UpdatedAt,
+	)
+	err = row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt)
+
+	if err != nil {
+		return fmt.Errorf("failed to create message: %w", err)
+	}
+
+	return nil
+}
+
+// GetMessageByID retrieves a single message by ID
+func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*model.Message, error) {
+	query := `
+		SELECT id, conversation_id, sender_user_id, parent_message_id,
+		       content, message_type, status, is_edited, is_deleted,
+		       mentions, metadata, created_at, updated_at, deleted_at, edited_at
+		FROM messages.messages
+		WHERE id = $1 AND is_deleted = FALSE
+	`
+
+	msg := &model.Message{}
+	err := r.db.QueryRow(ctx, query, messageID).Scan(
+		&msg.ID,
+		&msg.ConversationID,
+		&msg.SenderUserID,
+		&msg.ParentMessageID,
+		&msg.Content,
+		&msg.MessageType,
+		&msg.Status,
+		&msg.IsEdited,
+		&msg.IsDeleted,
+		&msg.Mentions,
+		&msg.Metadata,
+		&msg.CreatedAt,
+		&msg.UpdatedAt,
+		&msg.DeletedAt,
+		&msg.EditedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("message not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
+	}
+
+	return msg, nil
+}
+
+// GetMessages retrieves messages for a conversation with pagination
+func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) ([]model.Message, error) {
+	if params.Limit == 0 {
+		params.Limit = 50
+	}
+	if params.Limit > 100 {
+		params.Limit = 100
+	}
+
+	query := `
+		SELECT m.id, m.conversation_id, m.sender_user_id, m.parent_message_id,
+		       m.content, m.message_type, m.status, m.is_edited, m.is_deleted,
+		       m.mentions, m.metadata, m.created_at, m.updated_at, m.deleted_at, m.edited_at,
+		       COUNT(ds.id) FILTER (WHERE ds.status = 'read') as read_count
+		FROM messages.messages m
+		LEFT JOIN messages.delivery_status ds ON m.id = ds.message_id
+		WHERE m.conversation_id = $1 AND m.is_deleted = FALSE
+	`
+
+	args := []interface{}{conversationID}
+	argIdx := 2
+
+	if params.BeforeID != nil {
+		query += fmt.Sprintf(` AND m.created_at < (SELECT created_at FROM messages.messages WHERE id = $%d)`, argIdx)
+		args = append(args, *params.BeforeID)
+		argIdx++
+	}
+
+	if params.AfterID != nil {
+		query += fmt.Sprintf(` AND m.created_at > (SELECT created_at FROM messages.messages WHERE id = $%d)`, argIdx)
+		args = append(args, *params.AfterID)
+		argIdx++
+	}
+
+	query += `
+		GROUP BY m.id
+		ORDER BY m.created_at DESC
+		LIMIT $` + fmt.Sprintf("%d", argIdx)
+	args = append(args, params.Limit)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []model.Message
+	for rows.Next() {
+		var msg model.Message
+		err := rows.Scan(
+			&msg.ID,
+			&msg.ConversationID,
+			&msg.SenderUserID,
+			&msg.ParentMessageID,
+			&msg.Content,
+			&msg.MessageType,
+			&msg.Status,
+			&msg.IsEdited,
+			&msg.IsDeleted,
+			&msg.Mentions,
+			&msg.Metadata,
+			&msg.CreatedAt,
+			&msg.UpdatedAt,
+			&msg.DeletedAt,
+			&msg.EditedAt,
+			&msg.ReadCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan message: %w", err)
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages, nil
+}
+
+// UpdateMessage updates message content
+func (r *messageRepository) UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) error {
+	query := `
+		UPDATE messages.messages
+		SET content = $1, is_edited = TRUE, edited_at = NOW(), updated_at = NOW()
+		WHERE id = $2 AND is_deleted = FALSE
+	`
+
+	result, err := r.db.Exec(ctx, query, content, messageID)
+	if err != nil {
+		return fmt.Errorf("failed to update message: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("message not found or already deleted")
+	}
+
+	return nil
+}
+
+// DeleteMessage soft deletes a message
+func (r *messageRepository) DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error {
+	query := `
+		UPDATE messages.messages
+		SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND sender_user_id = $2 AND is_deleted = FALSE
+	`
+
+	result, err := r.db.Exec(ctx, query, messageID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete message: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("message not found or unauthorized")
+	}
+
+	return nil
+}
+
+// CreateDeliveryStatus creates delivery status records for all participants
+func (r *messageRepository) CreateDeliveryStatus(ctx context.Context, messageID uuid.UUID, userIDs []uuid.UUID) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	query := `
+		INSERT INTO messages.delivery_status (id, message_id, user_id, status, created_at)
+		SELECT gen_random_uuid(), $1, unnest($2::uuid[]), 'sent', NOW()
+		ON CONFLICT (message_id, user_id) DO NOTHING
+	`
+
+	_, err := r.db.Exec(ctx, query, messageID, pq.Array(userIDs))
+	if err != nil {
+		return fmt.Errorf("failed to create delivery status: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateDeliveryStatus updates the delivery status for a message
+func (r *messageRepository) UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) error {
+	query := `
+		UPDATE messages.delivery_status
+		SET status = $1,
+		    delivered_at = CASE WHEN $1 = 'delivered' AND delivered_at IS NULL THEN NOW() ELSE delivered_at END,
+		    read_at = CASE WHEN $1 = 'read' AND read_at IS NULL THEN NOW() ELSE read_at END
+		WHERE message_id = $2 AND user_id = $3
+	`
+
+	_, err := r.db.Exec(ctx, query, status, messageID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update delivery status: %w", err)
+	}
+
+	return nil
+}
+
+// MarkAsDelivered marks a message as delivered to a user
+func (r *messageRepository) MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error {
+	return r.UpdateDeliveryStatus(ctx, messageID, userID, "delivered")
+}
+
+// MarkAsRead marks a message as read by a user
+func (r *messageRepository) MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) error {
+	return r.UpdateDeliveryStatus(ctx, messageID, userID, "read")
+}
+
+// GetDeliveryStatus gets all delivery statuses for a message
+func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]model.DeliveryStatus, error) {
+	query := `
+		SELECT id, message_id, user_id, status, delivered_at, read_at, created_at
+		FROM messages.delivery_status
+		WHERE message_id = $1
+		ORDER BY created_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, messageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query delivery status: %w", err)
+	}
+	defer rows.Close()
+
+	var statuses []model.DeliveryStatus
+	for rows.Next() {
+		var ds model.DeliveryStatus
+		err := rows.Scan(
+			&ds.ID,
+			&ds.MessageID,
+			&ds.UserID,
+			&ds.Status,
+			&ds.DeliveredAt,
+			&ds.ReadAt,
+			&ds.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan delivery status: %w", err)
+		}
+		statuses = append(statuses, ds)
+	}
+
+	return statuses, nil
+}
+
+// GetConversationParticipants gets all participants in a conversation
+func (r *messageRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]model.ConversationParticipant, error) {
+	query := `
+		SELECT id, conversation_id, user_id, role, can_send_messages,
+		       last_read_message_id, last_read_at, unread_count, joined_at, left_at
+		FROM messages.conversation_participants
+		WHERE conversation_id = $1 AND left_at IS NULL
+		ORDER BY joined_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query participants: %w", err)
+	}
+	defer rows.Close()
+
+	var participants []model.ConversationParticipant
+	for rows.Next() {
+		var p model.ConversationParticipant
+		err := rows.Scan(
+			&p.ID,
+			&p.ConversationID,
+			&p.UserID,
+			&p.Role,
+			&p.CanSendMessages,
+			&p.LastReadMessageID,
+			&p.LastReadAt,
+			&p.UnreadCount,
+			&p.JoinedAt,
+			&p.LeftAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan participant: %w", err)
+		}
+		participants = append(participants, p)
+	}
+
+	return participants, nil
+}
+
+// GetParticipantUserIDs gets all user IDs in a conversation
+func (r *messageRepository) GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error) {
+	query := `
+		SELECT user_id FROM messages.conversation_participants
+		WHERE conversation_id = $1 AND left_at IS NULL
+	`
+
+	rows, err := r.db.Query(ctx, query, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query participant user IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var userIDs []uuid.UUID
+	for rows.Next() {
+		var userID uuid.UUID
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("failed to scan user ID: %w", err)
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	return userIDs, nil
+}
+
+// ValidateParticipant checks if a user is a participant in a conversation
+func (r *messageRepository) ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM messages.conversation_participants
+			WHERE conversation_id = $1 AND user_id = $2 AND left_at IS NULL AND can_send_messages = TRUE
+		)
+	`
+
+	var exists bool
+	err := r.db.QueryRow(ctx, query, conversationID, userID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate participant: %w", err)
+	}
+
+	return exists, nil
+}
+
+// UpdateConversationLastMessage updates conversation metadata
+func (r *messageRepository) UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) error {
+	query := `
+		UPDATE messages.conversations
+		SET last_message_id = $1,
+		    last_message_at = NOW(),
+		    last_activity_at = NOW(),
+		    message_count = message_count + 1,
+		    updated_at = NOW()
+		WHERE id = $2
+	`
+
+	_, err := r.db.Exec(ctx, query, messageID, conversationID)
+	if err != nil {
+		return fmt.Errorf("failed to update conversation: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateParticipantUnreadCount updates unread count for a participant
+func (r *messageRepository) UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) error {
+	var query string
+	if increment {
+		query = `
+			UPDATE messages.conversation_participants
+			SET unread_count = unread_count + 1, updated_at = NOW()
+			WHERE conversation_id = $1 AND user_id = $2
+		`
+	} else {
+		query = `
+			UPDATE messages.conversation_participants
+			SET unread_count = GREATEST(unread_count - 1, 0), updated_at = NOW()
+			WHERE conversation_id = $1 AND user_id = $2
+		`
+	}
+
+	_, err := r.db.Exec(ctx, query, conversationID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update unread count: %w", err)
+	}
+
+	return nil
+}
+
+// ResetUnreadCount resets unread count for a participant
+func (r *messageRepository) ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) error {
+	query := `
+		UPDATE messages.conversation_participants
+		SET unread_count = 0, last_read_at = NOW(), updated_at = NOW()
+		WHERE conversation_id = $1 AND user_id = $2
+	`
+
+	_, err := r.db.Exec(ctx, query, conversationID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to reset unread count: %w", err)
+	}
+
+	return nil
+}
+
+// SetTypingIndicator sets typing indicator for a user in a conversation
+func (r *messageRepository) SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) error {
+	if isTyping {
+		query := `
+			INSERT INTO messages.typing_indicators (conversation_id, user_id, started_at, expires_at)
+			VALUES ($1, $2, NOW(), NOW() + INTERVAL '10 seconds')
+			ON CONFLICT (conversation_id, user_id) DO UPDATE SET
+				started_at = NOW(),
+				expires_at = NOW() + INTERVAL '10 seconds'
+		`
+		_, err := r.db.Exec(ctx, query, conversationID, userID)
+		return err
+	} else {
+		query := `DELETE FROM messages.typing_indicators WHERE conversation_id = $1 AND user_id = $2`
+		_, err := r.db.Exec(ctx, query, conversationID, userID)
+		return err
+	}
+}
+
+// GetTypingUsers gets all users currently typing in a conversation
+func (r *messageRepository) GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error) {
+	query := `
+		SELECT user_id FROM messages.typing_indicators
+		WHERE conversation_id = $1 AND expires_at > NOW()
+	`
+
+	rows, err := r.db.Query(ctx, query, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query typing users: %w", err)
+	}
+	defer rows.Close()
+
+	var userIDs []uuid.UUID
+	for rows.Next() {
+		var userID uuid.UUID
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("failed to scan typing user: %w", err)
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	return userIDs, nil
+}

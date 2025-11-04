@@ -1,0 +1,28 @@
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates tzdata curl bash wget
+
+# Install Air for hot reload
+RUN go install github.com/air-verse/air@v1.52.3
+
+WORKDIR /app
+
+# Copy dependencies
+COPY shared/go.mod shared/go.sum ./shared/
+COPY services/message-service/go.mod services/message-service/go.sum ./services/message-service/
+
+WORKDIR /app/services/message-service
+
+# Setup module replacement
+RUN go mod edit -replace echo-backend/shared=../../shared
+RUN go mod download
+
+# Copy Air configuration
+COPY services/message-service/.air.toml .air.toml
+
+# Copy environment file
+COPY services/message-service/.env .env
+
+EXPOSE 8083 9093
+
+CMD ["air", "-c", ".air.toml"]

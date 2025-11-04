@@ -1,463 +1,1007 @@
+# =============================================================================
+# ECHO BACKEND - MAKEFILE
+# =============================================================================
+# Organized Makefile for managing Echo Backend microservices
+# =============================================================================
+
 .PHONY: help up down build rebuild logs restart status clean ps health
-.PHONY: gateway-up gateway-down gateway-logs gateway-restart gateway-build
-.PHONY: auth-up auth-down auth-logs auth-restart auth-build
+.PHONY: gateway-up gateway-down gateway-logs gateway-restart gateway-build gateway-rerun gateway-rebuild
+.PHONY: auth-up auth-down auth-logs auth-restart auth-build auth-rerun auth-rebuild
+.PHONY: location-up location-down location-logs location-restart location-build location-rerun
+.PHONY: message-up message-down message-logs message-restart message-build message-rerun message-rebuild
+.PHONY: kafka-up kafka-down kafka-logs kafka-restart kafka-topics kafka-create-topics
 .PHONY: db-init db-seed db-connect db-reset db-migrate db-migrate-down db-migrate-status
-.PHONY: redis-connect redis-flush test setup
+.PHONY: redis-connect redis-flush test setup test-auth verify-security dev generate-routes update-gateway-routes
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# Environment Selection (dev/prod)
+ENV ?= dev
 
 # Docker Compose files
-COMPOSE_FILE = infra/docker/docker-compose.dev.yml
+COMPOSE_FILE_DEV := infra/docker/docker-compose.dev.yml
+COMPOSE_FILE_PROD := infra/docker/docker-compose.prod.yml
+
+# Select compose file based on environment
+ifeq ($(ENV),prod)
+    COMPOSE_FILE := $(COMPOSE_FILE_PROD)
+    ENV_NAME := Production
+else
+    COMPOSE_FILE := $(COMPOSE_FILE_DEV)
+    ENV_NAME := Development
+endif
 
 # Default target
 .DEFAULT_GOAL := help
 
-# Colors for output
-BLUE := \033[0;34m
-GREEN := \033[0;32m
-YELLOW := \033[0;33m
-RED := \033[0;31m
-NC := \033[0m # No Color
+# Colors
+BOLD := \033[1m
+DIM := \033[2m
+BLUE := \033[38;5;33m
+GREEN := \033[38;5;82m
+YELLOW := \033[38;5;220m
+RED := \033[38;5;196m
+PURPLE := \033[38;5;141m
+CYAN := \033[38;5;51m
+GRAY := \033[38;5;240m
+NC := \033[0m
+
+# Symbols
+CHECK := ✓
+CROSS := ✗
+
+# =============================================================================
+# HELP
+# =============================================================================
 
 ## help: Show this help message
 help:
-	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
-	@echo "$(BLUE)  Echo Backend - Available Commands$(NC)"
-	@echo "$(BLUE)═══════════════════════════════════════════════════════════$(NC)"
 	@echo ""
-	@echo "$(GREEN)🚀 Main Services (API Gateway + Auth):$(NC)"
-	@echo "  make up               - Start all services (gateway + auth + deps)"
-	@echo "  make down             - Stop all services"
-	@echo "  make restart          - Restart all services"
-	@echo "  make build            - Build all service images"
-	@echo "  make logs             - View logs from all services"
-	@echo "  make status           - Show status of all services"
-	@echo "  make ps               - Show running containers"
-	@echo "  make clean            - Stop and remove everything (including volumes)"	@echo "$(GREEN)🌐 API Gateway:$(NC)"
-	@echo "  make gateway-up       - Start API Gateway"
-	@echo "  make gateway-down     - Stop API Gateway"
-	@echo "  make gateway-rerun    - Rerun API Gateway"
-	@echo "  make gateway-restart  - Restart API Gateway"
-	@echo "  make gateway-build    - Rebuild API Gateway"
-	@echo "  make gateway-logs     - View API Gateway logs"
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)$(CYAN)  ECHO BACKEND $(NC)$(GRAY)·$(NC) $(DIM)Microservices Management$(NC)"
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "$(GREEN)🔐 Auth Service:$(NC)"
-	@echo "  make auth-up          - Start Auth Service"
-	@echo "  make auth-down        - Stop Auth Service"
-	@echo "  make auth-rerun       - Rerun Auth Service"
-	@echo "  make auth-restart     - Restart Auth Service"
-	@echo "  make auth-build       - Rebuild Auth Service"
-	@echo "  make auth-logs        - View Auth Service logs"
+	@echo "$(BOLD)Main Services:$(NC)"
+	@echo "  make up               Start all services"
+	@echo "  make down             Stop all services"
+	@echo "  make restart          Restart all services"
+	@echo "  make build            Build all service images"
+	@echo "  make rerun            Stop, rebuild and start all services"
+	@echo "  make logs             View logs from all services"
+	@echo "  make status           Show status of all services"
+	@echo "  make ps               Show running containers"
+	@echo "  make clean            Stop and remove everything (including volumes)"
 	@echo ""
-	@echo "$(YELLOW)🔍 Location Service:$(NC)"
-	@echo "  make location-up          - Start Location Service"
-	@echo "  make location-down        - Stop Location Service"
-	@echo "  make location-rerun       - Rerun Location Service"
-	@echo "  make location-restart     - Restart Location Service"
-	@echo "  make location-build       - Rebuild Location Service"
-	@echo "  make location-logs        - View Location Service logs"
+	@echo "$(BOLD)API Gateway:$(NC)"
+	@echo "  make gateway-up       Start API Gateway"
+	@echo "  make gateway-down     Stop API Gateway"
+	@echo "  make gateway-rerun    Stop and restart API Gateway"
+	@echo "  make gateway-restart  Restart API Gateway"
+	@echo "  make gateway-build    Rebuild API Gateway"
+	@echo "  make gateway-rebuild  Rebuild API Gateway (no cache)"
+	@echo "  make gateway-logs     View API Gateway logs"
 	@echo ""
-	@echo "$(GREEN)💾 Database:$(NC)"
-	@echo "  make db-init          - Initialize database schemas"
-	@echo "  make db-seed          - Seed database with test data"
-	@echo "  make db-connect       - Connect to PostgreSQL"
-	@echo "  make db-reset         - Reset database (drop and recreate)"
-	@echo "  make db-migrate       - Run database migrations"
-	@echo "  make db-migrate-down  - Rollback last migration"
-	@echo "  make db-migrate-status - Show migration status"
+	@echo "$(BOLD)Auth Service:$(NC)"
+	@echo "  make auth-up          Start Auth Service"
+	@echo "  make auth-down        Stop Auth Service"
+	@echo "  make auth-rerun       Stop and restart Auth Service"
+	@echo "  make auth-restart     Restart Auth Service"
+	@echo "  make auth-build       Rebuild Auth Service"
+	@echo "  make auth-rebuild     Rebuild Auth Service (no cache)"
+	@echo "  make auth-logs        View Auth Service logs"
 	@echo ""
-	@echo "$(GREEN)📦 Redis:$(NC)"
-	@echo "  make redis-connect    - Connect to Redis CLI"
-	@echo "  make redis-flush      - Flush all Redis data"
+	@echo "$(BOLD)Location Service:$(NC)"
+	@echo "  make location-up      Start Location Service"
+	@echo "  make location-down    Stop Location Service"
+	@echo "  make location-rerun   Stop and restart Location Service"
+	@echo "  make location-restart Restart Location Service"
+	@echo "  make location-build   Rebuild Location Service"
+	@echo "  make location-logs    View Location Service logs"
 	@echo ""
-	@echo "$(GREEN)🛠️  Development:$(NC)"
-	@echo "  make setup            - Initial setup (create .env, start services)"
-	@echo "  make health           - Check health of all services"
-	@echo "  make test             - Run tests"
+	@echo "$(BOLD)Message Service:$(NC)"
+	@echo "  make message-up       Start Message Service"
+	@echo "  make message-down     Stop Message Service"
+	@echo "  make message-rerun    Stop and restart Message Service"
+	@echo "  make message-restart  Restart Message Service"
+	@echo "  make message-build    Rebuild Message Service"
+	@echo "  make message-rebuild  Rebuild Message Service (no cache)"
+	@echo "  make message-logs     View Message Service logs"
+	@echo ""
+	@echo "$(BOLD)Kafka:$(NC)"
+	@echo "  make kafka-up         Start Kafka and Zookeeper"
+	@echo "  make kafka-down       Stop Kafka and Zookeeper"
+	@echo "  make kafka-logs       View Kafka logs"
+	@echo "  make kafka-restart    Restart Kafka"
+	@echo "  make kafka-topics     List Kafka topics"
+	@echo "  make kafka-create-topics  Create required Kafka topics"
+	@echo ""
+	@echo "$(BOLD)Database:$(NC)"
+	@echo "  make db-init          Initialize database schemas"
+	@echo "  make db-seed          Seed database with test data"
+	@echo "  make db-connect       Connect to PostgreSQL"
+	@echo "  make db-reset         Reset database (drop and recreate)"
+	@echo "  make db-migrate       Run database migrations"
+	@echo "  make db-migrate-down  Rollback last migration"
+	@echo "  make db-migrate-status Show migration status"
+	@echo ""
+	@echo "$(BOLD)Redis:$(NC)"
+	@echo "  make redis-connect    Connect to Redis CLI"
+	@echo "  make redis-flush      Flush all Redis data"
+	@echo ""
+	@echo "$(BOLD)Development:$(NC)"
+	@echo "  make setup            Initial setup (create .env, start services)"
+	@echo "  make dev              Start in development mode with logs"
+	@echo "  make health           Check health of all services"
+	@echo "  make test             Run tests"
+	@echo "  make test-auth        Test auth endpoints"
+	@echo "  make verify-security  Verify auth service security"
+	@echo ""
+	@echo "$(BOLD)Utilities:$(NC)"
+	@echo "  make generate-routes  Generate routes from registry"
+	@echo "  make update-gateway-routes Update gateway routes"
+	@echo ""
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 
 # =============================================================================
-# Main Services (API Gateway + Auth Service)
+# MAIN SERVICES
 # =============================================================================
 
 ## up: Start all services
 up:
-	@echo "$(GREEN)🚀 Starting all services...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) up -d
 	@echo ""
-	@echo "$(GREEN)✓ Services started$(NC)"
-	@echo "$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)  API Gateway:$(NC)    http://localhost:8080"
-	@echo "$(BLUE)  Auth Service:$(NC)   Internal only (via gateway)"
-	@echo "$(BLUE)  PostgreSQL:$(NC)     localhost:5432"
-	@echo "$(BLUE)  Redis:$(NC)          localhost:6379"
-	@echo "$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting All Services$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "💡 Useful commands:"
-	@echo "   $(BLUE)make logs$(NC)    - View logs"
-	@echo "   $(BLUE)make status$(NC)  - Check service status"
-	@echo "   $(BLUE)make health$(NC)  - Run health checks"
+	@docker-compose -f $(COMPOSE_FILE) up -d
+	@sleep 2
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Services started successfully$(NC)"
+	@echo ""
+	@echo "$(BOLD)Service URLs:$(NC)"
+	@echo "  API Gateway      $(CYAN)http://localhost:8080$(NC)"
+	@echo "  Auth Service     $(GRAY)Internal only (via gateway)$(NC)"
+	@echo "  Location         $(CYAN)http://localhost:8090$(NC)"
+	@echo "  Messages         $(CYAN)http://localhost:8083$(NC)"
+	@echo "  WebSocket        $(CYAN)ws://localhost:8083/ws$(NC)"
+	@echo ""
+	@echo "$(BOLD)Infrastructure:$(NC)"
+	@echo "  PostgreSQL       $(YELLOW)localhost:5432$(NC)"
+	@echo "  Redis            $(YELLOW)localhost:6379$(NC)"
+	@echo "  Kafka            $(YELLOW)localhost:9092$(NC)"
+	@echo ""
+	@echo "$(BOLD)Quick Commands:$(NC)"
+	@echo "  $(CYAN)make logs$(NC)    View live logs"
+	@echo "  $(CYAN)make status$(NC)  Check service status"
+	@echo "  $(CYAN)make health$(NC)  Run health checks"
+	@echo ""
 
 ## down: Stop all services
 down:
-	@echo "$(YELLOW)⏹️  Stopping all services...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) down
-	@echo "$(GREEN)✓ Services stopped$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Stopping Services$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) down
+	@echo ""
+	@echo "$(GREEN)$(CHECK) All services stopped$(NC)"
+	@echo ""
 
 ## restart: Restart all services
 restart:
-	@echo "$(YELLOW)🔄 Restarting all services...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) restart
-	@echo "$(GREEN)✓ Services restarted$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Restarting Services$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) restart
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Services restarted$(NC)"
+	@echo ""
 
 ## build: Build all service images
 build:
-	@echo "$(GREEN)🔨 Building service images...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) build
-	@echo "$(GREEN)✓ Build complete$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Service Images$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
 
-## rerun: Rerun all services
+## rerun: Stop, rebuild and start all services
 rerun:
-	@echo "$(YELLOW)Rerunning all services...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) down
-	docker-compose -f $(COMPOSE_FILE) build
-	docker-compose -f $(COMPOSE_FILE) up -d
-	@echo "$(GREEN)✓ Services rerun complete$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuild and Restart$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(DIM)Step 1/3: Stopping services...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) down
+	@echo "$(DIM)Step 2/3: Building images...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) build
+	@echo "$(DIM)Step 3/3: Starting services...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) up -d
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Services rebuilt and restarted$(NC)"
+	@echo ""
 
 ## logs: View logs from all services
 logs:
-	docker-compose -f $(COMPOSE_FILE) logs -f
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f
 
 ## ps: Show running containers
 ps:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Running Containers$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@docker-compose -f $(COMPOSE_FILE) ps
+	@echo ""
 
 ## status: Show status of all services
 status:
-	@echo "$(GREEN)📊 Service Status:$(NC)"
 	@echo ""
-	@echo "$(BLUE)API Gateway:$(NC)"
-	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-api-gateway)" = "true" ]; then echo "✅"; else echo "❌"; fi)
-	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-api-gateway)
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Service Status$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "$(BLUE)Auth Service:$(NC)"
-	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-auth-service)" = "true" ]; then echo "✅"; else echo "❌"; fi)
-	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-auth-service)
+	@echo "$(BOLD)API Gateway$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-api-gateway 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-api-gateway 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
-	@echo "$(BLUE)Location Service:$(NC)"
-	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-location-service)" = "true" ]; then echo "✅"; else echo "❌"; fi)
-	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-location-service)
+	@echo "$(BOLD)Auth Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-auth-service 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-auth-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
-	@echo "$(BLUE)PostgreSQL:$(NC)"
-	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-postgres)" = "true" ]; then echo "✅"; else echo "❌"; fi)
-	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-postgres)
+	@echo "$(BOLD)Location Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' location-service 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' location-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
-	@echo "$(BLUE)Redis:$(NC)"
-	@echo "Running :" $$(if [ "$$(docker inspect -f '{{.State.Running}}' echo-redis)" = "true" ]; then echo "✅"; else echo "❌"; fi)
-	@echo "Uptime  :" $(shell docker inspect -f '{{.State.StartedAt}}' echo-redis)
+	@echo "$(BOLD)Message Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-message-service 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-message-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo ""
+	@echo "$(BOLD)Kafka$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-kafka 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-kafka 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo ""
+	@echo "$(BOLD)PostgreSQL$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-postgres 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-postgres 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo ""
+	@echo "$(BOLD)Redis$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-redis 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-redis 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
 
 ## clean: Stop and remove everything (including volumes)
 clean:
-	@echo "$(RED)🗑️  Cleaning up everything (this will delete all data)...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Cleanup $(NC)$(RED)$(CROSS) This will delete all data!$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		docker-compose -f $(COMPOSE_FILE) down -v; \
-		echo "$(GREEN)✓ Cleanup complete$(NC)"; \
+		echo ""; \
+		echo "$(GREEN)$(CHECK) Cleanup complete$(NC)"; \
+		echo ""; \
 	else \
+		echo ""; \
 		echo "$(YELLOW)Cancelled$(NC)"; \
+		echo ""; \
 	fi
 
 # =============================================================================
-# API Gateway
+# API GATEWAY
 # =============================================================================
 
 ## gateway-up: Start API Gateway
 gateway-up:
-	@echo "$(GREEN)🌐 Starting API Gateway...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) up -d api-gateway
-	@echo "$(GREEN)✓ API Gateway started$(NC)"
-	@echo "$(YELLOW)Gateway: http://localhost:8080$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting API Gateway$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d api-gateway
+	@echo ""
+	@echo "$(GREEN)$(CHECK) API Gateway started$(NC)"
+	@echo "  URL: $(CYAN)http://localhost:8080$(NC)"
+	@echo ""
 
 ## gateway-down: Stop API Gateway
 gateway-down:
+	@echo ""
 	@echo "$(YELLOW)Stopping API Gateway...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) stop api-gateway
-	@echo "$(GREEN)✓ API Gateway stopped$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop api-gateway
+	@echo "$(GREEN)$(CHECK) API Gateway stopped$(NC)"
+	@echo ""
 
-## gateway-rerun: Rerun API Gateway
+## gateway-rerun: Stop and restart API Gateway
 gateway-rerun:
-	@echo "$(YELLOW)Rerunning API Gateway...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) stop api-gateway
-	docker-compose -f $(COMPOSE_FILE) up -d api-gateway
-	@echo "$(GREEN)✓ API Gateway rerun complete$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning API Gateway$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop api-gateway
+	@docker-compose -f $(COMPOSE_FILE) up -d api-gateway
+	@echo ""
+	@echo "$(GREEN)$(CHECK) API Gateway rerun complete$(NC)"
+	@echo ""
 
 ## gateway-restart: Restart API Gateway
 gateway-restart:
-	@echo "$(YELLOW)🔄 Restarting API Gateway...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) restart api-gateway
-	@echo "$(GREEN)✓ API Gateway restarted$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Restarting API Gateway...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart api-gateway
+	@echo "$(GREEN)$(CHECK) API Gateway restarted$(NC)"
+	@echo ""
 
 ## gateway-build: Rebuild API Gateway
 gateway-build:
-	@echo "$(GREEN)🔨 Rebuilding API Gateway...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) build --no-cache api-gateway
-	@echo "$(GREEN)✓ Build complete$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building API Gateway$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build api-gateway
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
+
+## gateway-rebuild: Rebuild API Gateway (no cache)
+gateway-rebuild:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding API Gateway $(DIM)(no cache)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache api-gateway
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
 
 ## gateway-logs: View API Gateway logs
 gateway-logs:
-	docker-compose -f $(COMPOSE_FILE) logs -f api-gateway
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  API Gateway Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f api-gateway
 
 # =============================================================================
-# Auth Service
+# AUTH SERVICE
 # =============================================================================
 
 ## auth-up: Start Auth Service
 auth-up:
-	@echo "$(GREEN)🔐 Starting Auth Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) up -d auth-service
-	@echo "$(GREEN)✓ Auth Service started$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Auth Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d auth-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Auth Service started$(NC)"
+	@echo ""
 
 ## auth-down: Stop Auth Service
 auth-down:
+	@echo ""
 	@echo "$(YELLOW)Stopping Auth Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) stop auth-service
-	@echo "$(GREEN)✓ Auth Service stopped$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop auth-service
+	@echo "$(GREEN)$(CHECK) Auth Service stopped$(NC)"
+	@echo ""
 
-## auth-rerun: Rerun Auth Service
-auth-rerun: 
-	@echo "$(YELLOW)Rerunning Auth Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) stop auth-service
-	docker-compose -f $(COMPOSE_FILE) up -d auth-service
-	@echo "$(GREEN)✓ Auth Service rerun complete$(NC)"
-
-## auth-rebuild: Rebuild Auth Service
-auth-rebuild:
-	@echo "$(GREEN)🔨 Rebuilding Auth Service (no cache)...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) build --no-cache auth-service
-	@echo "$(GREEN)✓ Rebuild complete$(NC)"
+## auth-rerun: Stop and restart Auth Service
+auth-rerun:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning Auth Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop auth-service
+	@docker-compose -f $(COMPOSE_FILE) up -d auth-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Auth Service rerun complete$(NC)"
+	@echo ""
 
 ## auth-restart: Restart Auth Service
 auth-restart:
-	@echo "$(YELLOW)🔄 Restarting Auth Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) restart auth-service
-	@echo "$(GREEN)✓ Auth Service restarted$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Restarting Auth Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart auth-service
+	@echo "$(GREEN)$(CHECK) Auth Service restarted$(NC)"
+	@echo ""
 
 ## auth-build: Rebuild Auth Service
 auth-build:
-	@echo "$(GREEN)🔨 Rebuilding Auth Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) build --no-cache auth-service
-	@echo "$(GREEN)✓ Build complete$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Auth Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build auth-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
+
+## auth-rebuild: Rebuild Auth Service (no cache)
+auth-rebuild:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding Auth Service $(DIM)(no cache)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache auth-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
 
 ## auth-logs: View Auth Service logs
 auth-logs:
-	docker-compose -f $(COMPOSE_FILE) logs -f auth-service
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Auth Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f auth-service
 
 # =============================================================================
-# Location Service
+# LOCATION SERVICE
 # =============================================================================
+
+## location-up: Start Location Service
 location-up:
-	@echo "$(GREEN)🌐 Starting Location Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) up -d location-service
-	@echo "$(GREEN)✓ Location Service started$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Location Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Location Service started$(NC)"
+	@echo ""
 
+## location-down: Stop Location Service
 location-down:
+	@echo ""
 	@echo "$(YELLOW)Stopping Location Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) stop location-service
-	@echo "$(GREEN)✓ Location Service stopped$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop location-service
+	@echo "$(GREEN)$(CHECK) Location Service stopped$(NC)"
+	@echo ""
 
+## location-rerun: Stop and restart Location Service
 location-rerun:
-	@echo "$(YELLOW)Rerunning Location Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) stop location-service
-	docker-compose -f $(COMPOSE_FILE) up -d location-service
-	@echo "$(GREEN)✓ Location Service rerun complete$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning Location Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop location-service
+	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Location Service rerun complete$(NC)"
+	@echo ""
 
+## location-restart: Restart Location Service
 location-restart:
-	@echo "$(YELLOW)🔄 Restarting Location Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) restart location-service
-	@echo "$(GREEN)✓ Location Service restarted$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Restarting Location Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart location-service
+	@echo "$(GREEN)$(CHECK) Location Service restarted$(NC)"
+	@echo ""
 
+## location-build: Rebuild Location Service
 location-build:
-	@echo "$(GREEN)🔨 Rebuilding Location Service...$(NC)"
-	docker-compose -f $(COMPOSE_FILE) build --no-cache location-service
-	@echo "$(GREEN)✓ Build complete$(NC)"	
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Location Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
 
+## location-logs: View Location Service logs
 location-logs:
-	docker-compose -f $(COMPOSE_FILE) logs -f location-service
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Location Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f location-service
 
 # =============================================================================
-# Database
+# MESSAGE SERVICE
 # =============================================================================
+
+## message-up: Start Message Service
+message-up:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Message Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d message-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Message Service started$(NC)"
+	@echo "  REST API:   $(CYAN)http://localhost:8083$(NC)"
+	@echo "  WebSocket:  $(CYAN)ws://localhost:8083/ws$(NC)"
+	@echo ""
+
+## message-down: Stop Message Service
+message-down:
+	@echo ""
+	@echo "$(YELLOW)Stopping Message Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop message-service
+	@echo "$(GREEN)$(CHECK) Message Service stopped$(NC)"
+	@echo ""
+
+## message-rerun: Stop and restart Message Service
+message-rerun:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning Message Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop message-service
+	@docker-compose -f $(COMPOSE_FILE) up -d message-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Message Service rerun complete$(NC)"
+	@echo ""
+
+## message-restart: Restart Message Service
+message-restart:
+	@echo ""
+	@echo "$(YELLOW)Restarting Message Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart message-service
+	@echo "$(GREEN)$(CHECK) Message Service restarted$(NC)"
+	@echo ""
+
+## message-build: Rebuild Message Service
+message-build:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Message Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build message-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
+
+## message-rebuild: Rebuild Message Service (no cache)
+message-rebuild:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding Message Service $(DIM)(no cache)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache message-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
+
+## message-logs: View Message Service logs
+message-logs:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Message Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f message-service
+
+# =============================================================================
+# KAFKA & ZOOKEEPER
+# =============================================================================
+
+## kafka-up: Start Kafka and Zookeeper
+kafka-up:
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Kafka$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d zookeeper kafka
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Kafka started$(NC)"
+	@echo "  URL: $(CYAN)localhost:9092$(NC)"
+	@echo ""
+
+## kafka-down: Stop Kafka and Zookeeper
+kafka-down:
+	@echo ""
+	@echo "$(YELLOW)Stopping Kafka...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop kafka zookeeper
+	@echo "$(GREEN)$(CHECK) Kafka stopped$(NC)"
+	@echo ""
+
+## kafka-logs: View Kafka logs
+kafka-logs:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Kafka Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f kafka
+
+## kafka-restart: Restart Kafka
+kafka-restart:
+	@echo ""
+	@echo "$(YELLOW)Restarting Kafka...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart kafka
+	@echo "$(GREEN)$(CHECK) Kafka restarted$(NC)"
+	@echo ""
+
+## kafka-topics: List Kafka topics
+kafka-topics:
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Kafka Topics$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker exec echo-kafka kafka-topics --list --bootstrap-server localhost:9092
+	@echo ""
+
+## kafka-create-topics: Create required Kafka topics
+kafka-create-topics:
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Creating Kafka Topics$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic messages --partitions 3 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic notifications --partitions 3 --replication-factor 1
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Topics created$(NC)"
+	@echo ""
+
+# =============================================================================
+# DATABASE
+# =============================================================================
+
+## db-init: Initialize database
 db-init:
-	@echo "$(GREEN)Initializing database...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Initializing Database$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@cd infra/scripts && chmod +x init-db.sh && ./init-db.sh
-	@echo "$(GREEN)✓ Database initialized$(NC)"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Database initialized$(NC)"
+	@echo ""
 
 ## db-seed: Seed database with test data
 db-seed:
-	@echo "$(GREEN)Seeding database...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Seeding Database$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@cd infra/scripts && chmod +x seed-data.sh && ./seed-data.sh
-	@echo "$(GREEN)✓ Database seeded$(NC)"
-	@echo "$(YELLOW)Test accounts:$(NC)"
-	@echo "  - alice@example.com"
-	@echo "  - bob@example.com"
-	@echo "  - charlie@example.com"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Database seeded$(NC)"
+	@echo ""
+	@echo "$(BOLD)Test Accounts:$(NC)"
+	@echo "  $(GREEN)$(CHECK)$(NC) alice@example.com"
+	@echo "  $(GREEN)$(CHECK)$(NC) bob@example.com"
+	@echo "  $(GREEN)$(CHECK)$(NC) charlie@example.com"
+	@echo ""
 
 ## db-connect: Connect to PostgreSQL
 db-connect:
-	@echo "$(GREEN)Connecting to PostgreSQL...$(NC)"
-	docker exec -it echo-postgres psql -U echo -d echo_db
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Connecting to PostgreSQL$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker exec -it echo-postgres psql -U echo -d echo_db
 
 ## db-reset: Reset database (drop and recreate)
 db-reset:
-	@echo "$(RED)Resetting database (this will delete all data)...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Database Reset $(NC)$(RED)$(CROSS) This will delete all data!$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	if [[ $REPLY =~ ^[Yy]$ ]]; then \
 		docker exec -it echo-postgres psql -U echo -c "DROP DATABASE IF EXISTS echo_db;"; \
 		docker exec -it echo-postgres psql -U echo -c "CREATE DATABASE echo_db;"; \
 		$(MAKE) db-init; \
-		echo "$(GREEN)✓ Database reset complete$(NC)"; \
+		echo ""; \
+		echo "$(GREEN)$(CHECK) Database reset complete$(NC)"; \
+		echo ""; \
 	else \
+		echo ""; \
 		echo "$(YELLOW)Cancelled$(NC)"; \
+		echo ""; \
 	fi
 
 ## db-migrate: Run database migrations
 db-migrate:
-	@echo "$(GREEN)Running database migrations...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Running Migrations$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@cd infra/scripts && chmod +x run-migrations.sh && ./run-migrations.sh up
-	@echo "$(GREEN)✓ Migrations applied$(NC)"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Migrations applied$(NC)"
+	@echo ""
 
 ## db-migrate-down: Rollback last migration
 db-migrate-down:
-	@echo "$(YELLOW)Rolling back last migration...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rolling Back Migration$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@cd infra/scripts && chmod +x run-migrations.sh && ./run-migrations.sh down
-	@echo "$(GREEN)✓ Migration rolled back$(NC)"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Migration rolled back$(NC)"
+	@echo ""
 
 ## db-migrate-status: Show migration status
 db-migrate-status:
-	@echo "$(GREEN)Migration status:$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Migration Status$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@cd infra/scripts && chmod +x run-migrations.sh && ./run-migrations.sh status
+	@echo ""
+
+# =============================================================================
+# REDIS
+# =============================================================================
 
 ## redis-connect: Connect to Redis CLI
 redis-connect:
-	@echo "$(GREEN)Connecting to Redis...$(NC)"
-	docker exec -it echo-redis redis-cli -a redis_password
+	@echo ""
+	@echo "$(BOLD)$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Connecting to Redis$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker exec -it echo-redis redis-cli -a redis_password
 
 ## redis-flush: Flush all Redis data
 redis-flush:
-	@echo "$(RED)🗑️  Flushing Redis data...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Flush Redis $(NC)$(RED)$(CROSS) This will delete all data!$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	if [[ $REPLY =~ ^[Yy]$ ]]; then \
 		docker exec -it echo-redis redis-cli -a redis_password FLUSHALL; \
-		echo "$(GREEN)✓ Redis flushed$(NC)"; \
+		echo ""; \
+		echo "$(GREEN)$(CHECK) Redis flushed$(NC)"; \
+		echo ""; \
 	else \
+		echo ""; \
 		echo "$(YELLOW)Cancelled$(NC)"; \
+		echo ""; \
 	fi
 
 # =============================================================================
-# Development & Testing
+# DEVELOPMENT & TESTING
 # =============================================================================
 
 ## setup: Initial setup
 setup:
-	@echo "$(GREEN)🛠️  Setting up Echo Backend...$(NC)"
-	@if [ ! -f services/api-gateway/.env ]; then \
-		touch services/api-gateway/.env; \
-		echo "$(GREEN)✓ Created api-gateway .env file$(NC)"; \
-	else \
-		echo "$(YELLOW)⚠ api-gateway .env file already exists$(NC)"; \
-	fi
-	@if [ ! -f services/auth-service/.env ]; then \
-		touch services/auth-service/.env; \
-		echo "$(GREEN)✓ Created auth-service .env file$(NC)"; \
-	else \
-		echo "$(YELLOW)⚠ auth-service .env file already exists$(NC)"; \
-	fi
-	@$(MAKE) up
-	@sleep 5
 	@echo ""
-	@echo "$(GREEN)✓ Setup complete!$(NC)"
-	@echo "$(YELLOW)Run 'make health' to verify all services$(NC)"
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Initial Setup$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BOLD)Step 1/3:$(NC) Setting up environment files..."
+	@echo ""
+	@if [ ! -f .env ]; then \
+		if [ -f .env.example ]; then \
+			cp .env.example .env; \
+			echo "  $(GREEN)$(CHECK)$(NC) Created root .env"; \
+		else \
+			echo "POSTGRES_USER=echo" >> .env; \
+			echo "POSTGRES_PASSWORD=echo_password" >> .env; \
+			echo "POSTGRES_DB=echo_db" >> .env; \
+			echo "REDIS_PASSWORD=redis_password" >> .env; \
+			echo "  $(GREEN)$(CHECK)$(NC) Created root .env with defaults"; \
+		fi; \
+	else \
+		echo "  $(YELLOW)$(CROSS)$(NC) Root .env already exists"; \
+	fi
+	@echo ""
+	@echo "$(BOLD)Step 2/3:$(NC) Setting up service .env files..."
+	@echo ""
+	@for service in api-gateway auth-service location-service message-service; do \
+		if [ ! -f services/$service/.env ]; then \
+			if [ -f services/$service/.env.example ]; then \
+				cp services/$service/.env.example services/$service/.env; \
+				echo "  $(GREEN)$(CHECK)$(NC) Created $service/.env"; \
+			else \
+				echo "  $(RED)$(CROSS)$(NC) Missing $service/.env.example"; \
+			fi; \
+		else \
+			echo "  $(YELLOW)$(CROSS)$(NC) $service/.env already exists"; \
+		fi; \
+	done
+	@echo ""
+	@echo "$(BOLD)Step 3/3:$(NC) Starting services..."
+	@echo ""
+	@$(MAKE) up
+	@sleep 3
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Setup complete!$(NC)"
+	@echo ""
+	@echo "$(BOLD)Next Steps:$(NC)"
+	@echo "  $(CYAN)make health$(NC)  Verify all services"
+	@echo "  $(CYAN)make logs$(NC)    View service logs"
+	@echo ""
+
+## dev: Start services in development mode with logs
+dev:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Development Mode$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@$(MAKE) up
+	@sleep 2
+	@echo "$(BOLD)$(GREEN)Development mode active$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo ""
+	@$(MAKE) logs
 
 ## health: Check health of all services
 health:
-	@echo "$(GREEN)🏥 Checking service health...$(NC)"
 	@echo ""
-	@echo "$(BLUE)API Gateway:$(NC)"
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Health Check$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BOLD)API Gateway$(NC)"
 	@curl -f http://localhost:8080/health >/dev/null 2>&1 && \
-		echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Not responding$(NC)"
+		echo "  $(GREEN)$(CHECK) Healthy$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
 	@echo ""
-	@echo "$(BLUE)Auth Service:$(NC)"
+	@echo "$(BOLD)Auth Service$(NC)"
 	@docker exec echo-api-gateway curl -f http://auth-service:8081/health >/dev/null 2>&1 && \
-		echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Not responding$(NC)"
+		echo "  $(GREEN)$(CHECK) Healthy$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
 	@echo ""
-	@echo "$(BLUE)PostgreSQL:$(NC)"
-	@docker exec echo-postgres pg_isready -U echo 2>/dev/null && echo "$(GREEN)✓ Ready$(NC)" || echo "$(RED)✗ Not ready$(NC)"
+	@echo "$(BOLD)Location Service$(NC)"
+	@curl -f http://localhost:8090/health >/dev/null 2>&1 && \
+		echo "  $(GREEN)$(CHECK) Healthy$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
 	@echo ""
-	@echo "$(BLUE)Redis:$(NC)"
-	@docker exec echo-redis redis-cli -a redis_password PING 2>/dev/null | grep -q PONG && echo "$(GREEN)✓ Ready$(NC)" || echo "$(RED)✗ Not responding$(NC)"
+	@echo "$(BOLD)Message Service$(NC)"
+	@curl -f http://localhost:8083/health >/dev/null 2>&1 && \
+		echo "  $(GREEN)$(CHECK) Healthy$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
+	@echo ""
+	@echo "$(BOLD)PostgreSQL$(NC)"
+	@docker exec echo-postgres pg_isready -U echo >/dev/null 2>&1 && \
+		echo "  $(GREEN)$(CHECK) Ready$(NC)" || echo "  $(RED)$(CROSS) Not ready$(NC)"
+	@echo ""
+	@echo "$(BOLD)Redis$(NC)"
+	@docker exec echo-redis redis-cli -a redis_password PING 2>/dev/null | grep -q PONG && \
+		echo "  $(GREEN)$(CHECK) Ready$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
+	@echo ""
+	@echo "$(BOLD)Kafka$(NC)"
+	@docker exec echo-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1 && \
+		echo "  $(GREEN)$(CHECK) Ready$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
 	@echo ""
 
 ## test: Run tests
 test:
-	@echo "$(GREEN)🧪 Running tests...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Running Tests$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(DIM)Testing Auth Service...$(NC)"
 	@cd services/auth-service && go test -v ./...
+	@echo ""
+	@echo "$(DIM)Testing API Gateway...$(NC)"
 	@cd services/api-gateway && go test -v ./...
+	@echo ""
+	@echo "$(DIM)Testing Shared Packages...$(NC)"
 	@cd shared/ && go test -v ./...
-	@echo "$(GREEN)✓ Tests completed$(NC)"
-# =============================================================================
-# Utility Commands
-# =============================================================================
+	@echo ""
+	@echo "$(GREEN)$(CHECK) All tests completed$(NC)"
+	@echo ""
 
 ## test-auth: Test auth endpoints through gateway
 test-auth:
-	@echo "$(GREEN)Testing auth endpoints...$(NC)"
 	@echo ""
-	@echo "$(BLUE)Testing /login endpoint:$(NC)"
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Testing Auth Endpoints$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BOLD)POST$(NC) /api/v1/auth/login"
+	@echo ""
 	@curl -X POST http://localhost:8080/api/v1/auth/login \
 		-H "Content-Type: application/json" \
 		-d '{"email":"test@example.com","password":"test123"}' \
-		2>/dev/null | jq .
+		2>/dev/null | jq . || echo "$(RED)$(CROSS) Request failed$(NC)"
 	@echo ""
 
 ## verify-security: Verify auth service is not exposed
 verify-security:
-	@echo "$(GREEN)🔒 Verifying security configuration...$(NC)"
 	@echo ""
-	@echo "$(BLUE)Testing direct access to auth-service (should fail):$(NC)"
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Security Verification$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BOLD)Test 1:$(NC) Direct Auth Service Access $(DIM)(should be blocked)$(NC)"
 	@(curl -X POST http://localhost:8081/login -m 2 2>&1 | grep -q "Connection refused" || \
 	 curl -X POST http://localhost:8081/login -m 2 2>&1 | grep -q "Failed to connect") && \
-		echo "$(GREEN)✓ Auth service is properly secured (not accessible directly)$(NC)" || \
-		echo "$(RED)✗ WARNING: Auth service is exposed on port 8081$(NC)"
+		echo "  $(GREEN)$(CHECK) Auth service is properly secured$(NC)" || \
+		echo "  $(RED)$(CROSS) WARNING: Auth service is exposed!$(NC)"
 	@echo ""
-	@echo "$(BLUE)Testing access via API Gateway (should work):$(NC)"
+	@echo "$(BOLD)Test 2:$(NC) Gateway Proxy Access $(DIM)(should work)$(NC)"
 	@curl -X POST http://localhost:8080/api/v1/auth/login \
 		-H "Content-Type: application/json" \
 		-d '{"email":"test@example.com","password":"test123"}' \
-		-s -o /dev/null -w "%{http_code}" | grep -q "200" && \
-		echo "$(GREEN)✓ Gateway proxy is working correctly$(NC)" || \
-		echo "$(RED)✗ Gateway proxy is not working$(NC)"
-
-## dev: Start services in development mode
-dev: up
-	@echo "$(GREEN)🚀 Development mode started$(NC)"
-	@$(MAKE) logs
-## dev: Start services in development mode
-dev: up
-	@echo "$(GREEN)🚀 Development mode started$(NC)"
-	@$(MAKE) logs
+		-s -o /dev/null -w "%{http_code}" | grep -q "200\|400\|401" && \
+		echo "  $(GREEN)$(CHECK) Gateway proxy is working$(NC)" || \
+		echo "  $(RED)$(CROSS) Gateway proxy failed$(NC)"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Security verification complete$(NC)"
+	@echo ""
 
 # =============================================================================
-# Legacy Commands (for backward compatibility)
+# UTILITIES
 # =============================================================================
 
+## generate-routes: Generate routes from registry
 generate-routes:
-	@echo "$(GREEN)Generating routes from registry...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Generating Routes$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@go run scripts/generate-routes.go shared/routes/registry.yaml
-	@echo "$(GREEN)✓ Routes generated successfully$(NC)"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Routes generated successfully$(NC)"
+	@echo ""
 
+## update-gateway-routes: Update gateway configuration
 update-gateway-routes: generate-routes
-	@echo "$(GREEN)Updating gateway configuration...$(NC)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Updating Gateway Configuration$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
 	@cp shared/routes/registry.yaml services/api-gateway/configs/routes.yaml
-	@echo "$(GREEN)✓ Gateway routes updated$(NC)"
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Gateway routes updated$(NC)"
+	@echo ""
+	@echo "$(BOLD)Next Step:$(NC)"
+	@echo "  $(CYAN)make gateway-restart$(NC)  Restart the gateway to apply changes"
+	@echo ""

@@ -1,84 +1,37 @@
-# =============================================================================
-# Build Stage - Compile the Go application
-# =============================================================================
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache \
-    git \
-    ca-certificates \
-    tzdata
-
-WORKDIR /build
-
-# Copy shared module first
-COPY shared/ shared/
-
-# Copy api-gateway module
-COPY services/api-gateway/ api-gateway/
-
-# Set working directory to api-gateway
-WORKDIR /build/api-gateway
-
-# Replace the shared module path to use local copy
-RUN go mod edit -replace shared=../shared
-
-# Download dependencies (cached if go.mod/go.sum unchanged)
-RUN go mod download
-
-# Build the binary with optimizations
-RUN CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64 \
-    go build \
-    -ldflags='-w -s -extldflags "-static"' \
-    -a \
-    -installsuffix cgo \
-    -o /bin/api-gateway \
-    ./cmd/server
-
-
-# =============================================================================
-# Final Stage - Minimal runtime image
-# =============================================================================
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk --no-cache add \
-    ca-certificates \
-    tzdata \
-    wget
-
-# Create non-root user for security
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /bin/api-gateway .
+# Copy dependencies
+COPY shared ./shared
+COPY services/api-gateway ./services/api-gateway
 
-# Copy configs directory
-COPY --from=builder /build/api-gateway/configs ./configs
+WORKDIR /app/services/api-gateway
 
-# Create empty .env file (environment variables will be provided by docker-compose/kubernetes)
-RUN touch .env
+# Setup module replacement
+RUN go mod edit -replace shared=../../shared
+RUN go mod download
 
-# Set proper ownership
-RUN chown -R appuser:appuser /app
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server
 
-# Switch to non-root user
-USER appuser
+# Final stage
+FROM alpine:latest
 
-# Expose application port
-EXPOSE 8080
+RUN apk --no-cache add ca-certificates tzdata
 
-# Health check endpoint
-HEALTHCHECK --interval=30s \
-    --timeout=3s \
-    --start-period=5s \
-    --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+WORKDIR /app
 
-# Run the application
-CMD ["./api-gateway"]
+# Copy binary from builder
+COPY --from=builder /app/services/api-gateway/main .
+COPY --from=builder /app/services/api-gateway/configs ./configs
+COPY --from=builder /app/services/api-gateway/tls ./tls
+
+# Copy environment file
+COPY services/api-gateway/.env .env
+
+EXPOSE 8080 9090
+
+CMD ["./main"]

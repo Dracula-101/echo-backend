@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"shared/pkg/errors"
+	"shared/pkg/logger"
 )
 
 // JSON sends a success response with data
@@ -373,7 +374,7 @@ func InvalidCredentialsError(ctx context.Context, r *http.Request, w http.Respon
 		Unauthorized(w)
 }
 
-func RouteNotFoundError(ctx context.Context, r *http.Request, w http.ResponseWriter) error {
+func RouteNotFoundError(ctx context.Context, r *http.Request, w http.ResponseWriter, log logger.Logger) error {
 	message := "Route not found"
 	err := errors.New(errors.CodeNotFound, message)
 	errorDetails := ErrorDetailsFromError(err, false)
@@ -383,6 +384,10 @@ func RouteNotFoundError(ctx context.Context, r *http.Request, w http.ResponseWri
 		"path":   r.URL.Path,
 		"method": r.Method,
 	}
+	log.Warn("Route not found",
+		logger.String("path", r.URL.Path),
+		logger.String("method", r.Method),
+	)
 	return Error().
 		WithContext(ctx).
 		WithRequest(r).

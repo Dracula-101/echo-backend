@@ -1,84 +1,36 @@
-# =============================================================================
-# Build Stage - Compile the Go application
-# =============================================================================
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache \
-    git \
-    ca-certificates \
-    tzdata
-
-WORKDIR /build
-
-# Copy shared module first
-COPY shared/ shared/
-
-# Copy auth-service module
-COPY services/auth-service/ auth-service/
-
-# Set working directory to auth-service
-WORKDIR /build/auth-service
-
-# Replace the shared module path to use local copy
-RUN go mod edit -replace shared=../shared
-
-# Add shared as a requirement and download all dependencies
-RUN go get shared && go mod tidy && go mod download
-
-# Build the binary with optimizations
-RUN CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64 \
-    go build \
-    -ldflags='-w -s -extldflags "-static"' \
-    -a \
-    -installsuffix cgo \
-    -o /bin/auth-service \
-    ./cmd/server
-
-
-# =============================================================================
-# Final Stage - Minimal runtime image
-# =============================================================================
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk --no-cache add \
-    ca-certificates \
-    tzdata \
-    wget
-
-# Create non-root user for security
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /bin/auth-service .
+# Copy dependencies
+COPY shared ./shared
+COPY services/auth-service ./services/auth-service
 
-# Copy configs directory
-COPY --from=builder /build/auth-service/configs ./configs
+WORKDIR /app/services/auth-service
 
-# Create empty .env file (environment variables will be provided by docker-compose/kubernetes)
-RUN touch .env
+# Setup module replacement
+RUN go mod edit -replace shared=../../shared
+RUN go mod download
 
-# Set proper ownership
-RUN chown -R appuser:appuser /app
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server
 
-# Switch to non-root user
-USER appuser
+# Final stage
+FROM alpine:latest
 
-# Expose application port
-EXPOSE 8081
+RUN apk --no-cache add ca-certificates tzdata
 
-# Health check endpoint
-HEALTHCHECK --interval=30s \
-    --timeout=3s \
-    --start-period=5s \
-    --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1
+WORKDIR /app
 
-# Run the application
-CMD ["./auth-service"]
+# Copy binary from builder
+COPY --from=builder /app/services/auth-service/main .
+COPY --from=builder /app/services/auth-service/configs ./configs
+
+# Copy environment file
+COPY services/auth-service/.env .env
+
+EXPOSE 8081 9091
+
+CMD ["./main"]

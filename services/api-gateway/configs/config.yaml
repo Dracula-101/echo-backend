@@ -60,9 +60,9 @@ services:
     retry_attempts: 3
 
   message-service:
-    protocol: grpc
+    protocol: http
     addresses:
-      - ${MESSAGE_SERVICE_ADDR:message-service-service:50051}
+      - ${MESSAGE_SERVICE_ADDR:localhost:8083}
     health_check:
       enabled: true
       path: /health
@@ -76,63 +76,6 @@ services:
       timeout: 30s
       half_open_requests: 1
     timeout: 15s
-    retry_attempts: 3
-
-  media-service:
-    protocol: http
-    addresses:
-      - ${MEDIA_SERVICE_ADDR:media-service-service:8080}
-    health_check:
-      enabled: true
-      path: /health
-      interval: 10s
-      timeout: 5s
-      failure_threshold: 3
-    loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
-    timeout: 30s
-    retry_attempts: 2
-
-  notification-service:
-    protocol: grpc
-    addresses:
-      - ${NOTIFICATION_SERVICE_ADDR:notification-service:50051}
-    health_check:
-      enabled: true
-      path: /health
-      interval: 10s
-      timeout: 5s
-      failure_threshold: 3
-    loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
-    timeout: 10s
-    retry_attempts: 3
-
-  presence-service:
-    protocol: grpc
-    addresses:
-      - ${PRESENCE_SERVICE_ADDR:presence-service:50051}
-    health_check:
-      enabled: true
-      path: /health
-      interval: 10s
-      timeout: 5s
-      failure_threshold: 3
-    loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
-    timeout: 10s
     retry_attempts: 3
 
 router_groups:
@@ -169,39 +112,6 @@ router_groups:
       - POST
       - PUT
       - PATCH
-      - DELETE
-      - OPTIONS
-
-  - name: media_routes
-    prefix: /api/v1/media
-    service: media-service
-    transform: true
-    methods:
-      - GET
-      - POST
-      - PUT
-      - DELETE
-      - OPTIONS
-
-  - name: notification_routes
-    prefix: /api/v1/notifications
-    service: notification-service
-    transform: true
-    methods:
-      - GET
-      - POST
-      - PUT
-      - DELETE
-      - OPTIONS
-
-  - name: presence_routes
-    prefix: /api/v1/presence
-    service: presence-service
-    transform: true
-    methods:
-      - GET
-      - POST
-      - PUT
       - DELETE
       - OPTIONS
 

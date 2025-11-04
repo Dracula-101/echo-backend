@@ -31,9 +31,7 @@ import (
 )
 
 func loadenv() {
-	if err := env.LoadEnv(); err != nil {
-		panic(fmt.Sprintf("Failed to load environment variables: %v", err))
-	}
+	env.LoadEnv()
 }
 
 func createLogger(name string) logger.Logger {
@@ -162,7 +160,7 @@ func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log log
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", healthHandler.Health).
 		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.RouteNotFoundError(r.Context(), r, w)
+			response.RouteNotFoundError(r.Context(), r, w, log)
 		}).
 		WithMethodNotAllowedHandler(func(w http.ResponseWriter, r *http.Request) {
 			response.MethodNotAllowedError(r.Context(), r, w)

@@ -140,6 +140,16 @@ func (g *RouteGroup) HandleProxy(handler http.HandlerFunc, methods ...string) *m
 		handler(w, r)
 	})).Methods(methods...)
 
+	// Also register on parent router to handle exact prefix without trailing slash
+	g.parent.mux.Path(g.prefix).Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		vars := map[string]string{
+			"rest": "",
+			"path": "",
+		}
+		r = mux.SetURLVars(r, vars)
+		handler(w, r)
+	})).Methods(methods...)
+
 	g.parent.routes = append(g.parent.routes, RouteInfo{
 		Pattern: g.prefix + "/*",
 		Type:    RouteTypeCatch,
