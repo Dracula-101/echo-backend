@@ -1,46 +1,143 @@
 -- =====================================================
--- Utility Functions for Common Operations
+-- ROW LEVEL SECURITY (RLS) & UTILITY FUNCTIONS
 -- =====================================================
 
--- Generate a random slug
-CREATE OR REPLACE FUNCTION public.generate_slug(input_text TEXT)
-RETURNS TEXT AS $$
-BEGIN
-    RETURN LOWER(
-        REGEXP_REPLACE(
-            REGEXP_REPLACE(input_text, '[^a-zA-Z0-9\s-]', '', 'g'),
-            '\s+', '-', 'g'
-        )
-    ) || '-' || SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+-- =====================================================
+-- UTILITY FUNCTIONS
+-- =====================================================
 
--- Generate a secure random token
-CREATE OR REPLACE FUNCTION public.generate_token(length INTEGER DEFAULT 32)
-RETURNS TEXT AS $$
+-- Get current authenticated user ID (from JWT or session context)
+CREATE OR REPLACE FUNCTION auth.current_user_id()
+RETURNS UUID AS $$
 BEGIN
-    RETURN encode(gen_random_bytes(length), 'base64');
+    RETURN NULLIF(current_setting('app.current_user_id', TRUE), '')::UUID;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN NULL;
 END;
-$$ LANGUAGE plpgsql VOLATILE;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Generate a numeric OTP code
-CREATE OR REPLACE FUNCTION auth.generate_otp_code(digits INTEGER DEFAULT 6)
-RETURNS TEXT AS $$
+-- Check if user is admin
+CREATE OR REPLACE FUNCTION auth.is_admin()
+RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN LPAD(FLOOR(RANDOM() * POWER(10, digits))::TEXT, digits, '0');
+    RETURN COALESCE(
+        (SELECT metadata->>'is_admin' = 'true' 
+         FROM auth.users 
+         WHERE id = auth.current_user_id()),
+        FALSE
+    );
 END;
-$$ LANGUAGE plpgsql VOLATILE;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Calculate distance between two coordinates (in kilometers)
-CREATE OR REPLACE FUNCTION public.calculate_distance(
-    lat1 DECIMAL,
-    lon1 DECIMAL,
-    lat2 DECIMAL,
-    lon2 DECIMAL
+-- Check if user is moderator
+CREATE OR REPLACE FUNCTION auth.is_moderator()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN COALESCE(
+        (SELECT metadata->>'is_moderator' = 'true' 
+         FROM auth.users 
+         WHERE id = auth.current_user_id()),
+        FALSE
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Check if user has specific role in conversation
+CREATE OR REPLACE FUNCTION messages.user_has_conversation_role(
+    conv_id UUID,
+    required_role VARCHAR
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS(
+        SELECT 1 FROM messages.conversation_participants
+        WHERE conversation_id = conv_id
+        AND user_id = auth.current_user_id()
+        AND role = required_role
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Check if user is conversation participant
+CREATE OR REPLACE FUNCTION messages.is_conversation_participant(conv_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS(
+        SELECT 1 FROM messages.conversation_participants
+        WHERE conversation_id = conv_id
+        AND user_id = auth.current_user_id()
+        AND left_at IS NULL
+        AND removed_at IS NULL
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Check if users are contacts/friends
+CREATE OR REPLACE FUNCTION users.are_contacts(user_id_a UUID, user_id_b UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS(
+        SELECT 1 FROM users.contacts
+        WHERE ((user_id = user_id_a AND contact_user_id = user_id_b)
+           OR (user_id = user_id_b AND contact_user_id = user_id_a))
+        AND status = 'accepted'
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Check if user is blocked
+CREATE OR REPLACE FUNCTION users.is_blocked_by(target_user_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS(
+        SELECT 1 FROM users.blocked_users
+        WHERE user_id = target_user_id
+        AND blocked_user_id = auth.current_user_id()
+        AND unblocked_at IS NULL
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Check if current user blocked someone
+CREATE OR REPLACE FUNCTION users.has_blocked(target_user_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS(
+        SELECT 1 FROM users.blocked_users
+        WHERE user_id = auth.current_user_id()
+        AND blocked_user_id = target_user_id
+        AND unblocked_at IS NULL
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Generate unique username
+CREATE OR REPLACE FUNCTION users.generate_unique_username(base_name VARCHAR)
+RETURNS VARCHAR AS $$
+DECLARE
+    username VARCHAR;
+    counter INTEGER := 0;
+BEGIN
+    username := LOWER(REGEXP_REPLACE(base_name, '[^a-zA-Z0-9_]', '', 'g'));
+    
+    WHILE EXISTS(SELECT 1 FROM users.profiles WHERE profiles.username = username) LOOP
+        counter := counter + 1;
+        username := LOWER(REGEXP_REPLACE(base_name, '[^a-zA-Z0-9_]', '', 'g')) || counter::TEXT;
+    END LOOP;
+    
+    RETURN username;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Calculate distance between two points (Haversine formula)
+CREATE OR REPLACE FUNCTION location.calculate_distance(
+    lat1 DECIMAL, lon1 DECIMAL,
+    lat2 DECIMAL, lon2 DECIMAL
 )
 RETURNS DECIMAL AS $$
 DECLARE
-    earth_radius CONSTANT DECIMAL := 6371; -- km
+    earth_radius DECIMAL := 6371; -- km
     dlat DECIMAL;
     dlon DECIMAL;
     a DECIMAL;
@@ -59,111 +156,112 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Format file size to human readable
-CREATE OR REPLACE FUNCTION public.format_file_size(bytes BIGINT)
+-- Hash password with salt
+CREATE OR REPLACE FUNCTION auth.hash_password(password TEXT)
 RETURNS TEXT AS $$
-DECLARE
-    units TEXT[] := ARRAY['B', 'KB', 'MB', 'GB', 'TB'];
-    size DECIMAL := bytes;
-    unit_index INTEGER := 1;
 BEGIN
-    WHILE size >= 1024 AND unit_index < ARRAY_LENGTH(units, 1) LOOP
-        size := size / 1024.0;
-        unit_index := unit_index + 1;
-    END LOOP;
-    
-    RETURN ROUND(size, 2)::TEXT || ' ' || units[unit_index];
+    -- Using pgcrypto extension
+    RETURN crypt(password, gen_salt('bf', 10));
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql;
 
--- Get time ago string
-CREATE OR REPLACE FUNCTION public.time_ago(timestamp_input TIMESTAMPTZ)
+-- Verify password
+CREATE OR REPLACE FUNCTION auth.verify_password(password TEXT, hash TEXT)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN hash = crypt(password, hash);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Generate OTP code
+CREATE OR REPLACE FUNCTION auth.generate_otp(length INTEGER DEFAULT 6)
+RETURNS VARCHAR AS $$
+DECLARE
+    otp VARCHAR;
+    i INTEGER;
+BEGIN
+    otp := '';
+    FOR i IN 1..length LOOP
+        otp := otp || FLOOR(RANDOM() * 10)::TEXT;
+    END LOOP;
+    RETURN otp;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Generate secure token
+CREATE OR REPLACE FUNCTION auth.generate_token(length INTEGER DEFAULT 32)
+RETURNS TEXT AS $$
+BEGIN
+    RETURN encode(gen_random_bytes(length), 'hex');
+END;
+$$ LANGUAGE plpgsql;
+
+-- Format file size to human readable
+CREATE OR REPLACE FUNCTION media.format_file_size(bytes BIGINT)
 RETURNS TEXT AS $$
 DECLARE
-    diff INTERVAL;
-    seconds INTEGER;
-    minutes INTEGER;
-    hours INTEGER;
-    days INTEGER;
+    kb DECIMAL := 1024;
+    mb DECIMAL := 1024 * 1024;
+    gb DECIMAL := 1024 * 1024 * 1024;
 BEGIN
-    diff := NOW() - timestamp_input;
-    seconds := EXTRACT(EPOCH FROM diff)::INTEGER;
-    
-    IF seconds < 60 THEN
-        RETURN 'just now';
-    ELSIF seconds < 3600 THEN
-        minutes := seconds / 60;
-        RETURN minutes || ' minute' || (CASE WHEN minutes > 1 THEN 's' ELSE '' END) || ' ago';
-    ELSIF seconds < 86400 THEN
-        hours := seconds / 3600;
-        RETURN hours || ' hour' || (CASE WHEN hours > 1 THEN 's' ELSE '' END) || ' ago';
-    ELSIF seconds < 604800 THEN
-        days := seconds / 86400;
-        RETURN days || ' day' || (CASE WHEN days > 1 THEN 's' ELSE '' END) || ' ago';
+    IF bytes < kb THEN
+        RETURN bytes || ' B';
+    ELSIF bytes < mb THEN
+        RETURN ROUND(bytes / kb, 2) || ' KB';
+    ELSIF bytes < gb THEN
+        RETURN ROUND(bytes / mb, 2) || ' MB';
     ELSE
-        RETURN TO_CHAR(timestamp_input, 'Mon DD, YYYY');
+        RETURN ROUND(bytes / gb, 2) || ' GB';
     END IF;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Search users by username or email
-CREATE OR REPLACE FUNCTION users.search_users(
+-- Search messages with full-text search
+CREATE OR REPLACE FUNCTION messages.search_messages(
     search_query TEXT,
-    limit_count INTEGER DEFAULT 20,
-    offset_count INTEGER DEFAULT 0
+    conv_id UUID DEFAULT NULL,
+    limit_count INTEGER DEFAULT 50
 )
 RETURNS TABLE (
-    user_id UUID,
-    username VARCHAR,
-    display_name VARCHAR,
-    avatar_url TEXT,
-    is_verified BOOLEAN,
-    online_status VARCHAR
+    message_id UUID,
+    conversation_id UUID,
+    content TEXT,
+    sender_user_id UUID,
+    created_at TIMESTAMPTZ,
+    rank REAL
 ) AS $$
 BEGIN
     RETURN QUERY
     SELECT 
-        p.user_id,
-        p.username,
-        p.display_name,
-        p.avatar_url,
-        p.is_verified,
-        p.online_status
-    FROM users.profiles p
-    INNER JOIN auth.users u ON u.id = p.user_id
-    WHERE 
-        p.search_visibility = TRUE
-        AND u.account_status = 'active'
-        AND u.deleted_at IS NULL
-        AND p.deactivated_at IS NULL
-        AND (
-            p.username ILIKE '%' || search_query || '%'
-            OR p.display_name ILIKE '%' || search_query || '%'
-            OR u.email ILIKE '%' || search_query || '%'
-        )
-    ORDER BY
-        CASE WHEN p.is_verified THEN 0 ELSE 1 END,
-        p.username
-    LIMIT limit_count
-    OFFSET offset_count;
+        m.id,
+        m.conversation_id,
+        m.content,
+        m.sender_user_id,
+        m.created_at,
+        ts_rank(si.content_tsvector, plainto_tsquery('english', search_query)) AS rank
+    FROM messages.messages m
+    JOIN messages.search_index si ON si.message_id = m.id
+    WHERE si.content_tsvector @@ plainto_tsquery('english', search_query)
+    AND (conv_id IS NULL OR m.conversation_id = conv_id)
+    AND messages.is_conversation_participant(m.conversation_id)
+    AND m.is_deleted = FALSE
+    ORDER BY rank DESC, m.created_at DESC
+    LIMIT limit_count;
 END;
-$$ LANGUAGE plpgsql STABLE;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Get user's active conversations with pagination
-CREATE OR REPLACE FUNCTION messages.get_user_conversations(
-    p_user_id UUID,
-    limit_count INTEGER DEFAULT 20,
-    offset_count INTEGER DEFAULT 0
-)
+-- Get user's conversation list with unread counts
+CREATE OR REPLACE FUNCTION messages.get_user_conversations(user_uuid UUID)
 RETURNS TABLE (
     conversation_id UUID,
     conversation_type VARCHAR,
     title VARCHAR,
     avatar_url TEXT,
+    last_message TEXT,
     last_message_at TIMESTAMPTZ,
     unread_count INTEGER,
-    is_pinned BOOLEAN,
-    is_muted BOOLEAN
+    is_muted BOOLEAN,
+    is_pinned BOOLEAN
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -172,190 +270,474 @@ BEGIN
         c.conversation_type,
         c.title,
         c.avatar_url,
+        m.content,
         c.last_message_at,
-        p.unread_count,
-        p.is_pinned,
-        p.is_muted
+        cp.unread_count,
+        cp.is_muted,
+        cp.is_pinned
     FROM messages.conversations c
-    INNER JOIN messages.conversation_participants p ON p.conversation_id = c.id
-    WHERE 
-        p.user_id = p_user_id
-        AND p.left_at IS NULL
-        AND p.removed_at IS NULL
-        AND c.is_active = TRUE
-    ORDER BY 
-        p.is_pinned DESC,
-        c.last_activity_at DESC
-    LIMIT limit_count
-    OFFSET offset_count;
+    JOIN messages.conversation_participants cp ON cp.conversation_id = c.id
+    LEFT JOIN messages.messages m ON m.id = c.last_message_id
+    WHERE cp.user_id = user_uuid
+    AND cp.left_at IS NULL
+    AND cp.removed_at IS NULL
+    AND c.is_active = TRUE
+    ORDER BY cp.is_pinned DESC, c.last_message_at DESC NULLS LAST;
 END;
-$$ LANGUAGE plpgsql STABLE;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Batch mark messages as read
-CREATE OR REPLACE FUNCTION messages.mark_messages_as_read(
-    p_user_id UUID,
-    p_conversation_id UUID,
-    p_last_message_id UUID
-)
-RETURNS VOID AS $$
-BEGIN
-    UPDATE messages.conversation_participants
-    SET 
-        last_read_message_id = p_last_message_id,
-        last_read_at = NOW(),
-        unread_count = 0
-    WHERE user_id = p_user_id
-    AND conversation_id = p_conversation_id;
-    
-    -- Also update message delivery status
-    UPDATE messages.message_delivery_status
-    SET 
-        status = 'read',
-        read_at = NOW()
-    WHERE user_id = p_user_id
-    AND message_id IN (
-        SELECT id FROM messages.messages
-        WHERE conversation_id = p_conversation_id
-        AND created_at <= (
-            SELECT created_at FROM messages.messages WHERE id = p_last_message_id
+-- =====================================================
+-- ROW LEVEL SECURITY POLICIES
+-- =====================================================
+
+-- Enable RLS on all tables
+ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth.sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth.security_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth.login_history ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE users.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users.contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users.blocked_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users.status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users.activity_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users.devices ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE messages.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.conversation_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.reactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.delivery_status ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.bookmarks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.drafts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages.calls ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE media.files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media.albums ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media.shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media.storage_stats ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE notifications.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications.user_preferences ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE analytics.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analytics.user_sessions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE location.user_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location.location_shares ENABLE ROW LEVEL SECURITY;
+
+-- =====================================================
+-- AUTH SCHEMA POLICIES
+-- =====================================================
+
+-- Users can read their own user data
+CREATE POLICY users_select_own ON auth.users
+    FOR SELECT
+    USING (id = auth.current_user_id());
+
+-- Users can update their own data
+CREATE POLICY users_update_own ON auth.users
+    FOR UPDATE
+    USING (id = auth.current_user_id());
+
+-- Admins can see all users
+CREATE POLICY users_admin_all ON auth.users
+    FOR ALL
+    USING (auth.is_admin());
+
+-- Users can see their own sessions
+CREATE POLICY sessions_select_own ON auth.sessions
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- Users can delete their own sessions
+CREATE POLICY sessions_delete_own ON auth.sessions
+    FOR DELETE
+    USING (user_id = auth.current_user_id());
+
+-- Users can see their own security events
+CREATE POLICY security_events_select_own ON auth.security_events
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- Users can see their own login history
+CREATE POLICY login_history_select_own ON auth.login_history
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- =====================================================
+-- USERS SCHEMA POLICIES
+-- =====================================================
+
+-- Public profiles are visible to everyone
+CREATE POLICY profiles_select_public ON users.profiles
+    FOR SELECT
+    USING (
+        profile_visibility = 'public'
+        OR user_id = auth.current_user_id()
+        OR (profile_visibility = 'friends' AND users.are_contacts(user_id, auth.current_user_id()))
+    );
+
+-- Users can update their own profile
+CREATE POLICY profiles_update_own ON users.profiles
+    FOR UPDATE
+    USING (user_id = auth.current_user_id());
+
+-- Users can insert their own profile
+CREATE POLICY profiles_insert_own ON users.profiles
+    FOR INSERT
+    WITH CHECK (user_id = auth.current_user_id());
+
+-- Users can see their own contacts
+CREATE POLICY contacts_select_own ON users.contacts
+    FOR SELECT
+    USING (
+        user_id = auth.current_user_id()
+        OR contact_user_id = auth.current_user_id()
+    );
+
+-- Users can manage their own contacts
+CREATE POLICY contacts_insert_own ON users.contacts
+    FOR INSERT
+    WITH CHECK (user_id = auth.current_user_id());
+
+CREATE POLICY contacts_update_own ON users.contacts
+    FOR UPDATE
+    USING (user_id = auth.current_user_id());
+
+CREATE POLICY contacts_delete_own ON users.contacts
+    FOR DELETE
+    USING (user_id = auth.current_user_id());
+
+-- Users can only access their own settings
+CREATE POLICY settings_own_only ON users.settings
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can manage their own blocked users
+CREATE POLICY blocked_users_own_only ON users.blocked_users
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Status history visibility based on privacy settings
+CREATE POLICY status_history_select ON users.status_history
+    FOR SELECT
+    USING (
+        user_id = auth.current_user_id()
+        OR privacy = 'public'
+        OR (privacy = 'contacts' AND users.are_contacts(user_id, auth.current_user_id()))
+        AND expires_at > NOW()
+        AND deleted_at IS NULL
+    );
+
+-- Users can manage their own status
+CREATE POLICY status_history_manage_own ON users.status_history
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can only see their own activity log
+CREATE POLICY activity_log_own_only ON users.activity_log
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- Users can manage their own devices
+CREATE POLICY devices_own_only ON users.devices
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- =====================================================
+-- MESSAGES SCHEMA POLICIES
+-- =====================================================
+
+-- Users can see conversations they're part of
+CREATE POLICY conversations_select_participant ON messages.conversations
+    FOR SELECT
+    USING (messages.is_conversation_participant(id));
+
+-- Users can create conversations
+CREATE POLICY conversations_insert ON messages.conversations
+    FOR INSERT
+    WITH CHECK (creator_user_id = auth.current_user_id());
+
+-- Owners and admins can update conversations
+CREATE POLICY conversations_update ON messages.conversations
+    FOR UPDATE
+    USING (
+        creator_user_id = auth.current_user_id()
+        OR messages.user_has_conversation_role(id, 'admin')
+        OR messages.user_has_conversation_role(id, 'owner')
+    );
+
+-- Users can see participants in their conversations
+CREATE POLICY participants_select ON messages.conversation_participants
+    FOR SELECT
+    USING (messages.is_conversation_participant(conversation_id));
+
+-- Admins can manage participants
+CREATE POLICY participants_manage ON messages.conversation_participants
+    FOR ALL
+    USING (
+        user_id = auth.current_user_id()
+        OR messages.user_has_conversation_role(conversation_id, 'admin')
+        OR messages.user_has_conversation_role(conversation_id, 'owner')
+    );
+
+-- Users can see messages in their conversations
+CREATE POLICY messages_select_participant ON messages.messages
+    FOR SELECT
+    USING (
+        messages.is_conversation_participant(conversation_id)
+        AND is_deleted = FALSE
+        AND NOT users.is_blocked_by(sender_user_id)
+    );
+
+-- Users can send messages to their conversations
+CREATE POLICY messages_insert ON messages.messages
+    FOR INSERT
+    WITH CHECK (
+        sender_user_id = auth.current_user_id()
+        AND messages.is_conversation_participant(conversation_id)
+        AND (SELECT can_send_messages FROM messages.conversation_participants 
+             WHERE conversation_id = messages.conversation_id 
+             AND user_id = auth.current_user_id())
+    );
+
+-- Users can update their own messages
+CREATE POLICY messages_update_own ON messages.messages
+    FOR UPDATE
+    USING (sender_user_id = auth.current_user_id());
+
+-- Users can delete their own messages or admins can delete any
+CREATE POLICY messages_delete ON messages.messages
+    FOR DELETE
+    USING (
+        sender_user_id = auth.current_user_id()
+        OR messages.user_has_conversation_role(conversation_id, 'admin')
+        OR messages.user_has_conversation_role(conversation_id, 'moderator')
+    );
+
+-- Users can see reactions in their conversations
+CREATE POLICY reactions_select ON messages.reactions
+    FOR SELECT
+    USING (
+        EXISTS(
+            SELECT 1 FROM messages.messages m
+            WHERE m.id = message_id
+            AND messages.is_conversation_participant(m.conversation_id)
         )
-    )
-    AND status != 'read';
-END;
-$$ LANGUAGE plpgsql;
+    );
 
--- Get user statistics
-CREATE OR REPLACE FUNCTION users.get_user_stats(p_user_id UUID)
-RETURNS JSON AS $$
-DECLARE
-    stats JSON;
-BEGIN
-    SELECT json_build_object(
-        'total_contacts', (
-            SELECT COUNT(*) FROM users.contacts
-            WHERE user_id = p_user_id AND status = 'accepted'
-        ),
-        'total_conversations', (
-            SELECT COUNT(*) FROM messages.conversation_participants
-            WHERE user_id = p_user_id AND left_at IS NULL AND removed_at IS NULL
-        ),
-        'total_messages_sent', (
-            SELECT COUNT(*) FROM messages.messages
-            WHERE sender_user_id = p_user_id AND deleted_at IS NULL
-        ),
-        'unread_messages', (
-            SELECT COALESCE(SUM(unread_count), 0)
-            FROM messages.conversation_participants
-            WHERE user_id = p_user_id AND left_at IS NULL AND removed_at IS NULL
-        ),
-        'storage_used', (
-            SELECT COALESCE(SUM(file_size), 0)
-            FROM media.media_files
-            WHERE uploaded_by_user_id = p_user_id
-        ),
-        'account_created_at', (
-            SELECT created_at FROM auth.users WHERE id = p_user_id
-        ),
-        'last_seen_at', (
-            SELECT last_seen_at FROM users.profiles WHERE user_id = p_user_id
+-- Users can manage their own reactions
+CREATE POLICY reactions_manage_own ON messages.reactions
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can see delivery status for their messages
+CREATE POLICY delivery_status_select ON messages.delivery_status
+    FOR SELECT
+    USING (
+        user_id = auth.current_user_id()
+        OR EXISTS(
+            SELECT 1 FROM messages.messages m
+            WHERE m.id = message_id
+            AND m.sender_user_id = auth.current_user_id()
         )
-    ) INTO stats;
-    
-    RETURN stats;
-END;
-$$ LANGUAGE plpgsql STABLE;
+    );
 
--- Cleanup old data
-CREATE OR REPLACE FUNCTION public.cleanup_old_data()
-RETURNS JSON AS $$
-DECLARE
-    result JSON;
-    sessions_deleted INTEGER;
-    otps_deleted INTEGER;
-    notifications_deleted INTEGER;
-BEGIN
-    -- Delete expired sessions
-    SELECT auth.clean_expired_sessions() INTO sessions_deleted;
-    
-    -- Delete expired OTPs
-    SELECT auth.clean_expired_otps() INTO otps_deleted;
-    
-    -- Delete old read notifications (>30 days)
-    WITH deleted AS (
-        DELETE FROM notifications.notifications
-        WHERE read_at IS NOT NULL
-        AND read_at < NOW() - INTERVAL '30 days'
-        RETURNING id
-    )
-    SELECT COUNT(*) INTO notifications_deleted FROM deleted;
-    
-    -- Build result
-    SELECT json_build_object(
-        'sessions_deleted', sessions_deleted,
-        'otps_deleted', otps_deleted,
-        'notifications_deleted', notifications_deleted,
-        'cleaned_at', NOW()
-    ) INTO result;
-    
-    RETURN result;
-END;
-$$ LANGUAGE plpgsql;
+-- Users can manage their own bookmarks
+CREATE POLICY bookmarks_own_only ON messages.bookmarks
+    FOR ALL
+    USING (user_id = auth.current_user_id());
 
--- Paginate query results with cursor
-CREATE OR REPLACE FUNCTION public.cursor_paginate(
-    query_text TEXT,
-    cursor_value TEXT DEFAULT NULL,
-    page_size INTEGER DEFAULT 20
-)
-RETURNS JSON AS $$
-DECLARE
-    result JSON;
-BEGIN
-    -- This is a simplified version - actual implementation would be more complex
-    EXECUTE format('
-        SELECT json_build_object(
-            ''data'', json_agg(row_to_json(t)),
-            ''cursor'', MAX(t.id)
+-- Users can manage their own drafts
+CREATE POLICY drafts_own_only ON messages.drafts
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can see calls in their conversations
+CREATE POLICY calls_select ON messages.calls
+    FOR SELECT
+    USING (
+        messages.is_conversation_participant(conversation_id)
+        OR initiator_user_id = auth.current_user_id()
+    );
+
+-- =====================================================
+-- MEDIA SCHEMA POLICIES
+-- =====================================================
+
+-- Users can see their own files and shared files
+CREATE POLICY files_select ON media.files
+    FOR SELECT
+    USING (
+        uploader_user_id = auth.current_user_id()
+        OR visibility = 'public'
+        OR EXISTS(
+            SELECT 1 FROM media.shares s
+            WHERE s.file_id = id
+            AND s.shared_with_user_id = auth.current_user_id()
+            AND s.is_active = TRUE
         )
-        FROM (%s) t
-        WHERE ($1 IS NULL OR t.id > $1::UUID)
-        LIMIT $2
-    ', query_text)
-    INTO result
-    USING cursor_value, page_size;
-    
-    RETURN result;
-END;
-$$ LANGUAGE plpgsql;
-
--- Analyze table and return statistics
-CREATE OR REPLACE FUNCTION public.get_table_stats(schema_name TEXT, table_name TEXT)
-RETURNS JSON AS $$
-DECLARE
-    stats JSON;
-BEGIN
-    SELECT json_build_object(
-        'row_count', (
-            SELECT reltuples::BIGINT
-            FROM pg_class
-            WHERE oid = (schema_name || '.' || table_name)::regclass
-        ),
-        'table_size', (
-            SELECT pg_size_pretty(pg_total_relation_size((schema_name || '.' || table_name)::regclass))
-        ),
-        'index_size', (
-            SELECT pg_size_pretty(pg_indexes_size((schema_name || '.' || table_name)::regclass))
-        ),
-        'last_vacuum', (
-            SELECT last_vacuum FROM pg_stat_user_tables
-            WHERE schemaname = schema_name AND relname = table_name
-        ),
-        'last_analyze', (
-            SELECT last_analyze FROM pg_stat_user_tables
-            WHERE schemaname = schema_name AND relname = table_name
+        OR EXISTS(
+            SELECT 1 FROM messages.message_media mm
+            JOIN messages.messages m ON m.id = mm.message_id
+            WHERE mm.media_id = id
+            AND messages.is_conversation_participant(m.conversation_id)
         )
-    ) INTO stats;
-    
-    RETURN stats;
-END;
-$$ LANGUAGE plpgsql;
+    );
+
+-- Users can upload files
+CREATE POLICY files_insert ON media.files
+    FOR INSERT
+    WITH CHECK (uploader_user_id = auth.current_user_id());
+
+-- Users can update their own files
+CREATE POLICY files_update_own ON media.files
+    FOR UPDATE
+    USING (uploader_user_id = auth.current_user_id());
+
+-- Users can delete their own files
+CREATE POLICY files_delete_own ON media.files
+    FOR DELETE
+    USING (uploader_user_id = auth.current_user_id());
+
+-- Users can manage their own albums
+CREATE POLICY albums_own_only ON media.albums
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can manage their own shares
+CREATE POLICY shares_manage_own ON media.shares
+    FOR ALL
+    USING (
+        shared_by_user_id = auth.current_user_id()
+        OR shared_with_user_id = auth.current_user_id()
+    );
+
+-- Users can see their own storage stats
+CREATE POLICY storage_stats_own_only ON media.storage_stats
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- =====================================================
+-- NOTIFICATIONS SCHEMA POLICIES
+-- =====================================================
+
+-- Users can only see their own notifications
+CREATE POLICY notifications_own_only ON notifications.notifications
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can only manage their own notification preferences
+CREATE POLICY notification_prefs_own_only ON notifications.user_preferences
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- =====================================================
+-- ANALYTICS SCHEMA POLICIES
+-- =====================================================
+
+-- Users can see their own events
+CREATE POLICY events_own_only ON analytics.events
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- Users can see their own sessions
+CREATE POLICY user_sessions_own_only ON analytics.user_sessions
+    FOR SELECT
+    USING (user_id = auth.current_user_id());
+
+-- Admins and analysts can see all analytics
+CREATE POLICY analytics_admin_access ON analytics.events
+    FOR ALL
+    USING (auth.is_admin() OR auth.is_moderator());
+
+-- =====================================================
+-- LOCATION SCHEMA POLICIES
+-- =====================================================
+
+-- Users can see their own location history
+CREATE POLICY user_locations_own_only ON location.user_locations
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- Users can see location shares shared with them
+CREATE POLICY location_shares_select ON location.location_shares
+    FOR SELECT
+    USING (
+        user_id = auth.current_user_id()
+        OR shared_with_user_id = auth.current_user_id()
+    );
+
+-- Users can manage their own location shares
+CREATE POLICY location_shares_manage_own ON location.location_shares
+    FOR ALL
+    USING (user_id = auth.current_user_id());
+
+-- =====================================================
+-- GRANT PERMISSIONS
+-- =====================================================
+
+-- Create application role for authenticated users
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
+        CREATE ROLE app_user;
+    END IF;
+END
+$$;
+
+-- Grant usage on schemas
+GRANT USAGE ON SCHEMA auth TO app_user;
+GRANT USAGE ON SCHEMA users TO app_user;
+GRANT USAGE ON SCHEMA messages TO app_user;
+GRANT USAGE ON SCHEMA media TO app_user;
+GRANT USAGE ON SCHEMA notifications TO app_user;
+GRANT USAGE ON SCHEMA analytics TO app_user;
+GRANT USAGE ON SCHEMA location TO app_user;
+
+-- Grant table permissions (SELECT, INSERT, UPDATE, DELETE where appropriate)
+GRANT SELECT, INSERT, UPDATE ON auth.users TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON auth.sessions TO app_user;
+GRANT SELECT ON auth.security_events TO app_user;
+GRANT SELECT ON auth.login_history TO app_user;
+
+GRANT SELECT, INSERT, UPDATE ON users.profiles TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON users.contacts TO app_user;
+GRANT SELECT, INSERT, UPDATE ON users.settings TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON users.blocked_users TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON users.status_history TO app_user;
+GRANT SELECT ON users.activity_log TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON users.devices TO app_user;
+
+GRANT SELECT, INSERT, UPDATE ON messages.conversations TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON messages.conversation_participants TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON messages.messages TO app_user;
+GRANT SELECT, INSERT, DELETE ON messages.reactions TO app_user;
+GRANT SELECT ON messages.delivery_status TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON messages.bookmarks TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON messages.drafts TO app_user;
+GRANT SELECT, INSERT ON messages.calls TO app_user;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON media.files TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON media.albums TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON media.shares TO app_user;
+GRANT SELECT ON media.storage_stats TO app_user;
+
+GRANT SELECT, UPDATE ON notifications.notifications TO app_user;
+GRANT SELECT, INSERT, UPDATE ON notifications.user_preferences TO app_user;
+
+GRANT SELECT ON analytics.events TO app_user;
+GRANT SELECT ON analytics.user_sessions TO app_user;
+
+GRANT SELECT, INSERT ON location.user_locations TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON location.location_shares TO app_user;
+
+-- Grant execute on utility functions
+GRANT EXECUTE ON FUNCTION auth.current_user_id() TO app_user;
+GRANT EXECUTE ON FUNCTION auth.is_admin() TO app_user;
+GRANT EXECUTE ON FUNCTION messages.is_conversation_participant(UUID) TO app_user;
+GRANT EXECUTE ON FUNCTION users.are_contacts(UUID, UUID) TO app_user;
+GRANT EXECUTE ON FUNCTION messages.search_messages(TEXT, UUID, INTEGER) TO app_user;
+GRANT EXECUTE ON FUNCTION messages.get_user_conversations(UUID) TO app_user;

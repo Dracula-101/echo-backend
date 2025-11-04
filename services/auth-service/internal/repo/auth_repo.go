@@ -249,6 +249,7 @@ func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID strin
 	query := `UPDATE auth.users
 		SET failed_login_attempts = 0,
 		    last_failed_login_at = NULL,
+			last_successful_login_at = NOW(),
 		    updated_at = NOW()
 		WHERE id = $1`
 	result, err := r.db.Exec(ctx, query, userID)

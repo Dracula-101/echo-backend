@@ -1,8 +1,8 @@
 .PHONY: help up down build rebuild logs restart status clean ps health
 .PHONY: gateway-up gateway-down gateway-logs gateway-restart gateway-build
 .PHONY: auth-up auth-down auth-logs auth-restart auth-build
-.PHONY: db-init db-seed db-connect db-reset redis-connect redis-flush
-.PHONY: test setup
+.PHONY: db-init db-seed db-connect db-reset db-migrate db-migrate-down db-migrate-status
+.PHONY: redis-connect redis-flush test setup
 
 # Docker Compose files
 COMPOSE_FILE = infra/docker/docker-compose.dev.yml
@@ -60,6 +60,9 @@ help:
 	@echo "  make db-seed          - Seed database with test data"
 	@echo "  make db-connect       - Connect to PostgreSQL"
 	@echo "  make db-reset         - Reset database (drop and recreate)"
+	@echo "  make db-migrate       - Run database migrations"
+	@echo "  make db-migrate-down  - Rollback last migration"
+	@echo "  make db-migrate-status - Show migration status"
 	@echo ""
 	@echo "$(GREEN)📦 Redis:$(NC)"
 	@echo "  make redis-connect    - Connect to Redis CLI"
@@ -317,6 +320,23 @@ db-reset:
 	else \
 		echo "$(YELLOW)Cancelled$(NC)"; \
 	fi
+
+## db-migrate: Run database migrations
+db-migrate:
+	@echo "$(GREEN)Running database migrations...$(NC)"
+	@cd infra/scripts && chmod +x run-migrations.sh && ./run-migrations.sh up
+	@echo "$(GREEN)✓ Migrations applied$(NC)"
+
+## db-migrate-down: Rollback last migration
+db-migrate-down:
+	@echo "$(YELLOW)Rolling back last migration...$(NC)"
+	@cd infra/scripts && chmod +x run-migrations.sh && ./run-migrations.sh down
+	@echo "$(GREEN)✓ Migration rolled back$(NC)"
+
+## db-migrate-status: Show migration status
+db-migrate-status:
+	@echo "$(GREEN)Migration status:$(NC)"
+	@cd infra/scripts && chmod +x run-migrations.sh && ./run-migrations.sh status
 
 ## redis-connect: Connect to Redis CLI
 redis-connect:

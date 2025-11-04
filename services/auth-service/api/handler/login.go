@@ -44,9 +44,23 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 		)
 	}
 
-	err = h.service.FailedLogin(ctx, userID)
+	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
+		UserID:          &userID,
+		EventType:       "login_attempt",
+		EventCategory:   utils.PtrString("authentication"),
+		Severity:        "medium",
+		Status:          utils.PtrString("failed"),
+		Description:     utils.PtrString(fmt.Sprintf("User login attempt failed: %s", failureReason)),
+		IPAddress:       &locationInfo.IP,
+		UserAgent:       &userAgent,
+		DeviceID:        &device.ID,
+		LocationCountry: &locationInfo.Country,
+		LocationCity:    &locationInfo.City,
+		IsSuspicious:    false,
+		Metadata:        nil,
+	})
 	if err != nil {
-		h.log.Error("Failed to record failed login counter",
+		h.log.Error("Failed to log security event",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("user_id", userID),
 			logger.Error(err),
@@ -63,16 +77,7 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 		logger.String("device_os", device.OS),
 	)
 
-	err := h.service.SuccessLogin(ctx, userID)
-	if err != nil {
-		h.log.Error("Failed to record successful login counter",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-	}
-
-	err = h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
+	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
 		DeviceFingerprint: session.DeviceFingerprint,
 		DeviceInfo:        device,
 		IPInfo:            *locationInfo,
@@ -146,7 +151,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Debug("Extracting request metadata",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("email", loginRequest.Email),
 		logger.String("device_os", deviceInfo.OS),
 		logger.String("browser", browserInfo.Name),
 	)
@@ -185,7 +189,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	userResult, authErr := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
 	if authErr != nil {
-		if authErr.Code == authErrors.CodeInvalidCredentials || authErr.Code == authErrors.CodeUserNotFound {
+		if authErr.Code == authErrors.CodeInvalidCredentials {
 			h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, authErr.Message)
 			response.BadRequestError(r.Context(), r, w, authErr.Message, nil)
 		} else {

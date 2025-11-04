@@ -9,64 +9,102 @@ CREATE SCHEMA IF NOT EXISTS users;
 CREATE TABLE users.profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    display_name VARCHAR(100),
+    
+    -- Phone is the primary identifier (from auth.users)
+    phone_number VARCHAR(20) NOT NULL,        -- Denormalized for quick lookup
+    
+    -- Optional username (WhatsApp-style: can be set later)
+    username VARCHAR(50) UNIQUE,              -- Optional, can be NULL
+    display_name VARCHAR(100),                -- Display name (defaults to phone if not set)
+    
+    -- Profile info
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     middle_name VARCHAR(100),
-    bio TEXT,
-    bio_links JSONB DEFAULT '[]'::JSONB, -- [{url, title, icon}]
+    bio TEXT,                                 -- WhatsApp "About" field
+    bio_links JSONB DEFAULT '[]'::JSONB,
     avatar_url TEXT,
     avatar_thumbnail_url TEXT,
     cover_image_url TEXT,
+    
     date_of_birth DATE,
     gender VARCHAR(50),
     pronouns VARCHAR(50),
     language_code VARCHAR(10) DEFAULT 'en',
     timezone VARCHAR(100),
-    country_code VARCHAR(5),
+    country_code VARCHAR(5),                  -- From phone number
     city VARCHAR(100),
-    phone_visible BOOLEAN DEFAULT FALSE,
+    
+    -- Privacy settings (WhatsApp-style)
+    phone_visible BOOLEAN DEFAULT FALSE,      -- Show phone to non-contacts
     email_visible BOOLEAN DEFAULT FALSE,
-    online_status VARCHAR(20) DEFAULT 'offline', -- online, offline, away, busy, invisible
+    
+    -- Status
+    online_status VARCHAR(20) DEFAULT 'offline', -- online, offline, away, busy
     last_seen_at TIMESTAMPTZ,
-    profile_visibility VARCHAR(20) DEFAULT 'public', -- public, friends, private
-    search_visibility BOOLEAN DEFAULT TRUE,
-    is_verified BOOLEAN DEFAULT FALSE,
+    profile_visibility VARCHAR(20) DEFAULT 'everyone', -- everyone, contacts, nobody
+    search_visibility BOOLEAN DEFAULT TRUE,   -- Can be found by phone number
+    
+    is_verified BOOLEAN DEFAULT FALSE,        -- Business/verified account
+    is_business_account BOOLEAN DEFAULT FALSE,
+    business_info JSONB,
+    
     website_url TEXT,
-    social_links JSONB DEFAULT '{}'::JSONB, -- {twitter, instagram, linkedin, etc}
+    social_links JSONB DEFAULT '{}'::JSONB,
     interests TEXT[],
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deactivated_at TIMESTAMPTZ,
-    metadata JSONB DEFAULT '{}'::JSONB
+    metadata JSONB DEFAULT '{}'::JSONB,
+    
+    -- Constraints
+    CONSTRAINT check_profile_phone_format CHECK (phone_number ~ '^\+[1-9]\d{1,14}$')
 );
 
--- User Contacts/Friends
+-- User Contacts/Friends (WhatsApp-style phone book sync)
 CREATE TABLE users.contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    contact_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    relationship_type VARCHAR(50) DEFAULT 'contact', -- friend, contact, blocked, follow
-    status VARCHAR(50) DEFAULT 'pending', -- pending, accepted, rejected, blocked
-    nickname VARCHAR(100),
+    contact_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE, -- NULL if contact not on platform yet
+    
+    -- Phone book contact info (stored when syncing phone contacts)
+    contact_phone_number VARCHAR(20) NOT NULL, -- E.164 format
+    contact_name VARCHAR(255),                 -- Name from phone book
+    contact_phone_label VARCHAR(50),           -- "Mobile", "Work", "Home"
+    
+    -- If contact is on platform (contact_user_id NOT NULL)
+    relationship_type VARCHAR(50) DEFAULT 'contact', -- contact, blocked, favorite
+    status VARCHAR(50) DEFAULT 'active',       -- active, blocked, deleted
+    nickname VARCHAR(100),                     -- Custom name override
     notes TEXT,
+    
     is_favorite BOOLEAN DEFAULT FALSE,
     is_pinned BOOLEAN DEFAULT FALSE,
     is_archived BOOLEAN DEFAULT FALSE,
     is_muted BOOLEAN DEFAULT FALSE,
     muted_until TIMESTAMPTZ,
     custom_notifications JSONB,
-    contact_source VARCHAR(50), -- phone_contacts, search, suggestion, qr_code, link
+    
+    -- Metadata
+    contact_source VARCHAR(50) DEFAULT 'phone_sync', -- phone_sync, manual_add, qr_code, link
     contact_groups TEXT[],
     last_interaction_at TIMESTAMPTZ,
     interaction_count INTEGER DEFAULT 0,
+    
+    -- Sync tracking
+    phone_contact_id VARCHAR(255),             -- ID from phone's contact database
+    last_synced_at TIMESTAMPTZ,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     accepted_at TIMESTAMPTZ,
     blocked_at TIMESTAMPTZ,
     block_reason TEXT,
-    UNIQUE(user_id, contact_user_id),
+    
+    -- Constraints
+    UNIQUE(user_id, contact_phone_number),
+    CONSTRAINT check_contact_phone_format CHECK (contact_phone_number ~ '^\+[1-9]\d{1,14}$'),
     CHECK (user_id != contact_user_id)
 );
 
@@ -83,6 +121,37 @@ CREATE TABLE users.contact_groups (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, group_name)
+);
+
+-- Phone Contact Sync Log (Track contact book syncs)
+CREATE TABLE users.contact_sync_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    device_id VARCHAR(255),
+    total_contacts_synced INTEGER DEFAULT 0,
+    new_contacts_found INTEGER DEFAULT 0,      -- Contacts now on platform
+    contacts_updated INTEGER DEFAULT 0,
+    sync_status VARCHAR(50) DEFAULT 'completed', -- in_progress, completed, failed
+    sync_duration_ms INTEGER,
+    error_message TEXT,
+    synced_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::JSONB
+);
+
+-- Pending Contact Invitations (For contacts not yet on platform)
+CREATE TABLE users.contact_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    phone_number VARCHAR(20) NOT NULL,
+    invitation_method VARCHAR(50),             -- sms, whatsapp, link
+    invitation_message TEXT,
+    invitation_code TEXT UNIQUE,
+    status VARCHAR(50) DEFAULT 'pending',      -- pending, accepted, expired
+    sent_at TIMESTAMPTZ,
+    accepted_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT check_invitation_phone_format CHECK (phone_number ~ '^\+[1-9]\d{1,14}$')
 );
 
 -- User Settings
@@ -296,10 +365,13 @@ CREATE TABLE users.reports (
 
 -- Indexes
 CREATE INDEX idx_profiles_user ON users.profiles(user_id);
-CREATE INDEX idx_profiles_username ON users.profiles(username);
+CREATE INDEX idx_profiles_phone ON users.profiles(phone_number);
+CREATE INDEX idx_profiles_username ON users.profiles(username) WHERE username IS NOT NULL;
 CREATE INDEX idx_contacts_user ON users.contacts(user_id);
-CREATE INDEX idx_contacts_contact_user ON users.contacts(contact_user_id);
+CREATE INDEX idx_contacts_contact_user ON users.contacts(contact_user_id) WHERE contact_user_id IS NOT NULL;
+CREATE INDEX idx_contacts_phone ON users.contacts(contact_phone_number);
 CREATE INDEX idx_contacts_status ON users.contacts(status);
+CREATE INDEX idx_contacts_user_phone ON users.contacts(user_id, contact_phone_number);
 CREATE INDEX idx_blocked_users_user ON users.blocked_users(user_id);
 CREATE INDEX idx_blocked_users_blocked ON users.blocked_users(blocked_user_id);
 CREATE INDEX idx_status_history_user ON users.status_history(user_id);

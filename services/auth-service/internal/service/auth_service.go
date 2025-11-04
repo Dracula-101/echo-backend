@@ -277,23 +277,3 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		},
 	}, nil
 }
-
-// ============================================================================
-// Login Tracking
-// ============================================================================
-
-func (s *AuthService) FailedLogin(ctx context.Context, userID string) error {
-	s.log.Info("Recording failed login attempt",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-	)
-	return s.repo.RecordFailedLogin(ctx, userID)
-}
-
-func (s *AuthService) SuccessLogin(ctx context.Context, userID string) error {
-	s.log.Info("Recording successful login attempt",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-	)
-	return s.repo.RecordSuccessfulLogin(ctx, userID)
-}
