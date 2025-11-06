@@ -213,9 +213,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	if err := env.LoadEnv(); err != nil {
-		panic(fmt.Sprintf("Error loading .env.location file: %v", err))
-	}
+	env.LoadEnv()
 	log, err := adapter.NewZap(logger.Config{
 		Level:      logger.GetLoggerLevel(),
 		Output:     logger.GetLoggerOutput(),
@@ -227,9 +225,9 @@ func main() {
 		log.Fatal("Failed to initialize logger:", logger.Error(err))
 	}
 
-	cityDBPath := env.MustGetEnv("CITY_DB_PATH")
-	asnDBPath := env.MustGetEnv("ASN_DB_PATH")
-	countryDBPath := env.MustGetEnv("COUNTRY_DB_PATH")
+	cityDBPath := env.MustGetEnv("GEOIP_CITY_DB_PATH")
+	asnDBPath := env.MustGetEnv("GEOIP_ASN_DB_PATH")
+	countryDBPath := env.MustGetEnv("GEOIP_COUNTRY_DB_PATH")
 	host := env.GetEnv("HOST", "0.0.0.0")
 	port := env.GetEnv("PORT", "8090")
 

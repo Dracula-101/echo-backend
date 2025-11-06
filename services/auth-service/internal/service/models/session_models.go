@@ -1,6 +1,9 @@
 package models
 
-import "shared/server/request"
+import (
+	dbModels "shared/pkg/database/postgres/models"
+	"shared/server/request"
+)
 
 type CreateSessionInput struct {
 	UserID          string
@@ -15,7 +18,7 @@ type CreateSessionInput struct {
 	IsTrustedDevice bool
 	FCMToken        string
 	APNSToken       string
-	SessionType     string
+	SessionType     dbModels.SessionType
 	Metadata        map[string]interface{}
 }
 

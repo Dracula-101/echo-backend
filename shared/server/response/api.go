@@ -94,6 +94,7 @@ func BadRequestError(ctx context.Context, r *http.Request, w http.ResponseWriter
 func UnauthorizedError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
 	err := errors.New(errors.CodeUnauthenticated, message)
 	errorDetails := ErrorDetailsFromError(err, false)
+	errorDetails.Type = ErrorTypeAuthentication
 	errorDetails.Description = "Authentication is required and has failed or has not been provided."
 	if reqError != nil {
 		errorDetails.InnerError = reqError.Error()

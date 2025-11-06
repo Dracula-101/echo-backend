@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -29,10 +28,6 @@ import (
 	"shared/server/server"
 	"shared/server/shutdown"
 )
-
-func loadenv() {
-	env.LoadEnv()
-}
 
 func createLogger(name string) logger.Logger {
 	log, err := adapter.NewZap(logger.Config{
@@ -52,23 +47,16 @@ func loadConfig() (*config.Config, error) {
 	log := createLogger("config-loader")
 	defer log.Sync()
 
-	configPath := os.Getenv("CONFIG_PATH")
-	env := os.Getenv("ENV")
+	configPath := env.GetEnv("CONFIG_PATH")
+	env := env.GetEnv("APP_ENV")
 
 	var cfg *config.Config
 	var err error
-	if configPath != "" {
-		if env != "" {
-			log.Debug("Loading config with environment", logger.String("env", env))
-			cfg, err = config.LoadWithEnv(configPath, env)
-		} else {
-			log.Debug("Loading config from path", logger.String("configPath", configPath))
-			cfg, err = config.Load(configPath)
-		}
-	} else {
-		log.Debug("Loading config from environment variables")
-		cfg, err = config.LoadFromEnv()
-	}
+	log.Debug("Loading config from file",
+		logger.String("configPath", configPath),
+		logger.String("environment", env),
+	)
+	cfg, err = config.Load(configPath, env)
 	if err != nil {
 		log.Error("Failed to load config", logger.Error(err))
 		return nil, err
@@ -279,7 +267,7 @@ func createHashingService(cfg config.Config, log logger.Logger) *hashing.Hashing
 }
 
 func main() {
-	loadenv()
+	env.LoadEnv()
 
 	cfg, err := loadConfig()
 	if err != nil {

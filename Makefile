@@ -7,8 +7,9 @@
 .PHONY: help up down build rebuild logs restart status clean ps health
 .PHONY: gateway-up gateway-down gateway-logs gateway-restart gateway-build gateway-rerun gateway-rebuild
 .PHONY: auth-up auth-down auth-logs auth-restart auth-build auth-rerun auth-rebuild
-.PHONY: location-up location-down location-logs location-restart location-build location-rerun
+.PHONY: user-up user-down user-logs user-restart user-build user-rerun user-rebuild
 .PHONY: message-up message-down message-logs message-restart message-build message-rerun message-rebuild
+.PHONY: location-up location-down location-logs location-restart location-build location-rerun location-rebuild
 .PHONY: kafka-up kafka-down kafka-logs kafka-restart kafka-topics kafka-create-topics
 .PHONY: db-init db-seed db-connect db-reset db-migrate db-migrate-down db-migrate-status
 .PHONY: redis-connect redis-flush test setup test-auth verify-security dev generate-routes update-gateway-routes
@@ -98,7 +99,17 @@ help:
 	@echo "  make location-rerun   Stop and restart Location Service"
 	@echo "  make location-restart Restart Location Service"
 	@echo "  make location-build   Rebuild Location Service"
+	@echo "  make location-rebuild Rebuild Location Service (no cache)"
 	@echo "  make location-logs    View Location Service logs"
+	@echo ""
+	@echo "$(BOLD)User Service:$(NC)"
+	@echo "  make user-up          Start User Service"
+	@echo "  make user-down        Stop User Service"
+	@echo "  make user-rerun       Stop and restart User Service"
+	@echo "  make user-restart     Restart User Service"
+	@echo "  make user-build       Rebuild User Service"
+	@echo "  make user-rebuild     Rebuild User Service (no cache)"
+	@echo "  make user-logs        View User Service logs"
 	@echo ""
 	@echo "$(BOLD)Message Service:$(NC)"
 	@echo "  make message-up       Start Message Service"
@@ -162,11 +173,12 @@ up:
 	@echo "$(GREEN)$(CHECK) Services started successfully$(NC)"
 	@echo ""
 	@echo "$(BOLD)Service URLs:$(NC)"
-	@echo "  API Gateway      $(CYAN)http://localhost:8080$(NC)"
-	@echo "  Auth Service     $(GRAY)Internal only (via gateway)$(NC)"
-	@echo "  Location         $(CYAN)http://localhost:8090$(NC)"
-	@echo "  Messages         $(CYAN)http://localhost:8083$(NC)"
-	@echo "  WebSocket        $(CYAN)ws://localhost:8083/ws$(NC)"
+	@echo "  API Gateway      	$(CYAN)http://localhost:8080$(NC)"
+	@echo "  Auth Service     	$(GRAY)Internal only (via gateway)$(NC)"
+	@echo "  User Service     	$(GRAY)Internal only (via gateway)$(NC)"
+	@echo "  Messages Service 	$(GRAY)Internal only (via gateway)$(NC)"
+	@echo "  Location Service 	$(CYAN)http://localhost:8090$(NC)"
+	@echo "  WebSocket        	$(CYAN)ws://localhost:8083/ws$(NC)"
 	@echo ""
 	@echo "$(BOLD)Infrastructure:$(NC)"
 	@echo "  PostgreSQL       $(YELLOW)localhost:5432$(NC)"
@@ -225,7 +237,7 @@ rerun:
 	@echo "$(DIM)Step 1/3: Stopping services...$(NC)"
 	@docker-compose -f $(COMPOSE_FILE) down
 	@echo "$(DIM)Step 2/3: Building images...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) build
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache
 	@echo "$(DIM)Step 3/3: Starting services...$(NC)"
 	@docker-compose -f $(COMPOSE_FILE) up -d
 	@echo ""
@@ -268,15 +280,20 @@ status:
 		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
 	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-auth-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
-	@echo "$(BOLD)Location Service$(NC)"
-	@docker inspect -f '{{.State.Running}}' location-service 2>/dev/null | grep -q true && \
+	@echo "$(BOLD)User Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-user-service 2>/dev/null | grep -q true && \
 		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
-	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' location-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-user-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
 	@echo "$(BOLD)Message Service$(NC)"
 	@docker inspect -f '{{.State.Running}}' echo-message-service 2>/dev/null | grep -q true && \
 		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
 	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-message-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo ""
+	@echo "$(BOLD)Location Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' location-service 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' location-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
 	@echo "$(BOLD)Kafka$(NC)"
 	@docker inspect -f '{{.State.Running}}' echo-kafka 2>/dev/null | grep -q true && \
@@ -305,6 +322,14 @@ clean:
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		docker-compose -f $(COMPOSE_FILE) down -v; \
+		docker-compose -f $(COMPOSE_FILE) rm -f; \
+		docker system prune -f; \
+		docker volume prune -f; \
+		docker network prune -f; \
+		docker image prune -f; \
+		docker volume rm $$(docker volume ls -qf dangling=true) 2>/dev/null || true; \
+		docker network rm $$(docker network ls -qf dangling=true) 2>/dev/null || true; \
+		docker image rm $$(docker images -qf dangling=true) 2>/dev/null || true; \
 		echo ""; \
 		echo "$(GREEN)$(CHECK) Cleanup complete$(NC)"; \
 		echo ""; \
@@ -472,70 +497,82 @@ auth-logs:
 	@docker-compose -f $(COMPOSE_FILE) logs -f auth-service
 
 # =============================================================================
-# LOCATION SERVICE
+# USER SERVICE
 # =============================================================================
 
-## location-up: Start Location Service
-location-up:
+## user-up: Start User Service
+user-up:
 	@echo ""
-	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BOLD)  Starting Location Service$(NC)"
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting User Service$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@docker-compose -f $(COMPOSE_FILE) up -d user-service
 	@echo ""
-	@echo "$(GREEN)$(CHECK) Location Service started$(NC)"
-	@echo ""
-
-## location-down: Stop Location Service
-location-down:
-	@echo ""
-	@echo "$(YELLOW)Stopping Location Service...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) stop location-service
-	@echo "$(GREEN)$(CHECK) Location Service stopped$(NC)"
+	@echo "$(GREEN)$(CHECK) User Service started$(NC)"
 	@echo ""
 
-## location-rerun: Stop and restart Location Service
-location-rerun:
+## user-down: Stop User Service
+user-down:
 	@echo ""
-	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BOLD)  Rerunning Location Service$(NC)"
+	@echo "$(YELLOW)Stopping User Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop user-service
+	@echo "$(GREEN)$(CHECK) User Service stopped$(NC)"
+	@echo ""
+
+## user-rerun: Stop and restart User Service
+user-rerun:
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning User Service$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) stop location-service
-	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@docker-compose -f $(COMPOSE_FILE) stop user-service
+	@docker-compose -f $(COMPOSE_FILE) up -d user-service
 	@echo ""
-	@echo "$(GREEN)$(CHECK) Location Service rerun complete$(NC)"
-	@echo ""
-
-## location-restart: Restart Location Service
-location-restart:
-	@echo ""
-	@echo "$(YELLOW)Restarting Location Service...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) restart location-service
-	@echo "$(GREEN)$(CHECK) Location Service restarted$(NC)"
+	@echo "$(GREEN)$(CHECK) User Service rerun complete$(NC)"
 	@echo ""
 
-## location-build: Rebuild Location Service
-location-build:
+## user-restart: Restart User Service
+user-restart:
 	@echo ""
-	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BOLD)  Building Location Service$(NC)"
+	@echo "$(YELLOW)Restarting User Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart user-service
+	@echo "$(GREEN)$(CHECK) User Service restarted$(NC)"
+	@echo ""
+
+## user-build: Rebuild User Service
+user-build:
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building User Service$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) build --no-cache location-service
+	@docker-compose -f $(COMPOSE_FILE) build user-service
 	@echo ""
 	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
 	@echo ""
 
-## location-logs: View Location Service logs
-location-logs:
+## user-rebuild: Rebuild User Service (no cache)
+user-rebuild:
 	@echo ""
-	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BOLD)  Location Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding User Service $(DIM)(no cache)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f location-service
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache user-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
+
+## user-logs: View User Service logs
+user-logs:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  User Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f user-service
 
 # =============================================================================
 # MESSAGE SERVICE
@@ -616,6 +653,84 @@ message-logs:
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@docker-compose -f $(COMPOSE_FILE) logs -f message-service
+
+# =============================================================================
+# LOCATION SERVICE
+# =============================================================================
+
+## location-up: Start Location Service
+location-up:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Location Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Location Service started$(NC)"
+	@echo ""
+
+## location-down: Stop Location Service
+location-down:
+	@echo ""
+	@echo "$(YELLOW)Stopping Location Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop location-service
+	@echo "$(GREEN)$(CHECK) Location Service stopped$(NC)"
+	@echo ""
+
+## location-rerun: Stop and restart Location Service
+location-rerun:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning Location Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop location-service
+	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Location Service rerun complete$(NC)"
+	@echo ""
+
+## location-restart: Restart Location Service
+location-restart:
+	@echo ""
+	@echo "$(YELLOW)Restarting Location Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart location-service
+	@echo "$(GREEN)$(CHECK) Location Service restarted$(NC)"
+	@echo ""
+
+## location-build: Rebuild Location Service
+location-build:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Location Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
+
+## location-rebuild: Rebuild Location Service (no cache)
+location-rebuild:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding Location Service $(DIM)(no cache)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache location-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
+
+## location-logs: View Location Service logs
+location-logs:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Location Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f location-service
 
 # =============================================================================
 # KAFKA & ZOOKEEPER

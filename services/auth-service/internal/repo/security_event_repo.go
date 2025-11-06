@@ -29,8 +29,8 @@ func NewSecurityEventRepo(db database.Database, log logger.Logger) *SecurityEven
 
 func (r *SecurityEventRepo) LogSecurityEvent(ctx context.Context, event *models.SecurityEvent) error {
 	r.log.Debug("Logging security event",
-		logger.String("event_type", event.EventType),
-		logger.String("severity", event.Severity),
+		logger.Any("event_type", event.EventType),
+		logger.Any("severity", event.Severity),
 		logger.String("user_id", safeDerefString(event.UserID)),
 		logger.String("session_id", safeDerefString(event.SessionID)),
 		logger.Bool("is_suspicious", event.IsSuspicious),

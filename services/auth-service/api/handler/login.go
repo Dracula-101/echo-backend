@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"shared/pkg/database/postgres/models"
+	dbModels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 	"shared/server/request"
@@ -211,6 +212,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if activeSession == nil {
+		isMobile := deviceInfo.IsMobile()
 		session, err = h.sessionService.CreateSession(r.Context(), serviceModels.CreateSessionInput{
 			UserID:          userResult.User.ID,
 			RefreshToken:    userResult.Session.RefreshToken,
@@ -220,11 +222,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			IP:              *locationInfo,
 			Latitude:        locationInfo.Latitude,
 			Longitude:       locationInfo.Longitude,
-			IsMobile:        deviceInfo.OS == "iOS" || deviceInfo.OS == "Android",
+			IsMobile:        isMobile,
 			IsTrustedDevice: false,
 			FCMToken:        loginRequest.FCMToken,
 			APNSToken:       loginRequest.APNSToken,
-			SessionType:     "login",
+			SessionType: func() dbModels.SessionType {
+				if isMobile {
+					return dbModels.SessionTypeMobile
+				}
+				return dbModels.SessionTypeWeb
+			}(),
 			Metadata: map[string]interface{}{
 				"request_id":     request.GetRequestID(r),
 				"correlation_id": request.GetCorrelationID(r),

@@ -1,0 +1,162 @@
+# Message Service Configuration
+
+service:
+  name: message-service
+  version: 1.0.0
+  description: "Real-time messaging service for Echo Backend"
+  environment: ${APP_ENV}
+
+server:
+  host: ${SERVER_HOST:0.0.0.0}
+  port: ${SERVER_PORT:8083}
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 30s
+  max_header_bytes: 1048576
+  enable_cors: ${ENABLE_CORS:true}
+  allowed_origins:
+    - ${CORS_ORIGIN_1:http://localhost:3000}
+    - ${CORS_ORIGIN_2:http://localhost:5173}
+    - ${CORS_ORIGIN_3:*}
+  trusted_proxies:
+    - ${TRUSTED_PROXY_1:127.0.0.1}
+    - ${TRUSTED_PROXY_2:::1}
+
+database:
+  host: ${DB_HOST:localhost}
+  port: ${DB_PORT:5432}
+  user: ${DB_USER:postgres}
+  password: ${DB_PASSWORD:postgres}
+  db_name: ${DB_NAME:echo_db}
+  ssl_mode: ${DB_SSL_MODE:disable}
+  max_open_conns: ${DB_MAX_OPEN_CONNS:25}
+  max_idle_conns: ${DB_MAX_IDLE_CONNS:10}
+  conn_max_lifetime: ${DB_CONN_MAX_LIFETIME:5m}
+  conn_max_idle_time: ${DB_CONN_MAX_IDLE_TIME:10m}
+  log_queries: ${DB_LOG_QUERIES:false}
+
+kafka:
+  brokers:
+    - ${KAFKA_BROKERS}
+  topic: ${KAFKA_TOPIC:messages}
+  client_id: ${KAFKA_CLIENT_ID:message-service}
+  group_id: ${KAFKA_GROUP_ID:message-service-group}
+  compression: ${KAFKA_COMPRESSION:snappy}
+  batch_size: ${KAFKA_BATCH_SIZE:16384}
+  linger_ms: ${KAFKA_LINGER_MS:10}
+  retry_max: ${KAFKA_RETRY_MAX:3}
+  retry_backoff_ms: ${KAFKA_RETRY_BACKOFF_MS:100}
+  acks: ${KAFKA_ACKS:all}
+  enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
+  max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
+
+cache:
+  enabled: ${CACHE_ENABLED:true}
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  password: ${REDIS_PASSWORD}
+  db: ${REDIS_DB:0}
+  max_retries: ${REDIS_MAX_RETRIES:3}
+  pool_size: ${REDIS_POOL_SIZE:10}
+  min_idle_conns: ${REDIS_MIN_IDLE_CONNS:5}
+  dial_timeout: ${REDIS_DIAL_TIMEOUT:5s}
+  read_timeout: ${REDIS_READ_TIMEOUT:3s}
+  write_timeout: ${REDIS_WRITE_TIMEOUT:3s}
+  pool_timeout: ${REDIS_POOL_TIMEOUT:4s}
+  idle_timeout: ${REDIS_IDLE_TIMEOUT:5m}
+  ttl:
+    message: ${CACHE_TTL_MESSAGE:1h}
+    conversation: ${CACHE_TTL_CONVERSATION:30m}
+    user_presence: ${CACHE_TTL_USER_PRESENCE:5m}
+
+websocket:
+  read_buffer_size: ${WS_READ_BUFFER_SIZE:1024}
+  write_buffer_size: ${WS_WRITE_BUFFER_SIZE:1024}
+  max_message_size: ${WS_MAX_MESSAGE_SIZE:524288}
+  write_wait: ${WS_WRITE_WAIT:10s}
+  pong_wait: ${WS_PONG_WAIT:60s}
+  ping_period: ${WS_PING_PERIOD:54s}
+  max_connections: ${WS_MAX_CONNECTIONS:10000}
+  compression_enabled: ${WS_COMPRESSION_ENABLED:true}
+  compression_level: ${WS_COMPRESSION_LEVEL:6}
+  origin_patterns:
+    - ${WS_ORIGIN_1:http://localhost:*}
+    - ${WS_ORIGIN_2:https://*.yourdomain.com}
+  heartbeat:
+    enabled: ${WS_HEARTBEAT_ENABLED:true}
+    interval: ${WS_HEARTBEAT_INTERVAL:30s}
+  client_buffer_size: ${WS_CLIENT_BUFFER_SIZE:256}
+
+logging:
+  level: ${LOG_LEVEL:info}
+  format: ${LOG_FORMAT:json}
+  output_path: ${LOG_OUTPUT_PATH:stdout}
+  error_output_path: ${LOG_ERROR_OUTPUT_PATH:stderr}
+  enable_caller: ${LOG_ENABLE_CALLER:true}
+  enable_stacktrace: ${LOG_ENABLE_STACKTRACE:true}
+  sampling:
+    enabled: ${LOG_SAMPLING_ENABLED:false}
+    initial: ${LOG_SAMPLING_INITIAL:100}
+    thereafter: ${LOG_SAMPLING_THEREAFTER:100}
+
+shutdown:
+  timeout: ${SHUTDOWN_TIMEOUT:30s}
+  wait_for_connections: ${SHUTDOWN_WAIT_FOR_CONNECTIONS:true}
+  drain_timeout: ${SHUTDOWN_DRAIN_TIMEOUT:10s}
+  websocket_close_grace_period: ${SHUTDOWN_WS_GRACE_PERIOD:5s}
+
+monitoring:
+  enabled: ${MONITORING_ENABLED:true}
+  metrics_enabled: ${METRICS_ENABLED:true}
+  metrics_path: ${METRICS_PATH:/metrics}
+  health_path: ${HEALTH_PATH:/health}
+  tracing_enabled: ${TRACING_ENABLED:false}
+  tracing_endpoint: ${TRACING_ENDPOINT:http://jaeger:14268/api/traces}
+  tracing_sample_rate: ${TRACING_SAMPLE_RATE:0.1}
+  
+performance:
+  enable_profiling: ${ENABLE_PROFILING:false}
+  profiling_port: ${PROFILING_PORT:6060}
+  gc_percent: ${GC_PERCENT:100}
+  max_procs: ${MAX_PROCS:0}
+
+security:
+  enable_auth: ${SECURITY_ENABLE_AUTH:true}
+  jwt_secret: ${JWT_SECRET_KEY}
+  jwt_issuer: ${JWT_ISSUER:echo-backend}
+  jwt_audience: ${JWT_AUDIENCE:echo-users}
+  enable_encryption: ${SECURITY_ENABLE_ENCRYPTION:false}
+  encryption_key: ${ENCRYPTION_KEY}
+  allowed_file_types:
+    - image/jpeg
+    - image/png
+    - image/gif
+    - image/webp
+    - video/mp4
+    - video/webm
+    - application/pdf
+  max_file_size: ${MAX_FILE_SIZE:10485760}
+  rate_limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    requests_per_minute: ${RATE_LIMIT_RPM:60}
+    burst: ${RATE_LIMIT_BURST:10}
+
+features:
+  typing_indicator: ${FEATURE_TYPING_INDICATOR:true}
+  read_receipts: ${FEATURE_READ_RECEIPTS:true}
+  message_reactions: ${FEATURE_MESSAGE_REACTIONS:true}
+  message_editing: ${FEATURE_MESSAGE_EDITING:true}
+  message_deletion: ${FEATURE_MESSAGE_DELETION:true}
+  file_attachments: ${FEATURE_FILE_ATTACHMENTS:true}
+  voice_messages: ${FEATURE_VOICE_MESSAGES:false}
+  video_messages: ${FEATURE_VIDEO_MESSAGES:false}
+  message_search: ${FEATURE_MESSAGE_SEARCH:true}
+  message_threads: ${FEATURE_MESSAGE_THREADS:false}
+
+limits:
+  max_message_length: ${LIMIT_MAX_MESSAGE_LENGTH:4096}
+  max_attachments_per_message: ${LIMIT_MAX_ATTACHMENTS:10}
+  max_messages_per_request: ${LIMIT_MAX_MESSAGES_PER_REQUEST:100}
+  conversation_history_days: ${LIMIT_CONVERSATION_HISTORY_DAYS:365}
+  user_conversations_limit: ${LIMIT_USER_CONVERSATIONS:1000}

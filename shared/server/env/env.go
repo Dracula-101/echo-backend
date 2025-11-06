@@ -7,13 +7,34 @@ import (
 )
 
 func LoadEnv(filenames ...string) error {
-	return gotenv.Load(filenames...)
+	var possibleFilenames []string
+	if len(filenames) == 0 {
+		possibleFilenames = []string{
+			".env.local",
+			".env." + os.Getenv("APP_ENV") + ".local",
+			".env." + os.Getenv("APP_ENV"),
+			".env",
+		}
+	} else {
+		possibleFilenames = filenames
+	}
+
+	for _, filename := range possibleFilenames {
+		if _, err := os.Stat(filename); err == nil {
+			return gotenv.Load(filename)
+		}
+	}
+	return nil
 }
 
-func GetEnv(key string, def string) string {
+func GetEnv(key string, def ...string) string {
+	var defaultVal string
+	if len(def) > 0 {
+		defaultVal = def[0]
+	}
 	v := os.Getenv(key)
 	if v == "" {
-		return def
+		return defaultVal
 	}
 	return v
 }

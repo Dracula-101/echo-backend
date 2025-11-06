@@ -13,7 +13,7 @@ tmp_dir = "tmp"
   exclude_unchanged = false
   follow_symlink = false
   full_bin = ""
-  include_dir = ["../../shared", "cmd", "internal"]
+  include_dir = ["../../shared", "cmd", "configs", "internal"]
   include_ext = ["go", "tpl", "tmpl", "html", "yaml", "yml"]
   include_file = [".env"]
   kill_delay = "5s"
@@ -21,7 +21,7 @@ tmp_dir = "tmp"
   poll = false
   poll_interval = 0
   post_cmd = []
-  pre_cmd = ["go mod edit -replace echo-backend/shared=../../shared", "go get echo-backend/shared", "go mod tidy"]
+  pre_cmd = ["go mod edit -replace shared=../../shared", "go get shared", "go mod tidy"]
   rerun = false
   rerun_delay = 500
   send_interrupt = true

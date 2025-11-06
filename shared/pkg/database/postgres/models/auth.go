@@ -21,7 +21,7 @@ type AuthUser struct {
 	TwoFactorEnabled       bool             `db:"two_factor_enabled" json:"two_factor_enabled"`
 	TwoFactorSecret        *string          `db:"two_factor_secret" json:"-"`
 	TwoFactorBackupCodes   pq.StringArray   `db:"two_factor_backup_codes" json:"two_factor_backup_codes,omitempty"`
-	AccountStatus          string           `db:"account_status" json:"account_status"`
+	AccountStatus          AccountStatus    `db:"account_status" json:"account_status"`
 	AccountLockedUntil     *time.Time       `db:"account_locked_until" json:"account_locked_until,omitempty"`
 	FailedLoginAttempts    int              `db:"failed_login_attempts" json:"failed_login_attempts"`
 	LastFailedLoginAt      *time.Time       `db:"last_failed_login_at" json:"last_failed_login_at,omitempty"`
@@ -72,7 +72,7 @@ type AuthSession struct {
 	FCMToken           *string          `db:"fcm_token" json:"fcm_token,omitempty"`
 	APNSToken          *string          `db:"apns_token" json:"apns_token,omitempty"`
 	PushEnabled        bool             `db:"push_enabled" json:"push_enabled"`
-	SessionType        string           `db:"session_type" json:"session_type"`
+	SessionType        SessionType      `db:"session_type" json:"session_type"`
 	ExpiresAt          time.Time        `db:"expires_at" json:"expires_at"`
 	LastActivityAt     time.Time        `db:"last_activity_at" json:"last_activity_at"`
 	LastRefreshAt      *time.Time       `db:"last_refresh_at" json:"last_refresh_at,omitempty"`
@@ -94,10 +94,10 @@ type OTPVerification struct {
 	ID             string          `db:"id" json:"id" pk:"true"`
 	UserID         *string         `db:"user_id" json:"user_id,omitempty"`
 	Identifier     string          `db:"identifier" json:"identifier"`
-	IdentifierType string          `db:"identifier_type" json:"identifier_type"`
+	IdentifierType IdentifierType  `db:"identifier_type" json:"identifier_type"`
 	OTPCode        string          `db:"otp_code" json:"-"`
 	OTPHash        string          `db:"otp_hash" json:"-"`
-	Purpose        string          `db:"purpose" json:"purpose"`
+	Purpose        OTPPurpose      `db:"purpose" json:"purpose"`
 	Attempts       int             `db:"attempts" json:"attempts"`
 	MaxAttempts    int             `db:"max_attempts" json:"max_attempts"`
 	IsVerified     bool            `db:"is_verified" json:"is_verified"`
@@ -119,23 +119,23 @@ func (o *OTPVerification) PrimaryKey() interface{} {
 }
 
 type OAuthProvider struct {
-	ID               string          `db:"id" json:"id" pk:"true"`
-	UserID           string          `db:"user_id" json:"user_id"`
-	Provider         string          `db:"provider" json:"provider"`
-	ProviderUserID   string          `db:"provider_user_id" json:"provider_user_id"`
-	ProviderEmail    *string         `db:"provider_email" json:"provider_email,omitempty"`
-	ProviderUsername *string         `db:"provider_username" json:"provider_username,omitempty"`
-	AccessToken      *string         `db:"access_token" json:"-"`
-	RefreshToken     *string         `db:"refresh_token" json:"-"`
-	TokenExpiresAt   *time.Time      `db:"token_expires_at" json:"token_expires_at,omitempty"`
-	Scope            pq.StringArray  `db:"scope" json:"scope,omitempty"`
-	ProfileData      json.RawMessage `db:"profile_data" json:"profile_data,omitempty"`
-	IsPrimary        bool            `db:"is_primary" json:"is_primary"`
-	LinkedAt         time.Time       `db:"linked_at" json:"linked_at"`
-	LastUsedAt       *time.Time      `db:"last_used_at" json:"last_used_at,omitempty"`
-	UnlinkedAt       *time.Time      `db:"unlinked_at" json:"unlinked_at,omitempty"`
-	CreatedAt        time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time       `db:"updated_at" json:"updated_at"`
+	ID               string            `db:"id" json:"id" pk:"true"`
+	UserID           string            `db:"user_id" json:"user_id"`
+	Provider         OAuthProviderType `db:"provider" json:"provider"`
+	ProviderUserID   string            `db:"provider_user_id" json:"provider_user_id"`
+	ProviderEmail    *string           `db:"provider_email" json:"provider_email,omitempty"`
+	ProviderUsername *string           `db:"provider_username" json:"provider_username,omitempty"`
+	AccessToken      *string           `db:"access_token" json:"-"`
+	RefreshToken     *string           `db:"refresh_token" json:"-"`
+	TokenExpiresAt   *time.Time        `db:"token_expires_at" json:"token_expires_at,omitempty"`
+	Scope            pq.StringArray    `db:"scope" json:"scope,omitempty"`
+	ProfileData      json.RawMessage   `db:"profile_data" json:"profile_data,omitempty"`
+	IsPrimary        bool              `db:"is_primary" json:"is_primary"`
+	LinkedAt         time.Time         `db:"linked_at" json:"linked_at"`
+	LastUsedAt       *time.Time        `db:"last_used_at" json:"last_used_at,omitempty"`
+	UnlinkedAt       *time.Time        `db:"unlinked_at" json:"unlinked_at,omitempty"`
+	CreatedAt        time.Time         `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time         `db:"updated_at" json:"updated_at"`
 }
 
 func (o *OAuthProvider) TableName() string {
@@ -192,24 +192,24 @@ func (e *EmailVerificationToken) PrimaryKey() interface{} {
 }
 
 type SecurityEvent struct {
-	ID              string           `db:"id" json:"id" pk:"true"`
-	UserID          *string          `db:"user_id" json:"user_id,omitempty"`
-	SessionID       *string          `db:"session_id" json:"session_id,omitempty"`
-	EventType       string           `db:"event_type" json:"event_type"`
-	EventCategory   *string          `db:"event_category" json:"event_category,omitempty"`
-	Severity        string           `db:"severity" json:"severity"`
-	Status          *string          `db:"status" json:"status,omitempty"`
-	Description     *string          `db:"description" json:"description,omitempty"`
-	IPAddress       *string          `db:"ip_address" json:"ip_address,omitempty"`
-	UserAgent       *string          `db:"user_agent" json:"user_agent,omitempty"`
-	DeviceID        *string          `db:"device_id" json:"device_id,omitempty"`
-	LocationCountry *string          `db:"location_country" json:"location_country,omitempty"`
-	LocationCity    *string          `db:"location_city" json:"location_city,omitempty"`
-	RiskScore       *int             `db:"risk_score" json:"risk_score,omitempty"`
-	IsSuspicious    bool             `db:"is_suspicious" json:"is_suspicious"`
-	BlockedReason   *string          `db:"blocked_reason" json:"blocked_reason,omitempty"`
-	CreatedAt       time.Time        `db:"created_at" json:"created_at"`
-	Metadata        *json.RawMessage `db:"metadata" json:"metadata,omitempty"`
+	ID              string            `db:"id" json:"id" pk:"true"`
+	UserID          *string           `db:"user_id" json:"user_id,omitempty"`
+	SessionID       *string           `db:"session_id" json:"session_id,omitempty"`
+	EventType       SecurityEventType `db:"event_type" json:"event_type"`
+	EventCategory   *string           `db:"event_category" json:"event_category,omitempty"`
+	Severity        SecuritySeverity  `db:"severity" json:"severity"`
+	Status          *string           `db:"status" json:"status,omitempty"`
+	Description     *string           `db:"description" json:"description,omitempty"`
+	IPAddress       *string           `db:"ip_address" json:"ip_address,omitempty"`
+	UserAgent       *string           `db:"user_agent" json:"user_agent,omitempty"`
+	DeviceID        *string           `db:"device_id" json:"device_id,omitempty"`
+	LocationCountry *string           `db:"location_country" json:"location_country,omitempty"`
+	LocationCity    *string           `db:"location_city" json:"location_city,omitempty"`
+	RiskScore       *int              `db:"risk_score" json:"risk_score,omitempty"`
+	IsSuspicious    bool              `db:"is_suspicious" json:"is_suspicious"`
+	BlockedReason   *string           `db:"blocked_reason" json:"blocked_reason,omitempty"`
+	CreatedAt       time.Time         `db:"created_at" json:"created_at"`
+	Metadata        *json.RawMessage  `db:"metadata" json:"metadata,omitempty"`
 }
 
 func (s *SecurityEvent) TableName() string {
@@ -249,17 +249,17 @@ func (l *LoginHistory) PrimaryKey() interface{} {
 }
 
 type RateLimit struct {
-	ID             string     `db:"id" json:"id" pk:"true"`
-	Identifier     string     `db:"identifier" json:"identifier"`
-	IdentifierType string     `db:"identifier_type" json:"identifier_type"`
-	ActionType     string     `db:"action_type" json:"action_type"`
-	AttemptCount   int        `db:"attempt_count" json:"attempt_count"`
-	WindowStart    time.Time  `db:"window_start" json:"window_start"`
-	WindowDuration string     `db:"window_duration" json:"window_duration"`
-	MaxAttempts    *int       `db:"max_attempts" json:"max_attempts,omitempty"`
-	BlockedUntil   *time.Time `db:"blocked_until" json:"blocked_until,omitempty"`
-	CreatedAt      time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt      time.Time  `db:"updated_at" json:"updated_at"`
+	ID             string              `db:"id" json:"id" pk:"true"`
+	Identifier     string              `db:"identifier" json:"identifier"`
+	IdentifierType IdentifierType      `db:"identifier_type" json:"identifier_type"`
+	ActionType     RateLimitActionType `db:"action_type" json:"action_type"`
+	AttemptCount   int                 `db:"attempt_count" json:"attempt_count"`
+	WindowStart    time.Time           `db:"window_start" json:"window_start"`
+	WindowDuration string              `db:"window_duration" json:"window_duration"`
+	MaxAttempts    *int                `db:"max_attempts" json:"max_attempts,omitempty"`
+	BlockedUntil   *time.Time          `db:"blocked_until" json:"blocked_until,omitempty"`
+	CreatedAt      time.Time           `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time           `db:"updated_at" json:"updated_at"`
 }
 
 func (r *RateLimit) TableName() string {

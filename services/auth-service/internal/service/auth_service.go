@@ -13,6 +13,7 @@ import (
 	serviceModels "auth-service/internal/service/models"
 	"encoding/base64"
 	"shared/pkg/database"
+	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/common/token"
@@ -43,7 +44,20 @@ func normalizeEmail(email string) string {
 func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (bool, error) {
 	s.log.Info("Checking if email is taken", logger.String("email", email))
 	email = normalizeEmail(email)
-	return s.repo.ExistsByEmail(ctx, email)
+
+	var exists bool
+	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
+			result, err := s.repo.ExistsByEmail(ctx, email)
+			if err != nil {
+				return err
+			}
+			exists = result
+			return nil
+		})
+	})
+
+	return exists, err
 }
 
 // ============================================================================
@@ -55,7 +69,19 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
-	user, err := s.repo.GetUserByEmail(ctx, email)
+
+	var user *models.AuthUser
+	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
+			result, err := s.repo.GetUserByEmail(ctx, email)
+			if err != nil {
+				return err
+			}
+			user = result
+			return nil
+		})
+	})
+
 	if err != nil {
 		s.log.Error("Failed to fetch user",
 			logger.String("service", authErrors.ServiceName),
@@ -143,16 +169,27 @@ func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.Regi
 		logger.String("token", tokenResult.Token),
 	)
 
-	userID, err := s.repo.CreateUser(ctx, repository.CreateUserParams{
-		Email:             input.Email,
-		PasswordHash:      result.Encoded,
-		PasswordSalt:      base64.StdEncoding.EncodeToString(result.Salt),
-		PasswordAlgorithm: string(result.Algorithm),
-		PhoneNumber:       input.PhoneNumber,
-		PhoneCountryCode:  input.PhoneCountryCode,
-		IPAddress:         input.IPAddress,
-		UserAgent:         input.UserAgent,
+	var userID string
+	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
+			id, err := s.repo.CreateUser(ctx, repository.CreateUserParams{
+				Email:             input.Email,
+				PasswordHash:      result.Encoded,
+				PasswordSalt:      base64.StdEncoding.EncodeToString(result.Salt),
+				PasswordAlgorithm: string(result.Algorithm),
+				PhoneNumber:       input.PhoneNumber,
+				PhoneCountryCode:  input.PhoneCountryCode,
+				IPAddress:         input.IPAddress,
+				UserAgent:         input.UserAgent,
+			})
+			if err != nil {
+				return err
+			}
+			userID = id
+			return nil
+		})
 	})
+
 	if err != nil {
 		s.log.Error("Failed to create user",
 			logger.String("service", authErrors.ServiceName),
@@ -185,8 +222,20 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
-	user, err := s.repo.GetUserByEmail(ctx, email)
-	if err != nil && !database.IsNoRowsError(err) {
+
+	var user *models.AuthUser
+	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
+			result, err := s.repo.GetUserByEmail(ctx, email)
+			if err != nil && !database.IsNoRowsError(err) {
+				return err
+			}
+			user = result
+			return nil
+		})
+	})
+
+	if err != nil {
 		s.log.Error("Database error during login",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("error_code", pkgErrors.CodeDatabaseError),

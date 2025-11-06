@@ -1,293 +1,184 @@
 package config
 
 import (
-	"fmt"
-	"os"
-	"strconv"
 	"time"
 )
 
-// Config holds all configuration for the message service
 type Config struct {
-	Service   ServiceConfig
-	Server    ServerConfig
-	Database  DatabaseConfig
-	Kafka     KafkaConfig
-	Cache     CacheConfig
-	WebSocket WebSocketConfig
-	Logging   LoggingConfig
-	Shutdown  ShutdownConfig
+	Service    ServiceConfig    `yaml:"service" mapstructure:"service"`
+	Server     ServerConfig     `yaml:"server" mapstructure:"server"`
+	Database   DatabaseConfig   `yaml:"database" mapstructure:"database"`
+	Kafka      KafkaConfig      `yaml:"kafka" mapstructure:"kafka"`
+	Cache      CacheConfig      `yaml:"cache" mapstructure:"cache"`
+	WebSocket  WebSocketConfig  `yaml:"websocket" mapstructure:"websocket"`
+	Logging    LoggingConfig    `yaml:"logging" mapstructure:"logging"`
+	Shutdown   ShutdownConfig   `yaml:"shutdown" mapstructure:"shutdown"`
+	Monitoring MonitoringConfig `yaml:"monitoring" mapstructure:"monitoring"`
+	Security   SecurityConfig   `yaml:"security" mapstructure:"security"`
+	Features   FeaturesConfig   `yaml:"features" mapstructure:"features"`
+	Limits     LimitsConfig     `yaml:"limits" mapstructure:"limits"`
 }
 
-// ServiceConfig holds service metadata
 type ServiceConfig struct {
-	Name    string
-	Version string
+	Name        string `yaml:"name" mapstructure:"name"`
+	Version     string `yaml:"version" mapstructure:"version"`
+	Description string `yaml:"description" mapstructure:"description"`
+	Environment string `yaml:"environment" mapstructure:"environment"`
 }
 
-// ServerConfig holds server configuration
 type ServerConfig struct {
-	Host            string
-	Port            int
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
-	MaxHeaderBytes  int
-	EnableCORS      bool
-	AllowedOrigins  []string
-	TrustedProxies  []string
+	Host            string        `yaml:"host" mapstructure:"host"`
+	Port            int           `yaml:"port" mapstructure:"port"`
+	ReadTimeout     time.Duration `yaml:"read_timeout" mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `yaml:"write_timeout" mapstructure:"write_timeout"`
+	IdleTimeout     time.Duration `yaml:"idle_timeout" mapstructure:"idle_timeout"`
+	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" mapstructure:"shutdown_timeout"`
+	MaxHeaderBytes  int           `yaml:"max_header_bytes" mapstructure:"max_header_bytes"`
+	EnableCORS      bool          `yaml:"enable_cors" mapstructure:"enable_cors"`
+	AllowedOrigins  []string      `yaml:"allowed_origins" mapstructure:"allowed_origins"`
+	TrustedProxies  []string      `yaml:"trusted_proxies" mapstructure:"trusted_proxies"`
 }
 
-// DatabaseConfig holds database configuration
 type DatabaseConfig struct {
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	DBName          string
-	SSLMode         string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
-	ConnMaxIdleTime time.Duration
+	Host            string        `yaml:"host" mapstructure:"host"`
+	Port            int           `yaml:"port" mapstructure:"port"`
+	User            string        `yaml:"user" mapstructure:"user"`
+	Password        string        `yaml:"password" mapstructure:"password"`
+	DBName          string        `yaml:"db_name" mapstructure:"db_name"`
+	SSLMode         string        `yaml:"ssl_mode" mapstructure:"ssl_mode"`
+	MaxOpenConns    int           `yaml:"max_open_conns" mapstructure:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns" mapstructure:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime" mapstructure:"conn_max_lifetime"`
+	ConnMaxIdleTime time.Duration `yaml:"conn_max_idle_time" mapstructure:"conn_max_idle_time"`
+	LogQueries      bool          `yaml:"log_queries" mapstructure:"log_queries"`
 }
 
-// KafkaConfig holds Kafka configuration
 type KafkaConfig struct {
-	Brokers              []string
-	Topic                string
-	NotificationTopic    string
-	ConsumerGroup        string
-	EnableCompression    bool
-	CompressionType      string
-	RetryMax             int
-	RequiredAcks         int
-	EnableIdempotence    bool
+	Brokers           []string `yaml:"brokers" mapstructure:"brokers"`
+	Topic             string   `yaml:"topic" mapstructure:"topic"`
+	ClientID          string   `yaml:"client_id" mapstructure:"client_id"`
+	GroupID           string   `yaml:"group_id" mapstructure:"group_id"`
+	Compression       string   `yaml:"compression" mapstructure:"compression"`
+	BatchSize         int      `yaml:"batch_size" mapstructure:"batch_size"`
+	LingerMs          int      `yaml:"linger_ms" mapstructure:"linger_ms"`
+	RetryMax          int      `yaml:"retry_max" mapstructure:"retry_max"`
+	RetryBackoffMs    int      `yaml:"retry_backoff_ms" mapstructure:"retry_backoff_ms"`
+	Acks              string   `yaml:"acks" mapstructure:"acks"`
+	EnableIdempotence bool     `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`
+	MaxInFlight       int      `yaml:"max_in_flight" mapstructure:"max_in_flight"`
 }
 
-// CacheConfig holds cache (Redis) configuration
 type CacheConfig struct {
-	Enabled      bool
-	Host         string
-	Port         int
-	Password     string
-	DB           int
-	PoolSize     int
-	MinIdleConns int
-	MaxRetries   int
-	DialTimeout  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	PoolTimeout  time.Duration
+	Enabled      bool           `yaml:"enabled" mapstructure:"enabled"`
+	Host         string         `yaml:"host" mapstructure:"host"`
+	Port         int            `yaml:"port" mapstructure:"port"`
+	Password     string         `yaml:"password" mapstructure:"password"`
+	DB           int            `yaml:"db" mapstructure:"db"`
+	MaxRetries   int            `yaml:"max_retries" mapstructure:"max_retries"`
+	PoolSize     int            `yaml:"pool_size" mapstructure:"pool_size"`
+	MinIdleConns int            `yaml:"min_idle_conns" mapstructure:"min_idle_conns"`
+	DialTimeout  time.Duration  `yaml:"dial_timeout" mapstructure:"dial_timeout"`
+	ReadTimeout  time.Duration  `yaml:"read_timeout" mapstructure:"read_timeout"`
+	WriteTimeout time.Duration  `yaml:"write_timeout" mapstructure:"write_timeout"`
+	PoolTimeout  time.Duration  `yaml:"pool_timeout" mapstructure:"pool_timeout"`
+	IdleTimeout  time.Duration  `yaml:"idle_timeout" mapstructure:"idle_timeout"`
+	TTL          CacheTTLConfig `yaml:"ttl" mapstructure:"ttl"`
 }
 
-// ShutdownConfig holds shutdown configuration
-type ShutdownConfig struct {
-	WaitForConnections bool
-	DrainTimeout       time.Duration
+type CacheTTLConfig struct {
+	Message      time.Duration `yaml:"message" mapstructure:"message"`
+	Conversation time.Duration `yaml:"conversation" mapstructure:"conversation"`
+	UserPresence time.Duration `yaml:"user_presence" mapstructure:"user_presence"`
 }
 
-// WebSocketConfig holds WebSocket configuration
 type WebSocketConfig struct {
-	ReadBufferSize     int
-	WriteBufferSize    int
-	WriteWait          time.Duration
-	PongWait           time.Duration
-	PingPeriod         time.Duration
-	MaxMessageSize     int64
-	ClientBufferSize   int
+	ReadBufferSize     int             `yaml:"read_buffer_size" mapstructure:"read_buffer_size"`
+	WriteBufferSize    int             `yaml:"write_buffer_size" mapstructure:"write_buffer_size"`
+	MaxMessageSize     int64           `yaml:"max_message_size" mapstructure:"max_message_size"`
+	WriteWait          time.Duration   `yaml:"write_wait" mapstructure:"write_wait"`
+	PongWait           time.Duration   `yaml:"pong_wait" mapstructure:"pong_wait"`
+	PingPeriod         time.Duration   `yaml:"ping_period" mapstructure:"ping_period"`
+	MaxConnections     int             `yaml:"max_connections" mapstructure:"max_connections"`
+	CompressionEnabled bool            `yaml:"compression_enabled" mapstructure:"compression_enabled"`
+	CompressionLevel   int             `yaml:"compression_level" mapstructure:"compression_level"`
+	OriginPatterns     []string        `yaml:"origin_patterns" mapstructure:"origin_patterns"`
+	Heartbeat          HeartbeatConfig `yaml:"heartbeat" mapstructure:"heartbeat"`
+	ClientBufferSize   int             `yaml:"client_buffer_size" mapstructure:"client_buffer_size"`
 }
 
-// LoggingConfig holds logging configuration
+type HeartbeatConfig struct {
+	Enabled  bool          `yaml:"enabled" mapstructure:"enabled"`
+	Interval time.Duration `yaml:"interval" mapstructure:"interval"`
+}
+
 type LoggingConfig struct {
-	Level      string
-	Format     string // json or console
-	OutputPath string
+	Level            string         `yaml:"level" mapstructure:"level"`
+	Format           string         `yaml:"format" mapstructure:"format"`
+	OutputPath       string         `yaml:"output_path" mapstructure:"output_path"`
+	ErrorOutputPath  string         `yaml:"error_output_path" mapstructure:"error_output_path"`
+	EnableCaller     bool           `yaml:"enable_caller" mapstructure:"enable_caller"`
+	EnableStacktrace bool           `yaml:"enable_stacktrace" mapstructure:"enable_stacktrace"`
+	Sampling         SamplingConfig `yaml:"sampling" mapstructure:"sampling"`
 }
 
-// LoadConfig loads configuration from environment variables
-func LoadConfig() (*Config, error) {
-	config := &Config{
-		Service: ServiceConfig{
-			Name:    getEnv("SERVICE_NAME", "message-service"),
-			Version: getEnv("SERVICE_VERSION", "1.0.0"),
-		},
-		Server: ServerConfig{
-			Host:            getEnv("SERVER_HOST", "0.0.0.0"),
-			Port:            getEnvAsInt("SERVER_PORT", 8083),
-			ReadTimeout:     getEnvAsDuration("SERVER_READ_TIMEOUT", "15s"),
-			WriteTimeout:    getEnvAsDuration("SERVER_WRITE_TIMEOUT", "15s"),
-			IdleTimeout:     getEnvAsDuration("SERVER_IDLE_TIMEOUT", "60s"),
-			ShutdownTimeout: getEnvAsDuration("SERVER_SHUTDOWN_TIMEOUT", "30s"),
-			MaxHeaderBytes:  getEnvAsInt("SERVER_MAX_HEADER_BYTES", 1<<20), // 1 MB
-			EnableCORS:      getEnvAsBool("ENABLE_CORS", true),
-			AllowedOrigins:  getEnvAsSlice("ALLOWED_ORIGINS", []string{"*"}),
-			TrustedProxies:  getEnvAsSlice("TRUSTED_PROXIES", []string{}),
-		},
-		Database: DatabaseConfig{
-			Host:            getEnv("DB_HOST", "localhost"),
-			Port:            getEnvAsInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "postgres"),
-			Password:        getEnv("DB_PASSWORD", ""),
-			DBName:          getEnv("DB_NAME", "echo_backend"),
-			SSLMode:         getEnv("DB_SSLMODE", "disable"),
-			MaxOpenConns:    getEnvAsInt("DB_MAX_OPEN_CONNS", 25),
-			MaxIdleConns:    getEnvAsInt("DB_MAX_IDLE_CONNS", 5),
-			ConnMaxLifetime: getEnvAsDuration("DB_CONN_MAX_LIFETIME", "5m"),
-			ConnMaxIdleTime: getEnvAsDuration("DB_CONN_MAX_IDLE_TIME", "5m"),
-		},
-		Kafka: KafkaConfig{
-			Brokers:           getEnvAsSlice("KAFKA_BROKERS", []string{"localhost:9092"}),
-			Topic:             getEnv("KAFKA_TOPIC", "messages"),
-			NotificationTopic: getEnv("KAFKA_NOTIFICATION_TOPIC", "notifications"),
-			ConsumerGroup:     getEnv("KAFKA_CONSUMER_GROUP", "message-service"),
-			EnableCompression: getEnvAsBool("KAFKA_ENABLE_COMPRESSION", true),
-			CompressionType:   getEnv("KAFKA_COMPRESSION_TYPE", "snappy"),
-			RetryMax:          getEnvAsInt("KAFKA_RETRY_MAX", 3),
-			RequiredAcks:      getEnvAsInt("KAFKA_REQUIRED_ACKS", 1),
-			EnableIdempotence: getEnvAsBool("KAFKA_ENABLE_IDEMPOTENCE", true),
-		},
-		Cache: CacheConfig{
-			Enabled:      getEnvAsBool("CACHE_ENABLED", false),
-			Host:         getEnv("REDIS_HOST", "localhost"),
-			Port:         getEnvAsInt("REDIS_PORT", 6379),
-			Password:     getEnv("REDIS_PASSWORD", ""),
-			DB:           getEnvAsInt("REDIS_DB", 0),
-			PoolSize:     getEnvAsInt("REDIS_POOL_SIZE", 10),
-			MinIdleConns: getEnvAsInt("REDIS_MIN_IDLE_CONNS", 2),
-			MaxRetries:   getEnvAsInt("REDIS_MAX_RETRIES", 3),
-			DialTimeout:  getEnvAsDuration("REDIS_DIAL_TIMEOUT", "5s"),
-			ReadTimeout:  getEnvAsDuration("REDIS_READ_TIMEOUT", "3s"),
-			WriteTimeout: getEnvAsDuration("REDIS_WRITE_TIMEOUT", "3s"),
-			PoolTimeout:  getEnvAsDuration("REDIS_POOL_TIMEOUT", "4s"),
-		},
-		WebSocket: WebSocketConfig{
-			ReadBufferSize:   getEnvAsInt("WS_READ_BUFFER_SIZE", 1024),
-			WriteBufferSize:  getEnvAsInt("WS_WRITE_BUFFER_SIZE", 1024),
-			WriteWait:        getEnvAsDuration("WS_WRITE_WAIT", "10s"),
-			PongWait:         getEnvAsDuration("WS_PONG_WAIT", "60s"),
-			PingPeriod:       getEnvAsDuration("WS_PING_PERIOD", "54s"),
-			MaxMessageSize:   getEnvAsInt64("WS_MAX_MESSAGE_SIZE", 10*1024*1024), // 10 MB
-			ClientBufferSize: getEnvAsInt("WS_CLIENT_BUFFER_SIZE", 256),
-		},
-		Logging: LoggingConfig{
-			Level:      getEnv("LOG_LEVEL", "info"),
-			Format:     getEnv("LOG_FORMAT", "json"),
-			OutputPath: getEnv("LOG_OUTPUT_PATH", "stdout"),
-		},
-		Shutdown: ShutdownConfig{
-			WaitForConnections: getEnvAsBool("SHUTDOWN_WAIT_FOR_CONNECTIONS", false),
-			DrainTimeout:       getEnvAsDuration("SHUTDOWN_DRAIN_TIMEOUT", "5s"),
-		},
-	}
-
-	return config, nil
+type SamplingConfig struct {
+	Enabled    bool `yaml:"enabled" mapstructure:"enabled"`
+	Initial    int  `yaml:"initial" mapstructure:"initial"`
+	Thereafter int  `yaml:"thereafter" mapstructure:"thereafter"`
 }
 
-// GetDatabaseDSN returns the database connection string
-func (c *Config) GetDatabaseDSN() string {
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		c.Database.Host,
-		c.Database.Port,
-		c.Database.User,
-		c.Database.Password,
-		c.Database.DBName,
-		c.Database.SSLMode,
-	)
+type ShutdownConfig struct {
+	Timeout                   time.Duration `yaml:"timeout" mapstructure:"timeout"`
+	WaitForConnections        bool          `yaml:"wait_for_connections" mapstructure:"wait_for_connections"`
+	DrainTimeout              time.Duration `yaml:"drain_timeout" mapstructure:"drain_timeout"`
+	WebSocketCloseGracePeriod time.Duration `yaml:"websocket_close_grace_period" mapstructure:"websocket_close_grace_period"`
 }
 
-// Helper functions
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+type MonitoringConfig struct {
+	Enabled           bool    `yaml:"enabled" mapstructure:"enabled"`
+	MetricsEnabled    bool    `yaml:"metrics_enabled" mapstructure:"metrics_enabled"`
+	MetricsPath       string  `yaml:"metrics_path" mapstructure:"metrics_path"`
+	HealthPath        string  `yaml:"health_path" mapstructure:"health_path"`
+	TracingEnabled    bool    `yaml:"tracing_enabled" mapstructure:"tracing_enabled"`
+	TracingEndpoint   string  `yaml:"tracing_endpoint" mapstructure:"tracing_endpoint"`
+	TracingSampleRate float64 `yaml:"tracing_sample_rate" mapstructure:"tracing_sample_rate"`
 }
 
-func getEnvAsInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intVal, err := strconv.Atoi(value); err == nil {
-			return intVal
-		}
-	}
-	return defaultValue
+type SecurityConfig struct {
+	EnableAuth       bool            `yaml:"enable_auth" mapstructure:"enable_auth"`
+	JWTSecret        string          `yaml:"jwt_secret" mapstructure:"jwt_secret"`
+	JWTIssuer        string          `yaml:"jwt_issuer" mapstructure:"jwt_issuer"`
+	JWTAudience      string          `yaml:"jwt_audience" mapstructure:"jwt_audience"`
+	EnableEncryption bool            `yaml:"enable_encryption" mapstructure:"enable_encryption"`
+	EncryptionKey    string          `yaml:"encryption_key" mapstructure:"encryption_key"`
+	AllowedFileTypes []string        `yaml:"allowed_file_types" mapstructure:"allowed_file_types"`
+	MaxFileSize      int64           `yaml:"max_file_size" mapstructure:"max_file_size"`
+	RateLimit        RateLimitConfig `yaml:"rate_limit" mapstructure:"rate_limit"`
 }
 
-func getEnvAsInt64(key string, defaultValue int64) int64 {
-	if value := os.Getenv(key); value != "" {
-		if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return intVal
-		}
-	}
-	return defaultValue
+type RateLimitConfig struct {
+	Enabled           bool `yaml:"enabled" mapstructure:"enabled"`
+	RequestsPerMinute int  `yaml:"requests_per_minute" mapstructure:"requests_per_minute"`
+	Burst             int  `yaml:"burst" mapstructure:"burst"`
 }
 
-func getEnvAsBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if boolVal, err := strconv.ParseBool(value); err == nil {
-			return boolVal
-		}
-	}
-	return defaultValue
+type FeaturesConfig struct {
+	TypingIndicator  bool `yaml:"typing_indicator" mapstructure:"typing_indicator"`
+	ReadReceipts     bool `yaml:"read_receipts" mapstructure:"read_receipts"`
+	MessageReactions bool `yaml:"message_reactions" mapstructure:"message_reactions"`
+	MessageEditing   bool `yaml:"message_editing" mapstructure:"message_editing"`
+	MessageDeletion  bool `yaml:"message_deletion" mapstructure:"message_deletion"`
+	FileAttachments  bool `yaml:"file_attachments" mapstructure:"file_attachments"`
+	VoiceMessages    bool `yaml:"voice_messages" mapstructure:"voice_messages"`
+	VideoMessages    bool `yaml:"video_messages" mapstructure:"video_messages"`
+	MessageSearch    bool `yaml:"message_search" mapstructure:"message_search"`
+	MessageThreads   bool `yaml:"message_threads" mapstructure:"message_threads"`
 }
 
-func getEnvAsDuration(key string, defaultValue string) time.Duration {
-	value := getEnv(key, defaultValue)
-	duration, err := time.ParseDuration(value)
-	if err != nil {
-		duration, _ = time.ParseDuration(defaultValue)
-	}
-	return duration
-}
-
-func getEnvAsSlice(key string, defaultValue []string) []string {
-	if value := os.Getenv(key); value != "" {
-		// Simple comma-separated parsing
-		result := []string{}
-		for _, v := range splitString(value, ",") {
-			if trimmed := trimString(v); trimmed != "" {
-				result = append(result, trimmed)
-			}
-		}
-		if len(result) > 0 {
-			return result
-		}
-	}
-	return defaultValue
-}
-
-func splitString(s, sep string) []string {
-	var result []string
-	current := ""
-	for _, char := range s {
-		if string(char) == sep {
-			result = append(result, current)
-			current = ""
-		} else {
-			current += string(char)
-		}
-	}
-	if current != "" {
-		result = append(result, current)
-	}
-	return result
-}
-
-func trimString(s string) string {
-	// Simple trim implementation
-	start := 0
-	end := len(s)
-
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n') {
-		start++
-	}
-
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n') {
-		end--
-	}
-
-	return s[start:end]
+type LimitsConfig struct {
+	MaxMessageLength         int `yaml:"max_message_length" mapstructure:"max_message_length"`
+	MaxAttachmentsPerMessage int `yaml:"max_attachments_per_message" mapstructure:"max_attachments_per_message"`
+	MaxMessagesPerRequest    int `yaml:"max_messages_per_request" mapstructure:"max_messages_per_request"`
+	ConversationHistoryDays  int `yaml:"conversation_history_days" mapstructure:"conversation_history_days"`
+	UserConversationsLimit   int `yaml:"user_conversations_limit" mapstructure:"user_conversations_limit"`
 }

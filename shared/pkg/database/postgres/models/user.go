@@ -8,39 +8,39 @@ import (
 )
 
 type Profile struct {
-	ID                 string          `db:"id" json:"id" pk:"true"`
-	UserID             string          `db:"user_id" json:"user_id"`
-	Username           string          `db:"username" json:"username"`
-	DisplayName        *string         `db:"display_name" json:"display_name,omitempty"`
-	FirstName          *string         `db:"first_name" json:"first_name,omitempty"`
-	LastName           *string         `db:"last_name" json:"last_name,omitempty"`
-	MiddleName         *string         `db:"middle_name" json:"middle_name,omitempty"`
-	Bio                *string         `db:"bio" json:"bio,omitempty"`
-	BioLinks           json.RawMessage `db:"bio_links" json:"bio_links,omitempty"`
-	AvatarURL          *string         `db:"avatar_url" json:"avatar_url,omitempty"`
-	AvatarThumbnailURL *string         `db:"avatar_thumbnail_url" json:"avatar_thumbnail_url,omitempty"`
-	CoverImageURL      *string         `db:"cover_image_url" json:"cover_image_url,omitempty"`
-	DateOfBirth        *time.Time      `db:"date_of_birth" json:"date_of_birth,omitempty"`
-	Gender             *string         `db:"gender" json:"gender,omitempty"`
-	Pronouns           *string         `db:"pronouns" json:"pronouns,omitempty"`
-	LanguageCode       string          `db:"language_code" json:"language_code"`
-	Timezone           *string         `db:"timezone" json:"timezone,omitempty"`
-	CountryCode        *string         `db:"country_code" json:"country_code,omitempty"`
-	City               *string         `db:"city" json:"city,omitempty"`
-	PhoneVisible       bool            `db:"phone_visible" json:"phone_visible"`
-	EmailVisible       bool            `db:"email_visible" json:"email_visible"`
-	OnlineStatus       string          `db:"online_status" json:"online_status"`
-	LastSeenAt         *time.Time      `db:"last_seen_at" json:"last_seen_at,omitempty"`
-	ProfileVisibility  string          `db:"profile_visibility" json:"profile_visibility"`
-	SearchVisibility   bool            `db:"search_visibility" json:"search_visibility"`
-	IsVerified         bool            `db:"is_verified" json:"is_verified"`
-	WebsiteURL         *string         `db:"website_url" json:"website_url,omitempty"`
-	SocialLinks        json.RawMessage `db:"social_links" json:"social_links,omitempty"`
-	Interests          pq.StringArray  `db:"interests" json:"interests,omitempty"`
-	CreatedAt          time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt          time.Time       `db:"updated_at" json:"updated_at"`
-	DeactivatedAt      *time.Time      `db:"deactivated_at" json:"deactivated_at,omitempty"`
-	Metadata           json.RawMessage `db:"metadata" json:"metadata,omitempty"`
+	ID                 string            `db:"id" json:"id" pk:"true"`
+	UserID             string            `db:"user_id" json:"user_id"`
+	Username           string            `db:"username" json:"username"`
+	DisplayName        *string           `db:"display_name" json:"display_name,omitempty"`
+	FirstName          *string           `db:"first_name" json:"first_name,omitempty"`
+	LastName           *string           `db:"last_name" json:"last_name,omitempty"`
+	MiddleName         *string           `db:"middle_name" json:"middle_name,omitempty"`
+	Bio                *string           `db:"bio" json:"bio,omitempty"`
+	BioLinks           json.RawMessage   `db:"bio_links" json:"bio_links,omitempty"`
+	AvatarURL          *string           `db:"avatar_url" json:"avatar_url,omitempty"`
+	AvatarThumbnailURL *string           `db:"avatar_thumbnail_url" json:"avatar_thumbnail_url,omitempty"`
+	CoverImageURL      *string           `db:"cover_image_url" json:"cover_image_url,omitempty"`
+	DateOfBirth        *time.Time        `db:"date_of_birth" json:"date_of_birth,omitempty"`
+	Gender             *string           `db:"gender" json:"gender,omitempty"`
+	Pronouns           *string           `db:"pronouns" json:"pronouns,omitempty"`
+	LanguageCode       string            `db:"language_code" json:"language_code"`
+	Timezone           *string           `db:"timezone" json:"timezone,omitempty"`
+	CountryCode        *string           `db:"country_code" json:"country_code,omitempty"`
+	City               *string           `db:"city" json:"city,omitempty"`
+	PhoneVisible       bool              `db:"phone_visible" json:"phone_visible"`
+	EmailVisible       bool              `db:"email_visible" json:"email_visible"`
+	OnlineStatus       OnlineStatus      `db:"online_status" json:"online_status"`
+	LastSeenAt         *time.Time        `db:"last_seen_at" json:"last_seen_at,omitempty"`
+	ProfileVisibility  ProfileVisibility `db:"profile_visibility" json:"profile_visibility"`
+	SearchVisibility   bool              `db:"search_visibility" json:"search_visibility"`
+	IsVerified         bool              `db:"is_verified" json:"is_verified"`
+	WebsiteURL         *string           `db:"website_url" json:"website_url,omitempty"`
+	SocialLinks        json.RawMessage   `db:"social_links" json:"social_links,omitempty"`
+	Interests          pq.StringArray    `db:"interests" json:"interests,omitempty"`
+	CreatedAt          time.Time         `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time         `db:"updated_at" json:"updated_at"`
+	DeactivatedAt      *time.Time        `db:"deactivated_at" json:"deactivated_at,omitempty"`
+	Metadata           json.RawMessage   `db:"metadata" json:"metadata,omitempty"`
 }
 
 func (p *Profile) TableName() string {
@@ -52,28 +52,28 @@ func (p *Profile) PrimaryKey() interface{} {
 }
 
 type Contact struct {
-	ID                  string          `db:"id" json:"id" pk:"true"`
-	UserID              string          `db:"user_id" json:"user_id"`
-	ContactUserID       string          `db:"contact_user_id" json:"contact_user_id"`
-	RelationshipType    string          `db:"relationship_type" json:"relationship_type"`
-	Status              string          `db:"status" json:"status"`
-	Nickname            *string         `db:"nickname" json:"nickname,omitempty"`
-	Notes               *string         `db:"notes" json:"notes,omitempty"`
-	IsFavorite          bool            `db:"is_favorite" json:"is_favorite"`
-	IsPinned            bool            `db:"is_pinned" json:"is_pinned"`
-	IsArchived          bool            `db:"is_archived" json:"is_archived"`
-	IsMuted             bool            `db:"is_muted" json:"is_muted"`
-	MutedUntil          *time.Time      `db:"muted_until" json:"muted_until,omitempty"`
-	CustomNotifications json.RawMessage `db:"custom_notifications" json:"custom_notifications,omitempty"`
-	ContactSource       *string         `db:"contact_source" json:"contact_source,omitempty"`
-	ContactGroups       pq.StringArray  `db:"contact_groups" json:"contact_groups,omitempty"`
-	LastInteractionAt   *time.Time      `db:"last_interaction_at" json:"last_interaction_at,omitempty"`
-	InteractionCount    int             `db:"interaction_count" json:"interaction_count"`
-	CreatedAt           time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time       `db:"updated_at" json:"updated_at"`
-	AcceptedAt          *time.Time      `db:"accepted_at" json:"accepted_at,omitempty"`
-	BlockedAt           *time.Time      `db:"blocked_at" json:"blocked_at,omitempty"`
-	BlockReason         *string         `db:"block_reason" json:"block_reason,omitempty"`
+	ID                  string           `db:"id" json:"id" pk:"true"`
+	UserID              string           `db:"user_id" json:"user_id"`
+	ContactUserID       string           `db:"contact_user_id" json:"contact_user_id"`
+	RelationshipType    RelationshipType `db:"relationship_type" json:"relationship_type"`
+	Status              ContactStatus    `db:"status" json:"status"`
+	Nickname            *string          `db:"nickname" json:"nickname,omitempty"`
+	Notes               *string          `db:"notes" json:"notes,omitempty"`
+	IsFavorite          bool             `db:"is_favorite" json:"is_favorite"`
+	IsPinned            bool             `db:"is_pinned" json:"is_pinned"`
+	IsArchived          bool             `db:"is_archived" json:"is_archived"`
+	IsMuted             bool             `db:"is_muted" json:"is_muted"`
+	MutedUntil          *time.Time       `db:"muted_until" json:"muted_until,omitempty"`
+	CustomNotifications json.RawMessage  `db:"custom_notifications" json:"custom_notifications,omitempty"`
+	ContactSource       *string          `db:"contact_source" json:"contact_source,omitempty"`
+	ContactGroups       pq.StringArray   `db:"contact_groups" json:"contact_groups,omitempty"`
+	LastInteractionAt   *time.Time       `db:"last_interaction_at" json:"last_interaction_at,omitempty"`
+	InteractionCount    int              `db:"interaction_count" json:"interaction_count"`
+	CreatedAt           time.Time        `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time        `db:"updated_at" json:"updated_at"`
+	AcceptedAt          *time.Time       `db:"accepted_at" json:"accepted_at,omitempty"`
+	BlockedAt           *time.Time       `db:"blocked_at" json:"blocked_at,omitempty"`
+	BlockReason         *string          `db:"block_reason" json:"block_reason,omitempty"`
 }
 
 func (c *Contact) TableName() string {
@@ -106,54 +106,54 @@ func (c *ContactGroup) PrimaryKey() interface{} {
 }
 
 type UserSettings struct {
-	ID                        string     `db:"id" json:"id" pk:"true"`
-	UserID                    string     `db:"user_id" json:"user_id"`
-	ProfileVisibility         string     `db:"profile_visibility" json:"profile_visibility"`
-	LastSeenVisibility        string     `db:"last_seen_visibility" json:"last_seen_visibility"`
-	OnlineStatusVisibility    string     `db:"online_status_visibility" json:"online_status_visibility"`
-	ProfilePhotoVisibility    string     `db:"profile_photo_visibility" json:"profile_photo_visibility"`
-	AboutVisibility           string     `db:"about_visibility" json:"about_visibility"`
-	ReadReceiptsEnabled       bool       `db:"read_receipts_enabled" json:"read_receipts_enabled"`
-	TypingIndicatorsEnabled   bool       `db:"typing_indicators_enabled" json:"typing_indicators_enabled"`
-	PushNotificationsEnabled  bool       `db:"push_notifications_enabled" json:"push_notifications_enabled"`
-	EmailNotificationsEnabled bool       `db:"email_notifications_enabled" json:"email_notifications_enabled"`
-	SMSNotificationsEnabled   bool       `db:"sms_notifications_enabled" json:"sms_notifications_enabled"`
-	MessageNotifications      bool       `db:"message_notifications" json:"message_notifications"`
-	GroupMessageNotifications bool       `db:"group_message_notifications" json:"group_message_notifications"`
-	MentionNotifications      bool       `db:"mention_notifications" json:"mention_notifications"`
-	ReactionNotifications     bool       `db:"reaction_notifications" json:"reaction_notifications"`
-	CallNotifications         bool       `db:"call_notifications" json:"call_notifications"`
-	NotificationSound         string     `db:"notification_sound" json:"notification_sound"`
-	VibrationEnabled          bool       `db:"vibration_enabled" json:"vibration_enabled"`
-	NotificationPreview       string     `db:"notification_preview" json:"notification_preview"`
-	QuietHoursEnabled         bool       `db:"quiet_hours_enabled" json:"quiet_hours_enabled"`
-	QuietHoursStart           *time.Time `db:"quiet_hours_start" json:"quiet_hours_start,omitempty"`
-	QuietHoursEnd             *time.Time `db:"quiet_hours_end" json:"quiet_hours_end,omitempty"`
-	EnterKeyToSend            bool       `db:"enter_key_to_send" json:"enter_key_to_send"`
-	AutoDownloadPhotos        bool       `db:"auto_download_photos" json:"auto_download_photos"`
-	AutoDownloadVideos        bool       `db:"auto_download_videos" json:"auto_download_videos"`
-	AutoDownloadDocuments     bool       `db:"auto_download_documents" json:"auto_download_documents"`
-	AutoDownloadOnWifiOnly    bool       `db:"auto_download_on_wifi_only" json:"auto_download_on_wifi_only"`
-	CompressImages            bool       `db:"compress_images" json:"compress_images"`
-	SaveToGallery             bool       `db:"save_to_gallery" json:"save_to_gallery"`
-	ChatBackupEnabled         bool       `db:"chat_backup_enabled" json:"chat_backup_enabled"`
-	ChatBackupFrequency       string     `db:"chat_backup_frequency" json:"chat_backup_frequency"`
-	ScreenLockEnabled         bool       `db:"screen_lock_enabled" json:"screen_lock_enabled"`
-	ScreenLockTimeout         int        `db:"screen_lock_timeout" json:"screen_lock_timeout"`
-	FingerprintUnlock         bool       `db:"fingerprint_unlock" json:"fingerprint_unlock"`
-	FaceUnlock                bool       `db:"face_unlock" json:"face_unlock"`
-	ShowSecurityNotifications bool       `db:"show_security_notifications" json:"show_security_notifications"`
-	Theme                     string     `db:"theme" json:"theme"`
-	FontSize                  string     `db:"font_size" json:"font_size"`
-	ChatWallpaper             *string    `db:"chat_wallpaper" json:"chat_wallpaper,omitempty"`
-	UseSystemEmoji            bool       `db:"use_system_emoji" json:"use_system_emoji"`
-	LanguageCode              string     `db:"language_code" json:"language_code"`
-	Timezone                  *string    `db:"timezone" json:"timezone,omitempty"`
-	DateFormat                string     `db:"date_format" json:"date_format"`
-	TimeFormat                string     `db:"time_format" json:"time_format"`
-	LowDataMode               bool       `db:"low_data_mode" json:"low_data_mode"`
-	CreatedAt                 time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt                 time.Time  `db:"updated_at" json:"updated_at"`
+	ID                        string              `db:"id" json:"id" pk:"true"`
+	UserID                    string              `db:"user_id" json:"user_id"`
+	ProfileVisibility         ProfileVisibility   `db:"profile_visibility" json:"profile_visibility"`
+	LastSeenVisibility        ProfileVisibility   `db:"last_seen_visibility" json:"last_seen_visibility"`
+	OnlineStatusVisibility    ProfileVisibility   `db:"online_status_visibility" json:"online_status_visibility"`
+	ProfilePhotoVisibility    ProfileVisibility   `db:"profile_photo_visibility" json:"profile_photo_visibility"`
+	AboutVisibility           ProfileVisibility   `db:"about_visibility" json:"about_visibility"`
+	ReadReceiptsEnabled       bool                `db:"read_receipts_enabled" json:"read_receipts_enabled"`
+	TypingIndicatorsEnabled   bool                `db:"typing_indicators_enabled" json:"typing_indicators_enabled"`
+	PushNotificationsEnabled  bool                `db:"push_notifications_enabled" json:"push_notifications_enabled"`
+	EmailNotificationsEnabled bool                `db:"email_notifications_enabled" json:"email_notifications_enabled"`
+	SMSNotificationsEnabled   bool                `db:"sms_notifications_enabled" json:"sms_notifications_enabled"`
+	MessageNotifications      bool                `db:"message_notifications" json:"message_notifications"`
+	GroupMessageNotifications bool                `db:"group_message_notifications" json:"group_message_notifications"`
+	MentionNotifications      bool                `db:"mention_notifications" json:"mention_notifications"`
+	ReactionNotifications     bool                `db:"reaction_notifications" json:"reaction_notifications"`
+	CallNotifications         bool                `db:"call_notifications" json:"call_notifications"`
+	NotificationSound         NotificationSound   `db:"notification_sound" json:"notification_sound"`
+	VibrationEnabled          bool                `db:"vibration_enabled" json:"vibration_enabled"`
+	NotificationPreview       NotificationPreview `db:"notification_preview" json:"notification_preview"`
+	QuietHoursEnabled         bool                `db:"quiet_hours_enabled" json:"quiet_hours_enabled"`
+	QuietHoursStart           *time.Time          `db:"quiet_hours_start" json:"quiet_hours_start,omitempty"`
+	QuietHoursEnd             *time.Time          `db:"quiet_hours_end" json:"quiet_hours_end,omitempty"`
+	EnterKeyToSend            bool                `db:"enter_key_to_send" json:"enter_key_to_send"`
+	AutoDownloadPhotos        bool                `db:"auto_download_photos" json:"auto_download_photos"`
+	AutoDownloadVideos        bool                `db:"auto_download_videos" json:"auto_download_videos"`
+	AutoDownloadDocuments     bool                `db:"auto_download_documents" json:"auto_download_documents"`
+	AutoDownloadOnWifiOnly    bool                `db:"auto_download_on_wifi_only" json:"auto_download_on_wifi_only"`
+	CompressImages            bool                `db:"compress_images" json:"compress_images"`
+	SaveToGallery             bool                `db:"save_to_gallery" json:"save_to_gallery"`
+	ChatBackupEnabled         bool                `db:"chat_backup_enabled" json:"chat_backup_enabled"`
+	ChatBackupFrequency       BackupFrequency     `db:"chat_backup_frequency" json:"chat_backup_frequency"`
+	ScreenLockEnabled         bool                `db:"screen_lock_enabled" json:"screen_lock_enabled"`
+	ScreenLockTimeout         int                 `db:"screen_lock_timeout" json:"screen_lock_timeout"`
+	FingerprintUnlock         bool                `db:"fingerprint_unlock" json:"fingerprint_unlock"`
+	FaceUnlock                bool                `db:"face_unlock" json:"face_unlock"`
+	ShowSecurityNotifications bool                `db:"show_security_notifications" json:"show_security_notifications"`
+	Theme                     Theme               `db:"theme" json:"theme"`
+	FontSize                  FontSize            `db:"font_size" json:"font_size"`
+	ChatWallpaper             *string             `db:"chat_wallpaper" json:"chat_wallpaper,omitempty"`
+	UseSystemEmoji            bool                `db:"use_system_emoji" json:"use_system_emoji"`
+	LanguageCode              string              `db:"language_code" json:"language_code"`
+	Timezone                  *string             `db:"timezone" json:"timezone,omitempty"`
+	DateFormat                DateFormat          `db:"date_format" json:"date_format"`
+	TimeFormat                TimeFormat          `db:"time_format" json:"time_format"`
+	LowDataMode               bool                `db:"low_data_mode" json:"low_data_mode"`
+	CreatedAt                 time.Time           `db:"created_at" json:"created_at"`
+	UpdatedAt                 time.Time           `db:"updated_at" json:"updated_at"`
 }
 
 func (u *UserSettings) TableName() string {
@@ -171,7 +171,7 @@ type BlockedUser struct {
 	BlockReason   *string         `db:"block_reason" json:"block_reason,omitempty"`
 	BlockedAt     time.Time       `db:"blocked_at" json:"blocked_at"`
 	UnblockedAt   *time.Time      `db:"unblocked_at" json:"unblocked_at,omitempty"`
-	BlockType     string          `db:"block_type" json:"block_type"`
+	BlockType     BlockType       `db:"block_type" json:"block_type"`
 	Metadata      json.RawMessage `db:"metadata" json:"metadata,omitempty"`
 }
 
@@ -206,18 +206,18 @@ func (p *PrivacyOverride) PrimaryKey() interface{} {
 }
 
 type StatusHistory struct {
-	ID              string     `db:"id" json:"id" pk:"true"`
-	UserID          string     `db:"user_id" json:"user_id"`
-	StatusText      *string    `db:"status_text" json:"status_text,omitempty"`
-	StatusEmoji     *string    `db:"status_emoji" json:"status_emoji,omitempty"`
-	MediaURL        *string    `db:"media_url" json:"media_url,omitempty"`
-	MediaType       *string    `db:"media_type" json:"media_type,omitempty"`
-	BackgroundColor *string    `db:"background_color" json:"background_color,omitempty"`
-	ViewsCount      int        `db:"views_count" json:"views_count"`
-	Privacy         string     `db:"privacy" json:"privacy"`
-	ExpiresAt       *time.Time `db:"expires_at" json:"expires_at,omitempty"`
-	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
-	DeletedAt       *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
+	ID              string        `db:"id" json:"id" pk:"true"`
+	UserID          string        `db:"user_id" json:"user_id"`
+	StatusText      *string       `db:"status_text" json:"status_text,omitempty"`
+	StatusEmoji     *string       `db:"status_emoji" json:"status_emoji,omitempty"`
+	MediaURL        *string       `db:"media_url" json:"media_url,omitempty"`
+	MediaType       *string       `db:"media_type" json:"media_type,omitempty"`
+	BackgroundColor *string       `db:"background_color" json:"background_color,omitempty"`
+	ViewsCount      int           `db:"views_count" json:"views_count"`
+	Privacy         StatusPrivacy `db:"privacy" json:"privacy"`
+	ExpiresAt       *time.Time    `db:"expires_at" json:"expires_at,omitempty"`
+	CreatedAt       time.Time     `db:"created_at" json:"created_at"`
+	DeletedAt       *time.Time    `db:"deleted_at" json:"deleted_at,omitempty"`
 }
 
 func (s *StatusHistory) TableName() string {
@@ -339,20 +339,20 @@ func (a *Achievement) PrimaryKey() interface{} {
 }
 
 type UserReport struct {
-	ID             string         `db:"id" json:"id" pk:"true"`
-	ReporterUserID string         `db:"reporter_user_id" json:"reporter_user_id"`
-	ReportedUserID string         `db:"reported_user_id" json:"reported_user_id"`
-	ReportType     string         `db:"report_type" json:"report_type"`
-	ReportCategory *string        `db:"report_category" json:"report_category,omitempty"`
-	Description    *string        `db:"description" json:"description,omitempty"`
-	EvidenceURLs   pq.StringArray `db:"evidence_urls" json:"evidence_urls,omitempty"`
-	Status         string         `db:"status" json:"status"`
-	Priority       string         `db:"priority" json:"priority"`
-	AssignedTo     *string        `db:"assigned_to" json:"assigned_to,omitempty"`
-	Resolution     *string        `db:"resolution" json:"resolution,omitempty"`
-	ResolvedAt     *time.Time     `db:"resolved_at" json:"resolved_at,omitempty"`
-	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
+	ID             string             `db:"id" json:"id" pk:"true"`
+	ReporterUserID string             `db:"reporter_user_id" json:"reporter_user_id"`
+	ReportedUserID string             `db:"reported_user_id" json:"reported_user_id"`
+	ReportType     string             `db:"report_type" json:"report_type"`
+	ReportCategory *string            `db:"report_category" json:"report_category,omitempty"`
+	Description    *string            `db:"description" json:"description,omitempty"`
+	EvidenceURLs   pq.StringArray     `db:"evidence_urls" json:"evidence_urls,omitempty"`
+	Status         UserReportStatus   `db:"status" json:"status"`
+	Priority       UserReportPriority `db:"priority" json:"priority"`
+	AssignedTo     *string            `db:"assigned_to" json:"assigned_to,omitempty"`
+	Resolution     *string            `db:"resolution" json:"resolution,omitempty"`
+	ResolvedAt     *time.Time         `db:"resolved_at" json:"resolved_at,omitempty"`
+	CreatedAt      time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time          `db:"updated_at" json:"updated_at"`
 }
 
 func (u *UserReport) TableName() string {

@@ -200,7 +200,7 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 		logger.String("user_id", user.ID),
-		logger.String("account_status", user.AccountStatus),
+		logger.Any("account_status", user.AccountStatus),
 	)
 
 	return &user, nil

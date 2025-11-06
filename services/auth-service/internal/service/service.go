@@ -4,9 +4,12 @@ import (
 	"auth-service/internal/config"
 	repository "auth-service/internal/repo"
 	"shared/pkg/cache"
+	"shared/pkg/circuitbreaker"
 	"shared/pkg/logger"
+	"shared/pkg/retry"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
+	"time"
 )
 
 type AuthService struct {
@@ -16,6 +19,8 @@ type AuthService struct {
 	cache          cache.Cache
 	cfg            *config.AuthConfig
 	log            logger.Logger
+	dbCircuit      *circuitbreaker.CircuitBreaker
+	retryer        *retry.Retryer
 	*repository.LoginHistoryRepo
 	*repository.SecurityEventRepo
 }
@@ -96,6 +101,38 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 		logger.String("service", "auth-service"),
 	)
 
+	dbCircuit := circuitbreaker.New("auth-db", circuitbreaker.Config{
+		MaxRequests: 2,
+		Interval:    10 * time.Second,
+		Timeout:     30 * time.Second,
+		ReadyToTrip: func(counts circuitbreaker.Counts) bool {
+			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+			return counts.Requests >= 3 && failureRatio >= 0.6
+		},
+		OnStateChange: func(name string, from, to circuitbreaker.State) {
+			b.log.Info("Circuit breaker state changed",
+				logger.String("circuit", name),
+				logger.String("from", from.String()),
+				logger.String("to", to.String()),
+			)
+		},
+	})
+
+	retryer := retry.New(retry.Config{
+		MaxAttempts:  3,
+		InitialDelay: 100 * time.Millisecond,
+		MaxDelay:     2 * time.Second,
+		Strategy:     retry.StrategyExponential,
+		Multiplier:   2.0,
+		OnRetry: func(attempt int, delay time.Duration, err error) {
+			b.log.Warn("Retrying operation",
+				logger.Int("attempt", attempt),
+				logger.Duration("delay", delay),
+				logger.Error(err),
+			)
+		},
+	})
+
 	return &AuthService{
 		repo:              b.repo,
 		LoginHistoryRepo:  b.loginHistoryRepo,
@@ -105,6 +142,8 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 		cache:             b.cache,
 		cfg:               b.cfg,
 		log:               b.log,
+		dbCircuit:         dbCircuit,
+		retryer:           retryer,
 	}
 }
 

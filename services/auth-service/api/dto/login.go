@@ -2,6 +2,7 @@ package dto
 
 import (
 	"auth-service/internal/model"
+	dbModel "shared/pkg/database/postgres/models"
 	"shared/server/request"
 
 	"github.com/go-playground/validator/v10"
@@ -53,17 +54,17 @@ type LoginResponse struct {
 	Session Session `json:"session"`
 }
 
-type 	User struct {
-	ID               string `json:"id"`
-	Email            string `json:"email"`
-	PhoneNumber      string `json:"phone_number,omitempty"`
-	PhoneCountryCode string `json:"phone_country_code,omitempty"`
-	EmailVerified    bool   `json:"email_verified"`
-	PhoneVerified    bool   `json:"phone_verified,omitempty"`
-	AccountStatus    string `json:"account_status"`
-	TFAEnabled       bool   `json:"tfa_enabled"`
-	CreatedAt        int64  `json:"created_at"`
-	UpdatedAt        int64  `json:"updated_at"`
+type User struct {
+	ID               string                `json:"id"`
+	Email            string                `json:"email"`
+	PhoneNumber      string                `json:"phone_number,omitempty"`
+	PhoneCountryCode string                `json:"phone_country_code,omitempty"`
+	EmailVerified    bool                  `json:"email_verified"`
+	PhoneVerified    bool                  `json:"phone_verified,omitempty"`
+	AccountStatus    dbModel.AccountStatus `json:"account_status"`
+	TFAEnabled       bool                  `json:"tfa_enabled"`
+	CreatedAt        int64                 `json:"created_at"`
+	UpdatedAt        int64                 `json:"updated_at"`
 }
 
 type Session struct {

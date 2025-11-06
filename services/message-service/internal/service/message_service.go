@@ -10,61 +10,95 @@ import (
 	"echo-backend/services/message-service/internal/repo"
 	"echo-backend/services/message-service/internal/websocket"
 
-	"github.com/google/uuid"
+	"shared/pkg/circuitbreaker"
 	"shared/pkg/logger"
-
 	"shared/pkg/messaging"
+	"shared/pkg/retry"
+
+	"github.com/google/uuid"
 )
 
-// MessageService handles all message-related business logic
-// Production-ready implementation similar to WhatsApp/Telegram
 type MessageService interface {
-	// Core message operations
 	SendMessage(ctx context.Context, req *model.SendMessageRequest) (*model.Message, error)
 	GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) (*model.MessagesResponse, error)
 	GetMessage(ctx context.Context, messageID uuid.UUID) (*model.Message, error)
 	EditMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, newContent string) error
 	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
-
-	// Delivery tracking
 	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error
 	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) error
 	HandleReadReceipt(ctx context.Context, userID, messageID uuid.UUID) error
-
-	// Typing indicators
 	SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) error
-
-	// Bulk operations
 	MarkConversationAsRead(ctx context.Context, conversationID, userID uuid.UUID) error
 }
 
 type messageService struct {
-	repo   repo.MessageRepository
-	hub    *websocket.Hub
-	kafka  messaging.Producer
-	logger logger.Logger
+	repo         repo.MessageRepository
+	hub          *websocket.Hub
+	kafka        messaging.Producer
+	logger       logger.Logger
+	dbCircuit    *circuitbreaker.CircuitBreaker
+	kafkaCircuit *circuitbreaker.CircuitBreaker
+	retryer      *retry.Retryer
 }
 
-// NewMessageService creates a new message service instance
 func NewMessageService(
 	repo repo.MessageRepository,
 	hub *websocket.Hub,
 	kafka messaging.Producer,
-	logger logger.Logger,
+	log logger.Logger,
 ) MessageService {
+	dbCircuit := circuitbreaker.New("message-db", circuitbreaker.Config{
+		MaxRequests: 3,
+		Interval:    10 * time.Second,
+		Timeout:     30 * time.Second,
+		ReadyToTrip: func(counts circuitbreaker.Counts) bool {
+			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+			return counts.Requests >= 10 && failureRatio >= 0.6
+		},
+		OnStateChange: func(name string, from, to circuitbreaker.State) {
+			log.Warn("Circuit breaker state changed",
+				logger.String("name", name),
+				logger.String("from", from.String()),
+				logger.String("to", to.String()),
+			)
+		},
+	})
+
+	kafkaCircuit := circuitbreaker.New("message-kafka", circuitbreaker.Config{
+		MaxRequests: 2,
+		Interval:    5 * time.Second,
+		Timeout:     15 * time.Second,
+		ReadyToTrip: func(counts circuitbreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 5
+		},
+	})
+
+	retryConfig := retry.DefaultConfig()
+	retryConfig.MaxAttempts = 3
+	retryConfig.InitialDelay = 100 * time.Millisecond
+	retryConfig.MaxDelay = 2 * time.Second
+
 	return &messageService{
-		repo:   repo,
-		hub:    hub,
-		kafka:  kafka,
-		logger: logger,
+		repo:         repo,
+		hub:          hub,
+		kafka:        kafka,
+		logger:       log,
+		dbCircuit:    dbCircuit,
+		kafkaCircuit: kafkaCircuit,
+		retryer:      retry.New(retryConfig),
 	}
 }
 
 // SendMessage handles the complete flow of sending a message
 // This is the core function - production-ready with all checks and broadcasts
 func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessageRequest) (*model.Message, error) {
-	// Step 1: Validate sender is a participant with send permissions
-	canSend, err := s.repo.ValidateParticipant(ctx, req.ConversationID, req.SenderUserID)
+	var canSend bool
+	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+		var err error
+		canSend, err = s.repo.ValidateParticipant(ctx, req.ConversationID, req.SenderUserID)
+		return err
+	})
+
 	if err != nil {
 		s.logger.Error("Failed to validate participant",
 			logger.String("conversation_id", req.ConversationID.String()),
@@ -82,7 +116,6 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 		return nil, fmt.Errorf("user not authorized to send messages in this conversation")
 	}
 
-	// Step 2: Create message object
 	now := time.Now()
 	message := &model.Message{
 		ID:              uuid.New(),
@@ -98,7 +131,6 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 		UpdatedAt:       now,
 	}
 
-	// Marshal mentions and metadata
 	if len(req.Mentions) > 0 {
 		mentionsJSON, err := json.Marshal(req.Mentions)
 		if err != nil {
@@ -115,8 +147,13 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 		message.Metadata = metadataJSON
 	}
 
-	// Step 3: Save message to database
-	if err := s.repo.CreateMessage(ctx, message); err != nil {
+	err = s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
+		return s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+			return s.repo.CreateMessage(ctx, message)
+		})
+	})
+
+	if err != nil {
 		s.logger.Error("Failed to create message",
 			logger.String("message_id", message.ID.String()),
 			logger.Error(err),
@@ -130,29 +167,28 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 		logger.String("sender_id", message.SenderUserID.String()),
 	)
 
-	// Step 4: Get all conversation participants
-	participantIDs, err := s.repo.GetParticipantUserIDs(ctx, req.ConversationID)
+	var participantIDs []uuid.UUID
+	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
+		var err error
+		participantIDs, err = s.repo.GetParticipantUserIDs(ctx, req.ConversationID)
+		return err
+	})
+
 	if err != nil {
 		s.logger.Error("Failed to get participants",
 			logger.String("conversation_id", req.ConversationID.String()),
 			logger.Error(err),
 		)
-		// Don't fail the send, continue with broadcast attempt
 		participantIDs = []uuid.UUID{}
 	}
 
-	// Step 5: Update conversation metadata
 	go func() {
 		bgCtx := context.Background()
-		if err := s.repo.UpdateConversationLastMessage(bgCtx, req.ConversationID, message.ID); err != nil {
-			s.logger.Warn("Failed to update conversation metadata",
-				logger.String("conversation_id", req.ConversationID.String()),
-				logger.Error(err),
-			)
-		}
+		s.dbCircuit.ExecuteWithContext(bgCtx, func(ctx context.Context) error {
+			return s.repo.UpdateConversationLastMessage(ctx, req.ConversationID, message.ID)
+		})
 	}()
 
-	// Step 6: Create delivery status records for all recipients
 	recipientIDs := make([]uuid.UUID, 0)
 	for _, participantID := range participantIDs {
 		if participantID != req.SenderUserID {
@@ -163,12 +199,9 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 	if len(recipientIDs) > 0 {
 		go func() {
 			bgCtx := context.Background()
-			if err := s.repo.CreateDeliveryStatus(bgCtx, message.ID, recipientIDs); err != nil {
-				s.logger.Error("Failed to create delivery status",
-					logger.String("message_id", message.ID.String()),
-					logger.Error(err),
-				)
-			}
+			s.dbCircuit.ExecuteWithContext(bgCtx, func(ctx context.Context) error {
+				return s.repo.CreateDeliveryStatus(ctx, message.ID, recipientIDs)
+			})
 		}()
 	}
 

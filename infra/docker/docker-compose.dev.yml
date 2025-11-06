@@ -27,30 +27,71 @@ volumes:
   kafka_data:
     driver: local
 
-  # Service build cache volumes
+  # Centralized Go cache (shared across all services)
+  go-mod-cache:
+    driver: local
+  go-build-cache:
+    driver: local
+
+  # Service-specific build cache volumes (for hot reload artifacts)
   api-gateway-build-cache:
     driver: local
   auth-service-build-cache:
     driver: local
-  location-service-build-cache:
-    driver: local
   message-service-build-cache:
     driver: local
-
-  # Go module cache volume
-  auth-service-go-cache:
+  user-service-build-cache:
     driver: local
-  api-gateway-go-cache:
-    driver: local
-  message-service-go-cache:
-    driver: local
-  location-service-go-cache:
+  location-service-build-cache:
     driver: local
 
 # =============================================================================
 # SERVICES
 # =============================================================================
 services:
+
+  # ===========================================================================
+  # CACHE WARMER (Run once to populate Go cache)
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Go Cache Warmer
+  # ---------------------------------------------------------------------------
+  go-cache-warmer:
+    image: golang:1.25-alpine
+    container_name: echo-go-cache-warmer
+    profiles: [ "cache-warmer" ]
+    volumes:
+      - ${PWD}:/workspace
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    networks:
+      - echo-network
+    working_dir: /workspace
+    command: >
+      sh -c "
+        echo '========================================';
+        echo 'Warming Up Go Module Cache';
+        echo '========================================';
+        echo '';
+        cd /workspace/shared && echo '[1/6] Processing shared...' && go mod download;
+        cd /workspace/services/api-gateway && echo '[2/6] Processing api-gateway...' && go mod download;
+        cd /workspace/services/auth-service && echo '[3/6] Processing auth-service...' && go mod download;
+        cd /workspace/services/message-service && echo '[4/6] Processing message-service...' && go mod download;
+        cd /workspace/services/location-service && echo '[5/6] Processing location-service...' && go mod download;
+        cd /workspace/services/user-service && echo '[6/6] Processing user-service...' && go mod download 2>/dev/null || echo 'user-service not found, skipping...';
+        echo '';
+        echo '========================================';
+        echo '✓ Go cache warmup complete!';
+        echo '========================================';
+        echo '';
+        echo 'Cache volumes populated:';
+        echo '  - go-mod-cache';
+        echo '  - go-build-cache';
+        echo '';
+        echo 'All services will now build faster!';
+      "
+    restart: "no"
 
   # ===========================================================================
   # INFRASTRUCTURE LAYER
@@ -204,6 +245,9 @@ services:
     image: api-gateway:latest
     ports:
       - "8080:8080"
+    env_file:
+      - ${PWD}/.env
+      - ${PWD}/services/api-gateway/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -222,8 +266,10 @@ services:
       # Source code (hot reload)
       - ${PWD}/services/api-gateway:/app/services/api-gateway
       - ${PWD}/shared:/app/shared
-      # Build cache
-      - api-gateway-go-cache:/go/pkg/mod
+      # Centralized Go cache
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service build cache
       - api-gateway-build-cache:/app/services/api-gateway/tmp
     networks:
       - echo-network
@@ -242,6 +288,9 @@ services:
     image: auth-service:latest
     expose:
       - "8081"
+    env_file:
+      - ${PWD}/.env
+      - ${PWD}/services/auth-service/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -269,8 +318,10 @@ services:
       # Source code (hot reload)
       - ${PWD}/services/auth-service:/app/services/auth-service
       - ${PWD}/shared:/app/shared
-      # Build cache
-      - auth-service-go-cache:/go/pkg/mod
+      # Centralized Go cache
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service build cache
       - auth-service-build-cache:/app/services/auth-service/tmp
     networks:
       - echo-network
@@ -286,6 +337,53 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
+  # User Service
+  # ---------------------------------------------------------------------------
+  user-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/user-service/Dockerfile.dev
+    container_name: echo-user-service
+    image: user-service:latest
+    expose:
+      - "8082"
+    env_file:
+      - ${PWD}/.env
+      - ${PWD}/services/user-service/.env
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8082
+      APP_ENV: development
+      CONFIG_PATH: /app/services/user-service/configs/config.yaml
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSLMODE: disable
+    volumes:
+      # Source code (hot reload)
+      - ${PWD}/services/user-service:/app/services/user-service
+      - ${PWD}/shared:/app/shared
+      # Centralized Go cache
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service build cache
+      - user-service-build-cache:/app/services/user-service/tmp
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Message Service
   # ---------------------------------------------------------------------------
   message-service:
@@ -294,8 +392,11 @@ services:
       dockerfile: services/message-service/Dockerfile.dev
     container_name: echo-message-service
     image: message-service:latest
-    ports:
-      - "8083:8083"
+    expose:
+      - "8083"
+    env_file:
+      - ${PWD}/.env
+      - ${PWD}/services/message-service/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -327,8 +428,10 @@ services:
       # Source code (hot reload)
       - ${PWD}/services/message-service:/app/services/message-service
       - ${PWD}/shared:/app/shared
-      # Build cache
-      - message-service-go-cache:/go/pkg/mod
+      # Centralized Go cache
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service build cache
       - message-service-build-cache:/app/services/message-service/tmp
     networks:
       - echo-network
@@ -360,6 +463,9 @@ services:
     image: location-service:latest
     ports:
       - "8090:8090"
+    env_file:
+      - ${PWD}/.env
+      - ${PWD}/services/location-service/.env
     environment:
       # Server Configuration
       HOST: 0.0.0.0
@@ -371,8 +477,10 @@ services:
       - ${PWD}/shared:/app/shared
       # Data directory
       - ${PWD}/services/location-service/data:/app/data:ro
-      # Build cache
-      - location-service-go-cache:/go/pkg/mod
+      # Centralized Go cache
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service build cache
       - location-service-build-cache:/app/services/location-service/tmp
     networks:
       - echo-network
