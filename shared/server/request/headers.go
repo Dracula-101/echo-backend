@@ -91,3 +91,22 @@ func IsWebSocket(r *http.Request) bool {
 	return strings.ToLower(r.Header.Get(headers.Connection)) == "upgrade" &&
 		strings.ToLower(r.Header.Get(headers.Upgrade)) == "websocket"
 }
+
+func GetBearerToken(r *http.Request) string {
+	authHeader := r.Header.Get(headers.Authorization)
+	if authHeader == "" {
+		return ""
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+
+	return parts[1]
+}
+
+func GetUserIDFromHeader(r *http.Request) (string, bool) {
+	userID, ok := r.Context().Value(sContext.UserIDKey).(string)
+	return userID, ok
+}

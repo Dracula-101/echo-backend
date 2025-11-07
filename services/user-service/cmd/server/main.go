@@ -19,6 +19,7 @@ import (
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
 
+	"shared/server/common/token"
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
 	"shared/server/response"
@@ -115,6 +116,27 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
+func createTokenService(cfg *config.Config, log logger.Logger) *token.JWTTokenService {
+	keyset, err := token.NewStaticKeySet([]byte(cfg.JWT.SecretKey))
+	if err != nil {
+		log.Fatal("Failed to create JWT keyset", logger.Error(err))
+		return nil
+	}
+
+	tokenService, err := token.NewJWTTokenService(token.Config{
+		KeySet:          keyset,
+		Issuer:          cfg.JWT.Issuer,
+		Audience:        []string{cfg.JWT.Audience},
+		AccessTokenTTL:  cfg.JWT.AccessTokenTTL,
+		RefreshTokenTTL: cfg.JWT.RefreshTokenTTL,
+	})
+	if err != nil {
+		log.Fatal("Failed to create JWT token service", logger.Error(err))
+		return nil
+	}
+	return tokenService
+}
+
 func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
 	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
 
@@ -134,10 +156,9 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 
 func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering user routes")
-	builder = builder.WithRoutesGroup("/users", func(rg *router.RouteGroup) {
-		rg.Get("/search", h.SearchUsers)
-		rg.Get("/:user_id", h.GetProfile)
-		rg.Put("/:user_id", h.UpdateProfile)
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Post("/profile", h.CreateProfile)
+		r.Get("/profile/{user_id}", h.GetProfile)
 	})
 	log.Debug("User routes registered successfully")
 	return builder
@@ -257,6 +278,8 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
+	tokenService := createTokenService(cfg, log)
+
 	userRepo := repository.NewUserRepository(dbClient, log)
 	userService := service.NewUserServiceBuilder().
 		WithRepo(userRepo).
@@ -264,7 +287,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	userHandler := handler.NewUserHandler(userService, log)
+	userHandler := handler.NewUserHandler(userService, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

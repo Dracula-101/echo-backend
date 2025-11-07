@@ -10,6 +10,7 @@
 .PHONY: user-up user-down user-logs user-restart user-build user-rerun user-rebuild
 .PHONY: message-up message-down message-logs message-restart message-build message-rerun message-rebuild
 .PHONY: location-up location-down location-logs location-restart location-build location-rerun location-rebuild
+.PHONY: media-up media-down media-logs media-restart media-build media-rerun media-rebuild
 .PHONY: kafka-up kafka-down kafka-logs kafka-restart kafka-topics kafka-create-topics
 .PHONY: db-init db-seed db-connect db-reset db-migrate db-migrate-down db-migrate-status
 .PHONY: redis-connect redis-flush test setup test-auth verify-security dev generate-routes update-gateway-routes
@@ -120,6 +121,15 @@ help:
 	@echo "  make message-rebuild  Rebuild Message Service (no cache)"
 	@echo "  make message-logs     View Message Service logs"
 	@echo ""
+	@echo "$(BOLD)Media Service:$(NC)"
+	@echo "  make media-up         Start Media Service"
+	@echo "  make media-down       Stop Media Service"
+	@echo "  make media-rerun      Stop and restart Media Service"
+	@echo "  make media-restart    Restart Media Service"
+	@echo "  make media-build      Rebuild Media Service"
+	@echo "  make media-rebuild    Rebuild Media Service (no cache)"
+	@echo "  make media-logs       View Media Service logs"
+	@echo ""
 	@echo "$(BOLD)Kafka:$(NC)"
 	@echo "  make kafka-up         Start Kafka and Zookeeper"
 	@echo "  make kafka-down       Stop Kafka and Zookeeper"
@@ -177,6 +187,7 @@ up:
 	@echo "  Auth Service     	$(GRAY)Internal only (via gateway)$(NC)"
 	@echo "  User Service     	$(GRAY)Internal only (via gateway)$(NC)"
 	@echo "  Messages Service 	$(GRAY)Internal only (via gateway)$(NC)"
+	@echo "  Media Service    	$(GRAY)Internal only (via gateway)$(NC)"
 	@echo "  Location Service 	$(CYAN)http://localhost:8090$(NC)"
 	@echo "  WebSocket        	$(CYAN)ws://localhost:8083/ws$(NC)"
 	@echo ""
@@ -251,7 +262,7 @@ logs:
 	@echo "$(BOLD)  Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f
+	@docker-compose -f $(COMPOSE_FILE) logs -f --no-log-prefix
 
 ## ps: Show running containers
 ps:
@@ -289,6 +300,11 @@ status:
 	@docker inspect -f '{{.State.Running}}' echo-message-service 2>/dev/null | grep -q true && \
 		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
 	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-message-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo ""
+	@echo "$(BOLD)Media Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-media-service 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-media-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
 	@echo "$(BOLD)Location Service$(NC)"
 	@docker inspect -f '{{.State.Running}}' location-service 2>/dev/null | grep -q true && \
@@ -416,7 +432,7 @@ gateway-logs:
 	@echo "$(BOLD)  API Gateway Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f api-gateway
+	@docker-compose -f $(COMPOSE_FILE) logs -f api-gateway --no-log-prefix
 
 # =============================================================================
 # AUTH SERVICE
@@ -494,7 +510,7 @@ auth-logs:
 	@echo "$(BOLD)  Auth Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f auth-service
+	@docker-compose -f $(COMPOSE_FILE) logs -f auth-service --no-log-prefix
 
 # =============================================================================
 # USER SERVICE
@@ -572,7 +588,7 @@ user-logs:
 	@echo "$(BOLD)  User Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f user-service
+	@docker-compose -f $(COMPOSE_FILE) logs -f user-service --no-log-prefix
 
 # =============================================================================
 # MESSAGE SERVICE
@@ -652,7 +668,7 @@ message-logs:
 	@echo "$(BOLD)  Message Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f message-service
+	@docker-compose -f $(COMPOSE_FILE) logs -f message-service --no-log-prefix
 
 # =============================================================================
 # LOCATION SERVICE
@@ -730,7 +746,85 @@ location-logs:
 	@echo "$(BOLD)  Location Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@docker-compose -f $(COMPOSE_FILE) logs -f location-service
+	@docker-compose -f $(COMPOSE_FILE) logs -f location-service --no-log-prefix
+
+# =============================================================================
+# MEDIA SERVICE
+# =============================================================================
+
+## media-up: Start Media Service
+media-up:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Media Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d media-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Media Service started$(NC)"
+	@echo ""
+
+## media-down: Stop Media Service
+media-down:
+	@echo ""
+	@echo "$(YELLOW)Stopping Media Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop media-service
+	@echo "$(GREEN)$(CHECK) Media Service stopped$(NC)"
+	@echo ""
+
+## media-rerun: Stop and restart Media Service
+media-rerun:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning Media Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop media-service
+	@docker-compose -f $(COMPOSE_FILE) up -d media-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Media Service rerun complete$(NC)"
+	@echo ""
+
+## media-restart: Restart Media Service
+media-restart:
+	@echo ""
+	@echo "$(YELLOW)Restarting Media Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart media-service
+	@echo "$(GREEN)$(CHECK) Media Service restarted$(NC)"
+	@echo ""
+
+## media-build: Rebuild Media Service
+media-build:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Media Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build media-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
+
+## media-rebuild: Rebuild Media Service (no cache)
+media-rebuild:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding Media Service $(DIM)(no cache)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache media-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
+
+## media-logs: View Media Service logs
+media-logs:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Media Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f media-service --no-log-prefix
 
 # =============================================================================
 # KAFKA & ZOOKEEPER
@@ -958,7 +1052,7 @@ setup:
 	@echo ""
 	@echo "$(BOLD)Step 2/3:$(NC) Setting up service .env files..."
 	@echo ""
-	@for service in api-gateway auth-service location-service message-service; do \
+	@for service in api-gateway auth-service location-service message-service media-service; do \
 		if [ ! -f services/$service/.env ]; then \
 			if [ -f services/$service/.env.example ]; then \
 				cp services/$service/.env.example services/$service/.env; \
@@ -1017,6 +1111,10 @@ health:
 	@echo ""
 	@echo "$(BOLD)Message Service$(NC)"
 	@curl -f http://localhost:8083/health >/dev/null 2>&1 && \
+		echo "  $(GREEN)$(CHECK) Healthy$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
+	@echo ""
+	@echo "$(BOLD)Media Service$(NC)"
+	@docker exec echo-api-gateway curl -f http://media-service:8084/health >/dev/null 2>&1 && \
 		echo "  $(GREEN)$(CHECK) Healthy$(NC)" || echo "  $(RED)$(CROSS) Not responding$(NC)"
 	@echo ""
 	@echo "$(BOLD)PostgreSQL$(NC)"
@@ -1119,4 +1217,15 @@ update-gateway-routes: generate-routes
 	@echo ""
 	@echo "$(BOLD)Next Step:$(NC)"
 	@echo "  $(CYAN)make gateway-restart$(NC)  Restart the gateway to apply changes"
+	@echo ""
+
+format-code:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Formatting Code$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@find . -name '*.go' -not -path "./vendor/*" -not -path "./infra/*" | xargs gofmt -s -w
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Code formatted successfully$(NC)"
 	@echo ""

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -780,9 +781,15 @@ func CacheControl(maxAge int, public bool) Handler {
 type AuthConfig struct {
 	ValidateToken func(token string) (userID string, err error)
 	OnAuthFailed  func(w http.ResponseWriter, r *http.Request, err error)
-	SkipPaths     map[string]bool
+	SkipPaths     []string
 }
 
+// Auth validates bearer tokens and adds the authenticated user ID to both
+// the request context and the X-User-ID header. The header ensures the user ID
+// is forwarded when proxying requests to downstream services.
+//
+// Downstream services can use ExtractUserIDFromHeader middleware to retrieve
+// the user ID from the header into their request context.
 func Auth(config AuthConfig) Handler {
 	if config.ValidateToken == nil {
 		panic("AuthConfig.ValidateToken cannot be nil")
@@ -798,9 +805,11 @@ func Auth(config AuthConfig) Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if config.SkipPaths != nil && config.SkipPaths[r.URL.Path] {
-				next.ServeHTTP(w, r)
-				return
+			for _, skipPattern := range config.SkipPaths {
+				if matchPath(r.URL.Path, skipPattern) {
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
 
 			authHeader := r.Header.Get("Authorization")
@@ -823,7 +832,36 @@ func Auth(config AuthConfig) Handler {
 			}
 
 			ctx := SetUserID(r.Context(), userID)
+			r.Header.Set("X-User-ID", userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func matchPath(requestPath, pattern string) bool {
+	if pattern == "" {
+		return false
+	}
+	if pattern == requestPath {
+		return true
+	}
+	if matched, err := path.Match(pattern, requestPath); err == nil && matched {
+		return true
+	}
+	return false
+}
+
+func InterceptUserId() Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := r.Header.Get("X-User-ID")
+			if userID != "" {
+				ctx := SetUserID(r.Context(), userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			response.UnauthorizedError(r.Context(), r, w, "Missing or Invalid Auth Token", errors.New("missing user id in header"))
 		})
 	}
 }
@@ -856,4 +894,22 @@ func GetAPIVersion(ctx context.Context) string {
 		return version
 	}
 	return "v1"
+}
+
+// ExtractUserIDFromHeader extracts the user ID from X-User-ID header
+// (set by the Auth middleware) and adds it to the request context.
+// This is useful for services behind a proxy/gateway that receive
+// authenticated requests with the user ID in a header.
+func ExtractUserIDFromHeader() Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := r.Header.Get("X-User-ID")
+			if userID != "" {
+				ctx := SetUserID(r.Context(), userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

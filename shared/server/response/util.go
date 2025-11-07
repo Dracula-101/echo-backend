@@ -42,7 +42,7 @@ func ErrorDetailsFromError(err error, includeStackTrace bool) *ErrorDetails {
 		details.Code = errors.CodeInternal
 		details.Type = ErrorTypeInternal
 	}
-	
+
 	return details
 }
 

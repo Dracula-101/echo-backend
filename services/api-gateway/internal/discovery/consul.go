@@ -39,7 +39,7 @@ func (c *ConsulClient) GetServices() (map[string]string, error) {
 			result[prefix] = name
 		}
 	}
-	
+
 	return result, nil
 }
 

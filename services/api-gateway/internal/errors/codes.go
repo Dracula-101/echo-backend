@@ -8,28 +8,28 @@ import pkgErrors "shared/pkg/errors"
 
 const (
 	// Service Discovery Errors
-	CodeServiceNotFound      = "GW_SERVICE_NOT_FOUND"
-	CodeServiceUnavailable   = "GW_SERVICE_UNAVAILABLE"
-	CodeNoHealthyInstances   = "GW_NO_HEALTHY_INSTANCES"
+	CodeServiceNotFound    = "GW_SERVICE_NOT_FOUND"
+	CodeServiceUnavailable = "GW_SERVICE_UNAVAILABLE"
+	CodeNoHealthyInstances = "GW_NO_HEALTHY_INSTANCES"
 
 	// Routing Errors
-	CodeRoutingFailed        = "GW_ROUTING_FAILED"
-	CodeInvalidRoute         = "GW_INVALID_ROUTE"
-	CodeRouteNotFound        = "GW_ROUTE_NOT_FOUND"
+	CodeRoutingFailed = "GW_ROUTING_FAILED"
+	CodeInvalidRoute  = "GW_INVALID_ROUTE"
+	CodeRouteNotFound = "GW_ROUTE_NOT_FOUND"
 
 	// Proxy Errors
-	CodeProxyError           = "GW_PROXY_ERROR"
-	CodeUpstreamTimeout      = "GW_UPSTREAM_TIMEOUT"
-	CodeUpstreamError        = "GW_UPSTREAM_ERROR"
-	CodeConnectionFailed     = "GW_CONNECTION_FAILED"
+	CodeProxyError       = "GW_PROXY_ERROR"
+	CodeUpstreamTimeout  = "GW_UPSTREAM_TIMEOUT"
+	CodeUpstreamError    = "GW_UPSTREAM_ERROR"
+	CodeConnectionFailed = "GW_CONNECTION_FAILED"
 
 	// Rate Limiting Errors
-	CodeRateLimitExceeded    = "GW_RATE_LIMIT_EXCEEDED"
-	CodeQuotaExceeded        = "GW_QUOTA_EXCEEDED"
+	CodeRateLimitExceeded = "GW_RATE_LIMIT_EXCEEDED"
+	CodeQuotaExceeded     = "GW_QUOTA_EXCEEDED"
 
 	// Circuit Breaker Errors
-	CodeCircuitBreakerOpen   = "GW_CIRCUIT_BREAKER_OPEN"
-	CodeCircuitBreakerError  = "GW_CIRCUIT_BREAKER_ERROR"
+	CodeCircuitBreakerOpen  = "GW_CIRCUIT_BREAKER_OPEN"
+	CodeCircuitBreakerError = "GW_CIRCUIT_BREAKER_ERROR"
 
 	// Authentication/Authorization Errors
 	CodeMissingAuthHeader    = "GW_MISSING_AUTH_HEADER"
@@ -58,28 +58,28 @@ const ServiceName = "api-gateway"
 
 var HTTPStatusMap = map[string]int{
 	// Service Discovery Errors
-	CodeServiceNotFound:      503,
-	CodeServiceUnavailable:   503,
-	CodeNoHealthyInstances:   503,
+	CodeServiceNotFound:    503,
+	CodeServiceUnavailable: 503,
+	CodeNoHealthyInstances: 503,
 
 	// Routing Errors
-	CodeRoutingFailed:        502,
-	CodeInvalidRoute:         400,
-	CodeRouteNotFound:        404,
+	CodeRoutingFailed: 502,
+	CodeInvalidRoute:  400,
+	CodeRouteNotFound: 404,
 
 	// Proxy Errors
-	CodeProxyError:           502,
-	CodeUpstreamTimeout:      504,
-	CodeUpstreamError:        502,
-	CodeConnectionFailed:     503,
+	CodeProxyError:       502,
+	CodeUpstreamTimeout:  504,
+	CodeUpstreamError:    502,
+	CodeConnectionFailed: 503,
 
 	// Rate Limiting Errors
-	CodeRateLimitExceeded:    429,
-	CodeQuotaExceeded:        429,
+	CodeRateLimitExceeded: 429,
+	CodeQuotaExceeded:     429,
 
 	// Circuit Breaker Errors
-	CodeCircuitBreakerOpen:   503,
-	CodeCircuitBreakerError:  500,
+	CodeCircuitBreakerOpen:  503,
+	CodeCircuitBreakerError: 500,
 
 	// Authentication/Authorization Errors
 	CodeMissingAuthHeader:    401,

@@ -13,6 +13,7 @@ type Config struct {
 	Observability ObservabilityConfig `yaml:"observability" mapstructure:"observability"`
 	Shutdown      ShutdownConfig      `yaml:"shutdown" mapstructure:"shutdown"`
 	Features      FeaturesConfig      `yaml:"features" mapstructure:"features"`
+	JWT           JWTConfig           `yaml:"jwt" mapstructure:"jwt"`
 }
 
 // ServiceConfig contains service metadata
@@ -199,4 +200,14 @@ type UserSearchConfig struct {
 	Enabled        bool `yaml:"enabled" mapstructure:"enabled"`
 	MaxResults     int  `yaml:"max_results" mapstructure:"max_results"`
 	MinQueryLength int  `yaml:"min_query_length" mapstructure:"min_query_length"`
+}
+
+// JWTConfig contains JWT configuration
+type JWTConfig struct {
+	SecretKey       string        `yaml:"secret_key" mapstructure:"secret_key"`
+	Issuer          string        `yaml:"issuer" mapstructure:"issuer"`
+	Audience        string        `yaml:"audience" mapstructure:"audience"`
+	SigningMethod   string        `yaml:"signing_method" mapstructure:"signing_method"`
+	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" mapstructure:"access_token_ttl"`
+	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" mapstructure:"refresh_token_ttl"`
 }

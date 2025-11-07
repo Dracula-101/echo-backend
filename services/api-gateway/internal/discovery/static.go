@@ -9,12 +9,12 @@ type StaticDiscovery struct {
 func NewStaticDiscovery() *StaticDiscovery {
 	return &StaticDiscovery{
 		services: map[string]string{
-			"/api/v1/auth":         "http://localhost:8081",
-			"/api/v1/users":        "http://localhost:8082", 
-			"/api/v1/messages":     "http://localhost:9000",
-			"/api/v1/media":        "http://localhost:8083",
+			"/api/v1/auth":          "http://localhost:8081",
+			"/api/v1/users":         "http://localhost:8082",
+			"/api/v1/messages":      "http://localhost:9000",
+			"/api/v1/media":         "http://localhost:8083",
 			"/api/v1/notifications": "http://localhost:9001",
-			"/api/v1/presence":     "http://localhost:9002",
+			"/api/v1/presence":      "http://localhost:9002",
 		},
 	}
 }

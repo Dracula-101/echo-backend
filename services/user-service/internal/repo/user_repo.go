@@ -118,6 +118,64 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 	return &profile, nil
 }
 
+// CreateProfile creates a new user profile
+func (r *UserRepository) CreateProfile(ctx context.Context, profile models.Profile) (*models.Profile, error) {
+	r.log.Info("Creating new profile",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", profile.UserID),
+	)
+
+	id, err := r.db.Create(ctx, &models.Profile{
+		UserID:        profile.UserID,
+		Username:      profile.Username,
+		DisplayName:   profile.DisplayName,
+		FirstName:     profile.FirstName,
+		LastName:      profile.LastName,
+		Bio:           profile.Bio,
+		AvatarURL:     profile.AvatarURL,
+		LanguageCode:  profile.LanguageCode,
+		Timezone:      profile.Timezone,
+		CountryCode:   profile.CountryCode,
+		IsVerified:    profile.IsVerified,
+		CreatedAt:     profile.CreatedAt,
+		UpdatedAt:     profile.UpdatedAt,
+		DeactivatedAt: profile.DeactivatedAt,
+	})
+	if err != nil {
+		r.log.Error("Failed to create profile",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+
+	createdProfile, err := r.GetProfileByUserID(ctx, profile.UserID)
+	if err != nil {
+		r.log.Error("Failed to retrieve created profile",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", profile.UserID),
+			logger.String("profile_id", id),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+	if createdProfile == nil {
+		r.log.Error("Created profile not found",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", profile.UserID),
+		)
+		return nil, fmt.Errorf("created profile not found for user_id: %s", profile.UserID)
+	}
+
+	r.log.Info("Profile created successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", profile.UserID),
+		logger.String("profile_id", createdProfile.ID),
+	)
+	return createdProfile, nil
+}
+
 // UpdateProfile updates a user profile
 type UpdateProfileParams struct {
 	UserID       string

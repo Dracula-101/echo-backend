@@ -1,0 +1,195 @@
+service:
+  name: media-service
+  version: 1.0.0
+  environment: ${APP_ENV:development}
+
+server:
+  host: ${SERVER_HOST:0.0.0.0}
+  port: ${SERVER_PORT:8084}
+  read_timeout: ${SERVER_READ_TIMEOUT:30s}
+  write_timeout: ${SERVER_WRITE_TIMEOUT:30s}
+  idle_timeout: ${SERVER_IDLE_TIMEOUT:120s}
+  shutdown_timeout: ${SERVER_SHUTDOWN_TIMEOUT:30s}
+  max_header_bytes: ${SERVER_MAX_HEADER_BYTES:1048576}
+  enable_compression: ${SERVER_ENABLE_COMPRESSION:true}
+
+database:
+  postgres:
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:5432}
+    user: ${DB_USER:echo}
+    password: ${DB_PASSWORD:echo_password}
+    db_name: ${DB_NAME:echo}
+    ssl_mode: ${DB_SSL_MODE:disable}
+    max_open_conns: ${DB_MAX_OPEN_CONNS:25}
+    max_idle_conns: ${DB_MAX_IDLE_CONNS:10}
+    conn_max_lifetime: ${DB_CONN_MAX_LIFETIME:5m}
+    conn_max_idle_time: ${DB_CONN_MAX_IDLE_TIME:10m}
+    auto_migrate: ${DB_AUTO_MIGRATE:false}
+    migration_path: ${DB_MIGRATION_PATH:./migrations}
+
+cache:
+  enabled: ${CACHE_ENABLED:true}
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    db: ${REDIS_DB:0}
+    dial_timeout: ${REDIS_DIAL_TIMEOUT:5s}
+    read_timeout: ${REDIS_READ_TIMEOUT:3s}
+    write_timeout: ${REDIS_WRITE_TIMEOUT:3s}
+    pool_size: ${REDIS_POOL_SIZE:10}
+    min_idle_conns: ${REDIS_MIN_IDLE_CONNS:5}
+    max_retries: ${REDIS_MAX_RETRIES:3}
+    pool_timeout: ${REDIS_POOL_TIMEOUT:4s}
+
+storage:
+  provider: ${STORAGE_PROVIDER:r2}
+  bucket: ${STORAGE_BUCKET:echo-media}
+  region: ${STORAGE_REGION:auto}
+  access_key_id: ${STORAGE_ACCESS_KEY_ID:}
+  secret_access_key: ${STORAGE_SECRET_ACCESS_KEY:}
+  endpoint: ${STORAGE_ENDPOINT:}
+  public_url: ${STORAGE_PUBLIC_URL:}
+  cdn_base_url: ${STORAGE_CDN_BASE_URL:}
+  use_cdn: ${STORAGE_USE_CDN:false}
+  max_file_size: ${STORAGE_MAX_FILE_SIZE:104857600} # 100MB
+  allowed_types:
+    - image/jpeg
+    - image/png
+    - image/gif
+    - image/webp
+    - video/mp4
+    - video/quicktime
+    - audio/mpeg
+    - audio/wav
+    - application/pdf
+  upload_timeout: ${STORAGE_UPLOAD_TIMEOUT:5m}
+
+security:
+  allowed_origins: ${SECURITY_ALLOWED_ORIGINS:*}
+  allowed_methods: ${SECURITY_ALLOWED_METHODS:GET,POST,PUT,DELETE,OPTIONS}
+  allowed_headers: ${SECURITY_ALLOWED_HEADERS:Content-Type,Authorization,X-Request-ID}
+  allow_credentials: ${SECURITY_ALLOW_CREDENTIALS:true}
+  max_age: ${SECURITY_MAX_AGE:3600}
+  max_body_size: ${SECURITY_MAX_BODY_SIZE:104857600} # 100MB
+  security_headers:
+    x_frame_options: ${SECURITY_X_FRAME_OPTIONS:DENY}
+    x_content_type_options: ${SECURITY_X_CONTENT_TYPE_OPTIONS:nosniff}
+    x_xss_protection: ${SECURITY_X_XSS_PROTECTION:1; mode=block}
+    strict_transport_security: ${SECURITY_STRICT_TRANSPORT_SECURITY:max-age=31536000; includeSubDomains}
+    content_security_policy: ${SECURITY_CONTENT_SECURITY_POLICY:default-src 'self'}
+  rate_limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    window: ${RATE_LIMIT_WINDOW:1m}
+    global:
+      requests: ${RATE_LIMIT_GLOBAL_REQUESTS:1000}
+    endpoints:
+      upload:
+        requests: ${RATE_LIMIT_UPLOAD_REQUESTS:20}
+        window: ${RATE_LIMIT_UPLOAD_WINDOW:1m}
+      download:
+        requests: ${RATE_LIMIT_DOWNLOAD_REQUESTS:100}
+        window: ${RATE_LIMIT_DOWNLOAD_WINDOW:1m}
+      delete:
+        requests: ${RATE_LIMIT_DELETE_REQUESTS:50}
+        window: ${RATE_LIMIT_DELETE_WINDOW:1m}
+      list:
+        requests: ${RATE_LIMIT_LIST_REQUESTS:50}
+        window: ${RATE_LIMIT_LIST_WINDOW:1m}
+
+logging:
+  level: ${LOG_LEVEL:info}
+  format: ${LOG_FORMAT:json}
+  output: ${LOG_OUTPUT:stdout}
+  time_format: ${LOG_TIME_FORMAT:2006-01-02T15:04:05.000Z07:00}
+  file:
+    path: ${LOG_FILE_PATH:./logs/media-service.log}
+    max_size: ${LOG_FILE_MAX_SIZE:100}
+    max_backups: ${LOG_FILE_MAX_BACKUPS:3}
+    max_age: ${LOG_FILE_MAX_AGE:28}
+    compress: ${LOG_FILE_COMPRESS:true}
+
+observability:
+  metrics:
+    enabled: ${METRICS_ENABLED:true}
+    endpoint: ${METRICS_ENDPOINT:/metrics}
+  tracing:
+    enabled: ${TRACING_ENABLED:false}
+    provider: ${TRACING_PROVIDER:jaeger}
+    endpoint: ${TRACING_ENDPOINT:http://localhost:14268/api/traces}
+    sample_rate: ${TRACING_SAMPLE_RATE:0.1}
+  health:
+    enabled: ${HEALTH_ENABLED:true}
+    endpoint: ${HEALTH_ENDPOINT:/health}
+
+shutdown:
+  timeout: ${SHUTDOWN_TIMEOUT:30s}
+  wait_for_connections: ${SHUTDOWN_WAIT_FOR_CONNECTIONS:true}
+  drain_timeout: ${SHUTDOWN_DRAIN_TIMEOUT:10s}
+
+features:
+  image_processing:
+    enabled: ${FEATURE_IMAGE_PROCESSING_ENABLED:true}
+    max_width: ${FEATURE_IMAGE_MAX_WIDTH:4096}
+    max_height: ${FEATURE_IMAGE_MAX_HEIGHT:4096}
+    quality: ${FEATURE_IMAGE_QUALITY:85}
+    allowed_formats:
+      - jpeg
+      - png
+      - gif
+      - webp
+    auto_orient: ${FEATURE_IMAGE_AUTO_ORIENT:true}
+    strip_metadata: ${FEATURE_IMAGE_STRIP_METADATA:false}
+  video_processing:
+    enabled: ${FEATURE_VIDEO_PROCESSING_ENABLED:false}
+    max_duration: ${FEATURE_VIDEO_MAX_DURATION:600} # 10 minutes
+    allowed_formats:
+      - mp4
+      - mov
+      - avi
+    transcoding_enabled: ${FEATURE_VIDEO_TRANSCODING_ENABLED:false}
+  thumbnails:
+    enabled: ${FEATURE_THUMBNAILS_ENABLED:true}
+    small_size:
+      width: ${FEATURE_THUMBNAIL_SMALL_WIDTH:150}
+      height: ${FEATURE_THUMBNAIL_SMALL_HEIGHT:150}
+    medium_size:
+      width: ${FEATURE_THUMBNAIL_MEDIUM_WIDTH:300}
+      height: ${FEATURE_THUMBNAIL_MEDIUM_HEIGHT:300}
+    large_size:
+      width: ${FEATURE_THUMBNAIL_LARGE_WIDTH:600}
+      height: ${FEATURE_THUMBNAIL_LARGE_HEIGHT:600}
+    format: ${FEATURE_THUMBNAIL_FORMAT:jpeg}
+    quality: ${FEATURE_THUMBNAIL_QUALITY:85}
+  virus_scanning:
+    enabled: ${FEATURE_VIRUS_SCANNING_ENABLED:false}
+    provider: ${FEATURE_VIRUS_SCANNING_PROVIDER:clamav}
+    endpoint: ${FEATURE_VIRUS_SCANNING_ENDPOINT:}
+    api_key: ${FEATURE_VIRUS_SCANNING_API_KEY:}
+  content_moderation:
+    enabled: ${FEATURE_CONTENT_MODERATION_ENABLED:false}
+    provider: ${FEATURE_CONTENT_MODERATION_PROVIDER:aws-rekognition}
+    endpoint: ${FEATURE_CONTENT_MODERATION_ENDPOINT:}
+    api_key: ${FEATURE_CONTENT_MODERATION_API_KEY:}
+    threshold: ${FEATURE_CONTENT_MODERATION_THRESHOLD:0.8}
+  encryption:
+    enabled: ${FEATURE_ENCRYPTION_ENABLED:false}
+    algorithm: ${FEATURE_ENCRYPTION_ALGORITHM:AES-256}
+    key_id: ${FEATURE_ENCRYPTION_KEY_ID:}
+  deduplication:
+    enabled: ${FEATURE_DEDUPLICATION_ENABLED:true}
+    algorithm: ${FEATURE_DEDUPLICATION_ALGORITHM:sha256}
+  albums:
+    enabled: ${FEATURE_ALBUMS_ENABLED:true}
+    max_albums_per_user: ${FEATURE_ALBUMS_MAX_PER_USER:100}
+  sticker_packs:
+    enabled: ${FEATURE_STICKER_PACKS_ENABLED:true}
+    max_stickers_per_pack: ${FEATURE_STICKER_PACKS_MAX_STICKERS:100}
+    max_installed_per_user: ${FEATURE_STICKER_PACKS_MAX_INSTALLED:50}
+
+processing:
+  workers: ${PROCESSING_WORKERS:4}
+  queue_size: ${PROCESSING_QUEUE_SIZE:100}
+  max_attempts: ${PROCESSING_MAX_ATTEMPTS:3}
+  processing_timeout: ${PROCESSING_TIMEOUT:5m}

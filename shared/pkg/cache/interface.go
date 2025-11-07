@@ -20,6 +20,7 @@ type Cache interface {
 	Increment(ctx context.Context, key string, delta int64) (int64, error)
 	Decrement(ctx context.Context, key string, delta int64) (int64, error)
 
+	Ping(ctx context.Context) error
 	Info(ctx context.Context) (map[string]string, error)
 
 	Flush(ctx context.Context) error

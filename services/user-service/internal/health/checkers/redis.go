@@ -1,11 +1,11 @@
 package checkers
 
 import (
-	"user-service/internal/health"
 	"context"
 	"fmt"
 	"shared/pkg/cache"
 	"time"
+	"user-service/internal/health"
 )
 
 type CacheChecker struct {

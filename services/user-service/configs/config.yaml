@@ -116,3 +116,12 @@ features:
     enabled: ${FEATURE_USER_SEARCH_ENABLED:true}
     max_results: ${USER_SEARCH_MAX_RESULTS:50}
     min_query_length: ${USER_SEARCH_MIN_QUERY_LENGTH:2}
+
+jwt:
+  secret_key: ${JWT_SECRET_KEY:your-secret-key}
+  issuer: ${JWT_ISSUER:user-service}
+  audience: ${JWT_AUDIENCE:user-service-clients}
+  signing_method: ${JWT_SIGNING_METHOD:HS256}
+  access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+  refresh_token_ttl : ${JWT_REFRESH_TOKEN_TTL:7d}
+

@@ -11,24 +11,24 @@ type ErrorCode string
 
 const (
 	// Client errors (4xx)
-	ErrCodeBadRequest          ErrorCode = "BAD_REQUEST"
-	ErrCodeUnauthorized        ErrorCode = "UNAUTHORIZED"
-	ErrCodeForbidden           ErrorCode = "FORBIDDEN"
-	ErrCodeNotFound            ErrorCode = "NOT_FOUND"
-	ErrCodeMethodNotAllowed    ErrorCode = "METHOD_NOT_ALLOWED"
-	ErrCodeConflict            ErrorCode = "CONFLICT"
-	ErrCodeValidation          ErrorCode = "VALIDATION_ERROR"
-	ErrCodeRateLimitExceeded   ErrorCode = "RATE_LIMIT_EXCEEDED"
-	ErrCodeRequestTimeout      ErrorCode = "REQUEST_TIMEOUT"
-	ErrCodePayloadTooLarge     ErrorCode = "PAYLOAD_TOO_LARGE"
-	ErrCodeUnsupportedMedia    ErrorCode = "UNSUPPORTED_MEDIA_TYPE"
+	ErrCodeBadRequest        ErrorCode = "BAD_REQUEST"
+	ErrCodeUnauthorized      ErrorCode = "UNAUTHORIZED"
+	ErrCodeForbidden         ErrorCode = "FORBIDDEN"
+	ErrCodeNotFound          ErrorCode = "NOT_FOUND"
+	ErrCodeMethodNotAllowed  ErrorCode = "METHOD_NOT_ALLOWED"
+	ErrCodeConflict          ErrorCode = "CONFLICT"
+	ErrCodeValidation        ErrorCode = "VALIDATION_ERROR"
+	ErrCodeRateLimitExceeded ErrorCode = "RATE_LIMIT_EXCEEDED"
+	ErrCodeRequestTimeout    ErrorCode = "REQUEST_TIMEOUT"
+	ErrCodePayloadTooLarge   ErrorCode = "PAYLOAD_TOO_LARGE"
+	ErrCodeUnsupportedMedia  ErrorCode = "UNSUPPORTED_MEDIA_TYPE"
 
 	// Server errors (5xx)
-	ErrCodeInternal            ErrorCode = "INTERNAL_ERROR"
-	ErrCodeServiceUnavailable  ErrorCode = "SERVICE_UNAVAILABLE"
-	ErrCodeGatewayTimeout      ErrorCode = "GATEWAY_TIMEOUT"
-	ErrCodeCircuitOpen         ErrorCode = "CIRCUIT_OPEN"
-	ErrCodeDependencyFailure   ErrorCode = "DEPENDENCY_FAILURE"
+	ErrCodeInternal           ErrorCode = "INTERNAL_ERROR"
+	ErrCodeServiceUnavailable ErrorCode = "SERVICE_UNAVAILABLE"
+	ErrCodeGatewayTimeout     ErrorCode = "GATEWAY_TIMEOUT"
+	ErrCodeCircuitOpen        ErrorCode = "CIRCUIT_OPEN"
+	ErrCodeDependencyFailure  ErrorCode = "DEPENDENCY_FAILURE"
 )
 
 // APIError represents a structured API error
@@ -265,12 +265,12 @@ func (v *ValidationErrors) ToAPIError() *APIError {
 type ErrorCategory string
 
 const (
-	CategoryClient      ErrorCategory = "client"
-	CategoryServer      ErrorCategory = "server"
-	CategoryDependency  ErrorCategory = "dependency"
-	CategoryTimeout     ErrorCategory = "timeout"
-	CategoryRateLimit   ErrorCategory = "rate_limit"
-	CategoryValidation  ErrorCategory = "validation"
+	CategoryClient     ErrorCategory = "client"
+	CategoryServer     ErrorCategory = "server"
+	CategoryDependency ErrorCategory = "dependency"
+	CategoryTimeout    ErrorCategory = "timeout"
+	CategoryRateLimit  ErrorCategory = "rate_limit"
+	CategoryValidation ErrorCategory = "validation"
 )
 
 // GetCategory returns the error category
@@ -282,8 +282,8 @@ func GetCategory(err error) ErrorCategory {
 
 	switch apiErr.Code {
 	case ErrCodeBadRequest, ErrCodeUnauthorized, ErrCodeForbidden,
-		 ErrCodeNotFound, ErrCodeMethodNotAllowed, ErrCodeConflict,
-		 ErrCodeUnsupportedMedia, ErrCodePayloadTooLarge:
+		ErrCodeNotFound, ErrCodeMethodNotAllowed, ErrCodeConflict,
+		ErrCodeUnsupportedMedia, ErrCodePayloadTooLarge:
 		return CategoryClient
 
 	case ErrCodeValidation:
@@ -312,7 +312,7 @@ func IsRetriable(err error) bool {
 
 	switch apiErr.Code {
 	case ErrCodeServiceUnavailable, ErrCodeGatewayTimeout,
-		 ErrCodeRequestTimeout, ErrCodeCircuitOpen:
+		ErrCodeRequestTimeout, ErrCodeCircuitOpen:
 		return true
 	default:
 		return false

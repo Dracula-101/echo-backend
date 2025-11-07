@@ -25,10 +25,10 @@ const (
 	CodePhoneVerificationFailed = "AUTH_PHONE_VERIFY_FAILED"
 
 	// Registration Errors
-	CodeInvalidEmail        = "AUTH_INVALID_EMAIL"
-	CodeInvalidPhoneNumber  = "AUTH_INVALID_PHONE"
-	CodePasswordTooWeak     = "AUTH_PASSWORD_WEAK"
-	CodeTermsNotAccepted    = "AUTH_TERMS_NOT_ACCEPTED"
+	CodeInvalidEmail       = "AUTH_INVALID_EMAIL"
+	CodeInvalidPhoneNumber = "AUTH_INVALID_PHONE"
+	CodePasswordTooWeak    = "AUTH_PASSWORD_WEAK"
+	CodeTermsNotAccepted   = "AUTH_TERMS_NOT_ACCEPTED"
 
 	// Session Errors
 	CodeSessionCreationFailed = "AUTH_SESSION_CREATE_FAILED"

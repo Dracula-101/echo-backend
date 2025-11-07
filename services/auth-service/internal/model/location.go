@@ -12,4 +12,3 @@ type LocationData struct {
 	ISP        string  `json:"isp,omitempty"`
 	IP         string  `json:"ip,omitempty"`
 }
-

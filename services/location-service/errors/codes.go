@@ -8,24 +8,24 @@ import pkgErrors "shared/pkg/errors"
 
 const (
 	// Lookup Errors
-	CodeLookupFailed         = "LOC_LOOKUP_FAILED"
-	CodeInvalidIP            = "LOC_INVALID_IP"
-	CodeIPNotFound           = "LOC_IP_NOT_FOUND"
-	CodePrivateIPAddress     = "LOC_PRIVATE_IP"
+	CodeLookupFailed     = "LOC_LOOKUP_FAILED"
+	CodeInvalidIP        = "LOC_INVALID_IP"
+	CodeIPNotFound       = "LOC_IP_NOT_FOUND"
+	CodePrivateIPAddress = "LOC_PRIVATE_IP"
 
 	// Database Errors
-	CodeDatabaseNotFound     = "LOC_DATABASE_NOT_FOUND"
-	CodeDatabaseLoadFailed   = "LOC_DATABASE_LOAD_FAILED"
-	CodeDatabaseCorrupted    = "LOC_DATABASE_CORRUPTED"
-	CodeDatabaseOutdated     = "LOC_DATABASE_OUTDATED"
+	CodeDatabaseNotFound   = "LOC_DATABASE_NOT_FOUND"
+	CodeDatabaseLoadFailed = "LOC_DATABASE_LOAD_FAILED"
+	CodeDatabaseCorrupted  = "LOC_DATABASE_CORRUPTED"
+	CodeDatabaseOutdated   = "LOC_DATABASE_OUTDATED"
 
 	// Service Errors
-	CodeServiceUnavailable   = "LOC_SERVICE_UNAVAILABLE"
-	CodeRateLimitExceeded    = "LOC_RATE_LIMIT_EXCEEDED"
+	CodeServiceUnavailable = "LOC_SERVICE_UNAVAILABLE"
+	CodeRateLimitExceeded  = "LOC_RATE_LIMIT_EXCEEDED"
 
 	// Data Quality Errors
-	CodeIncompleteData       = "LOC_INCOMPLETE_DATA"
-	CodeLowAccuracy          = "LOC_LOW_ACCURACY"
+	CodeIncompleteData = "LOC_INCOMPLETE_DATA"
+	CodeLowAccuracy    = "LOC_LOW_ACCURACY"
 )
 
 // ============================================================================
@@ -40,24 +40,24 @@ const ServiceName = "location-service"
 
 var HTTPStatusMap = map[string]int{
 	// Lookup Errors
-	CodeLookupFailed:         500,
-	CodeInvalidIP:            400,
-	CodeIPNotFound:           404,
-	CodePrivateIPAddress:     400,
+	CodeLookupFailed:     500,
+	CodeInvalidIP:        400,
+	CodeIPNotFound:       404,
+	CodePrivateIPAddress: 400,
 
 	// Database Errors
-	CodeDatabaseNotFound:     503,
-	CodeDatabaseLoadFailed:   500,
-	CodeDatabaseCorrupted:    500,
-	CodeDatabaseOutdated:     503,
+	CodeDatabaseNotFound:   503,
+	CodeDatabaseLoadFailed: 500,
+	CodeDatabaseCorrupted:  500,
+	CodeDatabaseOutdated:   503,
 
 	// Service Errors
-	CodeServiceUnavailable:   503,
-	CodeRateLimitExceeded:    429,
+	CodeServiceUnavailable: 503,
+	CodeRateLimitExceeded:  429,
 
 	// Data Quality Errors
-	CodeIncompleteData:       200, // Still return data but with warning
-	CodeLowAccuracy:          200, // Still return data but with warning
+	CodeIncompleteData: 200, // Still return data but with warning
+	CodeLowAccuracy:    200, // Still return data but with warning
 }
 
 // HTTPStatus returns the HTTP status code for a location service error code

@@ -266,12 +266,12 @@ func (r *Registry) selectInstance(service *Service) (*ServiceInstance, error) {
 
 // HealthChecker performs periodic health checks on service instances
 type HealthChecker struct {
-	registry     *Registry
-	interval     time.Duration
-	timeout      time.Duration
-	httpClient   HTTPClient
-	stopChan     chan struct{}
-	stoppedChan  chan struct{}
+	registry    *Registry
+	interval    time.Duration
+	timeout     time.Duration
+	httpClient  HTTPClient
+	stopChan    chan struct{}
+	stoppedChan chan struct{}
 }
 
 // HTTPClient interface for health checks

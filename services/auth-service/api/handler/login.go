@@ -47,9 +47,9 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 
 	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
 		UserID:          &userID,
-		EventType:       "login_attempt",
+		EventType:       models.SecurityEventLoginFailed,
 		EventCategory:   utils.PtrString("authentication"),
-		Severity:        "medium",
+		Severity:        models.SecuritySeverityMedium,
 		Status:          utils.PtrString("failed"),
 		Description:     utils.PtrString(fmt.Sprintf("User login attempt failed: %s", failureReason)),
 		IPAddress:       &locationInfo.IP,
@@ -101,9 +101,9 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
 		UserID:          &userID,
 		SessionID:       &session.SessionId,
-		EventType:       "login_attempt",
+		EventType:       models.SecurityEventLogin,
 		EventCategory:   utils.PtrString("authentication"),
-		Severity:        "medium",
+		Severity:        models.SecuritySeverityMedium,
 		Status:          utils.PtrString("initiated"),
 		Description:     utils.PtrString("User login attempt initiated"),
 		IPAddress:       &locationInfo.IP,

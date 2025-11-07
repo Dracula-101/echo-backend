@@ -328,10 +328,10 @@ func NotRetryableErrors(excluded ...error) func(error) bool {
 
 // RetryMetrics holds statistics about retry operations
 type RetryMetrics struct {
-	TotalAttempts    int
+	TotalAttempts     int
 	SuccessfulRetries int
-	FailedRetries    int
-	TotalDelay       time.Duration
+	FailedRetries     int
+	TotalDelay        time.Duration
 }
 
 // RetryerWithMetrics wraps Retryer with metrics collection

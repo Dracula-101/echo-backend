@@ -141,6 +141,11 @@ func (c *client) Decrement(ctx context.Context, key string, delta int64) (int64,
 	return c.rdb.DecrBy(ctx, key, delta).Result()
 }
 
+func (c *client) Ping(ctx context.Context) error {
+	c.logger.Debug("Pinging Redis server")
+	return c.rdb.Ping(ctx).Err()
+}
+
 func (c *client) Info(ctx context.Context) (map[string]string, error) {
 	c.logger.Debug("Fetching Redis INFO")
 	result, err := c.rdb.Info(ctx).Result()

@@ -37,8 +37,18 @@ type ServerConfig struct {
 	TLSCertFile       string        `yaml:"tls_cert_file"`
 	TLSKeyFile        string        `yaml:"tls_key_file"`
 	TLSMinVersion     string        `yaml:"tls_min_version"`
+	JWTConfig         JWTConfig     `yaml:"jwt" mapstructure:"jwt"`
 }
 
+type JWTConfig struct {
+	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" mapstructure:"access_token_ttl"`
+	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" mapstructure:"refresh_token_ttl"`
+	SecretKey       string        `yaml:"secret_key" mapstructure:"secret_key"`
+	Issuer          string        `yaml:"issuer" mapstructure:"issuer"`
+	Audience        string        `yaml:"audience" mapstructure:"audience"`
+	Leeway          time.Duration `yaml:"leeway" mapstructure:"leeway"`
+	SkipPaths       []string      `yaml:"skip_paths" mapstructure:"skip_paths"`
+}
 type ServiceConfig struct {
 	Protocol       string               `yaml:"protocol"`
 	Addresses      []string             `yaml:"addresses"`

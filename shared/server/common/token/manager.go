@@ -11,14 +11,14 @@ import (
 )
 
 type Manager struct {
-	keySet    KeySet
-	issuer    string
-	audience  []string
-	accessTTL time.Duration
+	keySet     KeySet
+	issuer     string
+	audience   []string
+	accessTTL  time.Duration
 	refreshTTL time.Duration
-	leeway    time.Duration
-	clock     func() time.Time
-	parser    *jwt.Parser
+	leeway     time.Duration
+	clock      func() time.Time
+	parser     *jwt.Parser
 }
 
 type Config struct {
@@ -33,8 +33,8 @@ type Config struct {
 }
 
 type IssueOptions struct {
-	Metadata map[string]any
-	Audience []string
+	Metadata  map[string]any
+	Audience  []string
 	ExpiresIn time.Duration
 	NotBefore time.Time
 }
@@ -65,14 +65,14 @@ func NewManager(cfg Config) (*Manager, error) {
 	}
 	parser := jwt.NewParser(cfg.ParserOptions...)
 	manager := &Manager{
-		keySet:    cfg.KeySet,
-		issuer:    cfg.Issuer,
-		audience:  cfg.Audience,
-		accessTTL: cfg.AccessTokenTTL,
+		keySet:     cfg.KeySet,
+		issuer:     cfg.Issuer,
+		audience:   cfg.Audience,
+		accessTTL:  cfg.AccessTokenTTL,
 		refreshTTL: cfg.RefreshTokenTTL,
-		leeway:    cfg.Leeway,
-		clock:     clock,
-		parser:    parser,
+		leeway:     cfg.Leeway,
+		clock:      clock,
+		parser:     parser,
 	}
 	if manager.leeway < 0 {
 		manager.leeway = 0

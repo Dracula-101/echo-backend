@@ -10,7 +10,6 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, sContext.UserIDKey, userID)
 }
 
-// GetUserIDFromContext retrieves user ID from context
 func GetUserIDFromContext(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(sContext.UserIDKey).(string)
 	return userID, ok

@@ -42,15 +42,15 @@ type DatabaseDetails struct {
 
 // CacheDetails contains detailed information about cache health
 type CacheDetails struct {
-	Connected       bool   `json:"connected"`
-	PoolSize        int    `json:"pool_size"`
-	IdleConns       int    `json:"idle_conns"`
-	StaleConns      int    `json:"stale_conns"`
-	TotalConns      int    `json:"total_conns"`
-	HitRate         string `json:"hit_rate,omitempty"`
-	UsedMemory      string `json:"used_memory,omitempty"`
-	MaxMemory       string `json:"max_memory,omitempty"`
-	EvictedKeys     string `json:"evicted_keys,omitempty"`
-	ExpiredKeys     string `json:"expired_keys,omitempty"`
+	Connected        bool   `json:"connected"`
+	PoolSize         int    `json:"pool_size"`
+	IdleConns        int    `json:"idle_conns"`
+	StaleConns       int    `json:"stale_conns"`
+	TotalConns       int    `json:"total_conns"`
+	HitRate          string `json:"hit_rate,omitempty"`
+	UsedMemory       string `json:"used_memory,omitempty"`
+	MaxMemory        string `json:"max_memory,omitempty"`
+	EvictedKeys      string `json:"evicted_keys,omitempty"`
+	ExpiredKeys      string `json:"expired_keys,omitempty"`
 	ConnectedClients string `json:"connected_clients,omitempty"`
 }

@@ -176,6 +176,10 @@ func (c *memoryCache) Decrement(ctx context.Context, key string, delta int64) (i
 	return 0, cache.ErrNotSupported
 }
 
+func (c *memoryCache) Ping(ctx context.Context) error {
+	return nil
+}
+
 func (c *memoryCache) Info(ctx context.Context) (map[string]string, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

@@ -23,13 +23,13 @@ type User struct {
 
 // ProfileUpdate represents a profile update request
 type ProfileUpdate struct {
-	Username    *string
-	DisplayName *string
-	FirstName   *string
-	LastName    *string
-	Bio         *string
-	AvatarURL   *string
+	Username     *string
+	DisplayName  *string
+	FirstName    *string
+	LastName     *string
+	Bio          *string
+	AvatarURL    *string
 	LanguageCode *string
-	Timezone    *string
-	CountryCode *string
+	Timezone     *string
+	CountryCode  *string
 }

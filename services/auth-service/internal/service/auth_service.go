@@ -276,8 +276,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		ExpiresIn: s.cfg.JWT.AccessTokenTTL,
 		Metadata: map[string]interface{}{
 			"purpose": "access_token",
+			"user_id": user.ID,
+			"email":   user.Email,
 		},
-		Audience: []string{"auth_service_access"},
+		Audience: []string{s.cfg.JWT.Audience},
 	})
 	if tokenErr != nil {
 		s.log.Error("Failed to generate access token",
@@ -294,7 +296,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		Metadata: map[string]interface{}{
 			"purpose": "refresh_token",
 		},
-		Audience: []string{"auth_service_refresh"},
+		Audience: []string{s.cfg.JWT.Audience},
 	})
 	if refreshErr != nil {
 		s.log.Error("Failed to generate refresh token",

@@ -44,22 +44,22 @@ func (c *Claims) Validate(now time.Time, leeway time.Duration, expect TokenType,
 	if c.NotBefore != nil && now.Add(leeway).Before(c.NotBefore.Time) {
 		return errors.New("token: token not yet valid")
 	}
-	 if len(expectedAudience) > 0 && !hasAudience(c.Audience, expectedAudience) {
-	 	return errors.New("token: audience mismatch")
-	 }
-	 return nil
+	if len(expectedAudience) > 0 && !hasAudience(c.Audience, expectedAudience) {
+		return errors.New("token: audience mismatch")
 	}
+	return nil
+}
 
-	func hasAudience(actual jwt.ClaimStrings, expected []string) bool {
-		if len(actual) == 0 {
-			return false
-		}
-		for _, want := range expected {
-			for _, got := range actual {
-				if got == want {
-					return true
-				}
-			}
-		}
+func hasAudience(actual jwt.ClaimStrings, expected []string) bool {
+	if len(actual) == 0 {
 		return false
 	}
+	for _, want := range expected {
+		for _, got := range actual {
+			if got == want {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -8,10 +8,11 @@ import (
 
 	"user-service/internal/model"
 	repository "user-service/internal/repo"
+	"user-service/internal/service/models"
 
 	"shared/pkg/cache"
 	"shared/pkg/circuitbreaker"
-	"shared/pkg/database/postgres/models"
+	dbmodels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	"shared/pkg/retry"
 )
@@ -102,13 +103,10 @@ func (b *UserServiceBuilder) Build() *UserService {
 	}
 }
 
-// GetProfile retrieves a user profile by user ID
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
 	s.log.Info("Getting user profile",
 		logger.String("user_id", userID),
 	)
-
-	// Try to get from cache first
 	if s.cache != nil {
 		cacheKey := fmt.Sprintf("user:profile:%s", userID)
 		cachedData, err := s.cache.Get(ctx, cacheKey)
@@ -122,13 +120,11 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 			}
 		}
 	}
-
-	// Get from database with circuit breaker
-	var profile *models.Profile
+	var repoProfile *dbmodels.Profile
 	var err error
 
 	err = s.dbCircuit.Execute(func() error {
-		profile, err = s.repo.GetProfileByUserID(ctx, userID)
+		repoProfile, err = s.repo.GetProfileByUserID(ctx, userID)
 		return err
 	})
 
@@ -140,14 +136,15 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 		return nil, err
 	}
 
-	if profile == nil {
-		return nil, fmt.Errorf("profile not found")
+	if repoProfile == nil {
+		return nil, nil
 	}
-
-	// Convert to domain model
+	profile := fromRepoProfile(repoProfile)
+	if profile == nil {
+		return nil, nil
+	}
 	user := s.profileToUser(profile)
 
-	// Cache the result
 	if s.cache != nil {
 		cacheKey := fmt.Sprintf("user:profile:%s", userID)
 		if data, err := json.Marshal(user); err == nil {
@@ -158,134 +155,91 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 	return user, nil
 }
 
-// UpdateProfile updates a user profile
-func (s *UserService) UpdateProfile(ctx context.Context, userID string, update *model.ProfileUpdate) (*model.User, error) {
-	s.log.Info("Updating user profile",
-		logger.String("user_id", userID),
+func (s *UserService) CreateProfile(ctx context.Context, profile *models.Profile) (*model.User, error) {
+	s.log.Info("Creating user profile",
+		logger.String("user_id", profile.UserID),
 	)
 
-	// Check if username is being changed and if it's available
-	if update.Username != nil {
-		exists, err := s.repo.UsernameExists(ctx, *update.Username)
+	var createdProfile *models.Profile
+
+	err := s.dbCircuit.Execute(func() error {
+		repoInput := toRepoProfile(profile)
+		result, err := s.repo.CreateProfile(ctx, repoInput)
 		if err != nil {
-			s.log.Error("Failed to check username availability",
-				logger.String("username", *update.Username),
-				logger.Error(err),
-			)
-			return nil, err
+			return err
 		}
-		if exists {
-			return nil, fmt.Errorf("username already taken")
-		}
-	}
-
-	// Update profile with circuit breaker
-	params := repository.UpdateProfileParams{
-		UserID:       userID,
-		Username:     update.Username,
-		DisplayName:  update.DisplayName,
-		FirstName:    update.FirstName,
-		LastName:     update.LastName,
-		Bio:          update.Bio,
-		AvatarURL:    update.AvatarURL,
-		LanguageCode: update.LanguageCode,
-		Timezone:     update.Timezone,
-		CountryCode:  update.CountryCode,
-	}
-
-	var profile *models.Profile
-	var err error
-
-	err = s.dbCircuit.Execute(func() error {
-		profile, err = s.repo.UpdateProfile(ctx, params)
-		return err
+		createdProfile = fromRepoProfile(result)
+		return nil
 	})
-
 	if err != nil {
-		s.log.Error("Failed to update profile",
-			logger.String("user_id", userID),
+		s.log.Error("Failed to create profile",
+			logger.String("user_id", profile.UserID),
 			logger.Error(err),
 		)
 		return nil, err
 	}
 
-	// Convert to domain model
-	user := s.profileToUser(profile)
-
-	// Invalidate cache
-	if s.cache != nil {
-		cacheKey := fmt.Sprintf("user:profile:%s", userID)
-		_ = s.cache.Delete(ctx, cacheKey)
+	if createdProfile == nil {
+		createdProfile = profile
 	}
+
+	user := s.profileToUser(createdProfile)
 
 	return user, nil
 }
 
-// SearchUsers searches for users by query
-func (s *UserService) SearchUsers(ctx context.Context, query string, limit, offset int) ([]*model.User, int, error) {
-	s.log.Info("Searching users",
-		logger.String("query", query),
-		logger.Int("limit", limit),
-		logger.Int("offset", offset),
-	)
-
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 50 {
-		limit = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	var profiles []*models.Profile
-	var totalCount int
-	var err error
-
-	err = s.dbCircuit.Execute(func() error {
-		profiles, totalCount, err = s.repo.SearchProfiles(ctx, query, limit, offset)
-		return err
-	})
-
-	if err != nil {
-		s.log.Error("Failed to search users",
-			logger.String("query", query),
-			logger.Error(err),
-		)
-		return nil, 0, err
-	}
-
-	// Convert to domain models
-	users := make([]*model.User, 0, len(profiles))
-	for _, profile := range profiles {
-		users = append(users, s.profileToUser(profile))
-	}
-
-	s.log.Info("User search completed",
-		logger.String("query", query),
-		logger.Int("results", len(users)),
-		logger.Int("total_count", totalCount),
-	)
-
-	return users, totalCount, nil
-}
-
-// Helper function to convert Profile model to User domain model
 func (s *UserService) profileToUser(profile *models.Profile) *model.User {
 	return &model.User{
 		ID:           profile.UserID,
 		Username:     profile.Username,
-		DisplayName:  profile.DisplayName,
+		DisplayName:  &profile.DisplayName,
 		FirstName:    profile.FirstName,
 		LastName:     profile.LastName,
 		Bio:          profile.Bio,
 		AvatarURL:    profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
+		LanguageCode: *profile.LanguageCode,
 		Timezone:     profile.Timezone,
 		CountryCode:  profile.CountryCode,
 		IsVerified:   profile.IsVerified,
-		CreatedAt:    profile.CreatedAt,
-		UpdatedAt:    profile.UpdatedAt,
+	}
+}
+
+func toRepoProfile(profile *models.Profile) dbmodels.Profile {
+	if profile == nil {
+		return dbmodels.Profile{}
+	}
+
+	return dbmodels.Profile{
+		UserID:       profile.UserID,
+		Username:     profile.Username,
+		DisplayName:  &profile.DisplayName,
+		FirstName:    profile.FirstName,
+		LastName:     profile.LastName,
+		Bio:          profile.Bio,
+		AvatarURL:    profile.AvatarURL,
+		LanguageCode: *profile.LanguageCode,
+		Timezone:     profile.Timezone,
+		CountryCode:  profile.CountryCode,
+		IsVerified:   profile.IsVerified,
+	}
+}
+
+func fromRepoProfile(profile *dbmodels.Profile) *models.Profile {
+	if profile == nil {
+		return nil
+	}
+
+	return &models.Profile{
+		UserID:       profile.UserID,
+		Username:     profile.Username,
+		DisplayName:  *profile.DisplayName,
+		FirstName:    profile.FirstName,
+		LastName:     profile.LastName,
+		Bio:          profile.Bio,
+		AvatarURL:    profile.AvatarURL,
+		LanguageCode: &profile.LanguageCode,
+		Timezone:     profile.Timezone,
+		CountryCode:  profile.CountryCode,
+		IsVerified:   profile.IsVerified,
 	}
 }

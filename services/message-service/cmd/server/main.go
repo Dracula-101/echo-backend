@@ -23,7 +23,6 @@ import (
 	adapter "shared/pkg/logger/adapter"
 	"shared/pkg/messaging"
 	"shared/pkg/messaging/kafka"
-	"shared/server/common/token"
 	env "shared/server/env"
 	"shared/server/middleware"
 	"shared/server/response"
@@ -129,32 +128,6 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 	return producer, nil
 }
 
-func createTokenService(cfg config.Config, log logger.Logger) *token.JWTTokenService {
-	log.Debug("Creating JWT token service",
-		logger.String("issuer", cfg.Security.JWTIssuer),
-		logger.String("audience", cfg.Security.JWTAudience),
-	)
-	keySet, err := token.NewStaticKeySet([]byte(cfg.Security.JWTSecret))
-	if err != nil {
-		log.Error("Failed to create key set", logger.Error(err))
-		return nil
-	}
-	tokenService, err := token.NewJWTTokenService(token.Config{
-		KeySet:          keySet,
-		Issuer:          cfg.Security.JWTIssuer,
-		Audience:        []string{cfg.Security.JWTAudience},
-		AccessTokenTTL:  15 * time.Minute,
-		RefreshTokenTTL: 7 * 24 * time.Hour,
-		Leeway:          30 * time.Second,
-	})
-	if err != nil {
-		log.Error("Failed to create token service", logger.Error(err))
-		return nil
-	}
-	log.Info("JWT token service created successfully")
-	return tokenService
-}
-
 func setupAPIRoutes(builder *router.Builder, h *handler.MessageHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering message API routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
@@ -169,32 +142,9 @@ func setupAPIRoutes(builder *router.Builder, h *handler.MessageHandler, log logg
 func createRouter(
 	httpHandler *handler.MessageHandler,
 	healthHandler *health.Handler,
-	tokenService *token.JWTTokenService,
 	cfg *config.Config,
 	log logger.Logger,
 ) (*router.Router, error) {
-
-	authMiddleware := middleware.Auth(middleware.AuthConfig{
-		ValidateToken: func(tokenString string) (string, error) {
-			claims, err := tokenService.Validate(context.Background(), tokenString, token.TokenTypeAccess)
-			if err != nil {
-				return "", err
-			}
-			return claims.Subject, nil
-		},
-		OnAuthFailed: func(w http.ResponseWriter, r *http.Request, err error) {
-			log.Warn("Authentication failed",
-				logger.String("path", r.URL.Path),
-				logger.String("method", r.Method),
-				logger.Error(err),
-			)
-			response.UnauthorizedError(r.Context(), r, w, "Authentication required", err)
-		},
-		SkipPaths: map[string]bool{
-			"/health": true,
-			"/ws":     true, // WebSocket has its own auth in the handler
-		},
-	})
 
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", healthHandler.Health).
@@ -208,7 +158,6 @@ func createRouter(
 			router.Middleware(middleware.Timeout(30*time.Second)),
 			router.Middleware(middleware.BodyLimit(10*1024*1024)),
 			router.Middleware(middleware.RequestReceivedLogger(log)),
-			router.Middleware(authMiddleware),
 			router.Middleware(middleware.RateLimit(middleware.RateLimitConfig{
 				RequestsPerWindow: 100,
 				Window:            time.Minute,
@@ -343,8 +292,6 @@ func main() {
 	go hub.Run()
 	log.Info("WebSocket hub started")
 
-	tokenService := createTokenService(*cfg, log)
-
 	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
 	healthMgr.RegisterChecker(healthCheckers.NewDatabaseChecker(dbClient))
 	if cfg.Cache.Enabled && cacheClient != nil {
@@ -357,7 +304,7 @@ func main() {
 	httpHandler := handler.NewMessageHandler(messageService, log)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(httpHandler, healthHandler, tokenService, cfg, log)
+	routerInstance, err := createRouter(httpHandler, healthHandler, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

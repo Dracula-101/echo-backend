@@ -7,10 +7,10 @@ const (
 // Error codes
 const (
 	// User errors
-	ErrCodeUserNotFound       = "USER_NOT_FOUND"
-	ErrCodeUserAlreadyExists  = "USER_ALREADY_EXISTS"
-	ErrCodeInvalidUserID      = "INVALID_USER_ID"
-	ErrCodeInvalidUserData    = "INVALID_USER_DATA"
+	ErrCodeUserNotFound        = "USER_NOT_FOUND"
+	ErrCodeUserAlreadyExists   = "USER_ALREADY_EXISTS"
+	ErrCodeInvalidUserID       = "INVALID_USER_ID"
+	ErrCodeInvalidUserData     = "INVALID_USER_DATA"
 	ErrCodeUsernameUnavailable = "USERNAME_UNAVAILABLE"
 
 	// Profile errors
@@ -19,8 +19,8 @@ const (
 	ErrCodeProfileUpdateFailed = "PROFILE_UPDATE_FAILED"
 
 	// Search errors
-	ErrCodeSearchFailed        = "SEARCH_FAILED"
-	ErrCodeInvalidSearchQuery  = "INVALID_SEARCH_QUERY"
+	ErrCodeSearchFailed       = "SEARCH_FAILED"
+	ErrCodeInvalidSearchQuery = "INVALID_SEARCH_QUERY"
 
 	// Database errors
 	ErrCodeDatabaseError      = "DATABASE_ERROR"

@@ -40,7 +40,7 @@ type BoxDimensions struct {
 const (
 	timestampColumnWidth = 23
 	levelColumnWidth     = 6
-	fileColumnWidth      = 20
+	fileColumnWidth      = 15
 	serviceColumnWidth   = 15
 	methodColumnWidth    = 4
 	statusColumnWidth    = 3
@@ -49,7 +49,7 @@ const (
 	routePathColumnWidth = 25
 
 	minTerminalWidth     = 80
-	defaultTerminalWidth = 200
+	defaultTerminalWidth = 130
 	columnSeparatorWidth = 3
 	boxBorderWidth       = 2
 

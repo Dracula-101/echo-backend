@@ -1,12 +1,12 @@
 package checkers
 
 import (
-	"user-service/internal/health"
 	"context"
 	"database/sql"
 	"fmt"
 	"shared/pkg/database"
 	"time"
+	"user-service/internal/health"
 )
 
 type DatabaseChecker struct {

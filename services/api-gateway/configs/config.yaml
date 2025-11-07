@@ -19,6 +19,19 @@ server:
   tls_cert_file: ${TLS_CERT_FILE}
   tls_key_file: ${TLS_KEY_FILE}
   tls_min_version: 1.2
+  jwt:
+    access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+    refresh_token_ttl: ${JWT_REFRESH_TOKEN_TTL:168h}
+    secret_key: ${JWT_SECRET_KEY}
+    issuer: ${JWT_ISSUER:echo-service}
+    audience: ${JWT_AUDIENCE:api}
+    leeway: ${JWT_LEEWAY:1m}
+    skip_paths:
+      - /api/v1/auth/login
+      - /api/v1/auth/register
+      - /api/v1/health
+      - /api/v1/metrics
+
 
 services:
   auth-service:
@@ -78,6 +91,25 @@ services:
     timeout: 15s
     retry_attempts: 3
 
+  media-service:
+    protocol: http
+    addresses:
+      - ${MEDIA_SERVICE_ADDR:localhost:8084}
+    health_check:
+      enabled: true
+      path: /health 
+      interval: 10s
+      timeout: 5s
+      failure_threshold: 3
+    loadbalancer: roundrobin
+    circuit_breaker:
+      enabled: true
+      threshold: 5
+      timeout: 30s
+      half_open_requests: 1
+    timeout: 15s
+    retry_attempts: 3
+
 router_groups:
   - name: auth_routes
     prefix: /api/v1/auth
@@ -112,6 +144,17 @@ router_groups:
       - POST
       - PUT
       - PATCH
+      - DELETE
+      - OPTIONS
+
+  - name: media_routes
+    prefix: /api/v1/media
+    service: media-service
+    transform: true
+    methods:
+      - GET
+      - POST
+      - PUT
       - DELETE
       - OPTIONS
 
