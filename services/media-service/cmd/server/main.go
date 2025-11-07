@@ -162,8 +162,11 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 func setupRoutes(builder *router.Builder, h *handler.MediaHandler, cfg *config.Config, log logger.Logger) *router.Builder {
 	log.Debug("Registering media routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.With(middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes)).
-			Post("/upload", h.Upload)
+		r.With(middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes))
+		r.Post("/upload", coreMiddleware.ApplyMiddlewares(
+			h.Upload,
+			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
+		))
 		r.Get("/file/get/{file_id}", h.GetFile)
 		r.Post("/file/delete/{file_id}", h.DeleteFile)
 	})
@@ -172,6 +175,7 @@ func setupRoutes(builder *router.Builder, h *handler.MediaHandler, cfg *config.C
 }
 
 func createRouter(h *handler.MediaHandler, healthHandler *health.Handler, cfg *config.Config, log logger.Logger) (*router.Router, error) {
+
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", healthHandler.Health).
 		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {

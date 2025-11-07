@@ -62,12 +62,10 @@ func (c *Chain) Copy() *Chain {
 	return newChain
 }
 
-func ApplyMiddleware(handler http.HandlerFunc, middlewares []mux.MiddlewareFunc) http.HandlerFunc {
+func ApplyMiddlewares(handler http.HandlerFunc, middlewares ...Handler) http.HandlerFunc {
 	var h http.Handler = handler
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		h = middlewares[i](h)
 	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r)
-	}
+	return h.ServeHTTP
 }
