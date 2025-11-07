@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"media-service/api/handler"
+	"media-service/api/middleware"
 	"media-service/internal/config"
 	"media-service/internal/health"
 	"media-service/internal/health/checkers"
@@ -158,18 +159,19 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 	return healthMgr
 }
 
-func setupRoutes(builder *router.Builder, h *handler.MediaHandler, log logger.Logger) *router.Builder {
+func setupRoutes(builder *router.Builder, h *handler.MediaHandler, cfg *config.Config, log logger.Logger) *router.Builder {
 	log.Debug("Registering media routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/upload", h.Upload)
-		r.Get("/files/{file_id}", h.GetFile)
-		r.Delete("/files/{file_id}", h.DeleteFile)
+		r.With(middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes)).
+			Post("/upload", h.Upload)
+		r.Get("/file/get/{file_id}", h.GetFile)
+		r.Post("/file/delete/{file_id}", h.DeleteFile)
 	})
 	log.Debug("Media routes registered successfully")
 	return builder
 }
 
-func createRouter(h *handler.MediaHandler, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.MediaHandler, healthHandler *health.Handler, cfg *config.Config, log logger.Logger) (*router.Router, error) {
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", healthHandler.Health).
 		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -181,12 +183,14 @@ func createRouter(h *handler.MediaHandler, healthHandler *health.Handler, log lo
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptUserId()),
+			// BodyLimit removed - FileOnlyMultipart middleware handles size validation for file uploads
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
 			router.Middleware(coreMiddleware.RequestCompletedLogger(log)),
 		)
 
+	// Health endpoints without authentication
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/live", healthHandler.Liveness)
 		r.Get("/ready", healthHandler.Readiness)
@@ -194,7 +198,7 @@ func createRouter(h *handler.MediaHandler, healthHandler *health.Handler, log lo
 		r.Get("/health/readiness", healthHandler.Readiness)
 	})
 
-	builder = setupRoutes(builder, h, log)
+	builder = setupRoutes(builder, h, cfg, log)
 	routerInstance := builder.Build()
 	return routerInstance, nil
 }
@@ -310,7 +314,7 @@ func main() {
 	healthHandler := health.NewHandler(healthMgr)
 
 	// Create router
-	routerInstance, err := createRouter(mediaHandler, healthHandler, log)
+	routerInstance, err := createRouter(mediaHandler, healthHandler, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

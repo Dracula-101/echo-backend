@@ -24,12 +24,12 @@ import (
 )
 
 type MediaService struct {
-	fileRepo     *repo.FileRepository
-	cache        cache.Cache
-	cfg          *config.Config
-	log          logger.Logger
-	dbCircuit    *circuitbreaker.CircuitBreaker
-	retryer      *retry.Retryer
+	fileRepo        *repo.FileRepository
+	cache           cache.Cache
+	cfg             *config.Config
+	log             logger.Logger
+	dbCircuit       *circuitbreaker.CircuitBreaker
+	retryer         *retry.Retryer
 	storageProvider StorageProvider
 }
 
@@ -242,6 +242,8 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 	// Determine file category
 	fileCategory := determineFileCategory(input.ContentType)
 
+	visibility := normalizeVisibility(input.Visibility)
+
 	// Create database record
 	var fileID string
 	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
@@ -262,7 +264,7 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 				StorageRegion:    s.cfg.Storage.Region,
 				CDNURL:           s.buildCDNURL(storageKey),
 				ContentHash:      contentHash,
-				Visibility:       input.Visibility,
+				Visibility:       string(visibility),
 				DeviceID:         input.DeviceID,
 				IPAddress:        input.IPAddress,
 			})
@@ -324,7 +326,7 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 	}
 
 	// Check access permissions
-	if file.Visibility == "private" && file.UploaderUserID != input.UserID {
+	if file.Visibility == model.VisibilityPrivate && file.UploaderUserID != input.UserID {
 		s.log.Warn("Access denied to file",
 			logger.String("file_id", input.FileID),
 			logger.String("user_id", input.UserID),
@@ -344,7 +346,7 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 		CDNURL:           file.CDNURL,
 		ThumbnailURL:     file.ThumbnailURL,
 		ProcessingStatus: file.ProcessingStatus,
-		Visibility:       file.Visibility,
+		Visibility:       file.Visibility.String(),
 		DownloadCount:    file.DownloadCount,
 		ViewCount:        file.ViewCount,
 		CreatedAt:        file.CreatedAt,
@@ -431,5 +433,24 @@ func determineFileCategory(contentType string) string {
 		return "document"
 	default:
 		return "other"
+	}
+}
+
+type Visibility string
+
+const (
+	VisibilityPrivate  Visibility = "private"
+	VisibilityPublic   Visibility = "public"
+	VisibilityUnlisted Visibility = "unlisted"
+)
+
+func normalizeVisibility(raw string) Visibility {
+	switch Visibility(strings.TrimSpace(strings.ToLower(raw))) {
+	case VisibilityPublic:
+		return VisibilityPublic
+	case VisibilityUnlisted:
+		return VisibilityUnlisted
+	default:
+		return VisibilityPrivate
 	}
 }

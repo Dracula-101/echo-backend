@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -16,6 +15,14 @@ import (
 // Upload handles file upload
 func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	handler := request.NewHandler(r, w)
+
+	// Clean up multipart form at the end of request handling
+	defer func() {
+		if r.MultipartForm != nil {
+			r.MultipartForm.RemoveAll()
+		}
+	}()
 
 	userID, ok := request.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
@@ -23,13 +30,8 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(h.cfg.Security.MaxBodySize); err != nil {
-		h.log.Error("Failed to parse multipart form", logger.Error(err))
-		response.BadRequestError(ctx, r, w, "Invalid form data", err)
-		return
-	}
-
-	file, fileHeader, err := r.FormFile("file")
+	// MultipartForm is already parsed and validated by middleware
+	file, fileHeader, err := handler.GetFormFile("file")
 	if err != nil {
 		h.log.Error("Failed to get file from form", logger.Error(err))
 		response.BadRequestError(ctx, r, w, "File is required", err)
@@ -37,18 +39,8 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	visibility := r.FormValue("visibility")
-	if visibility == "" {
-		visibility = "private"
-	}
-
-	// Get metadata if provided
+	visibility := "private"
 	var metadata map[string]interface{}
-	if metadataStr := r.FormValue("metadata"); metadataStr != "" {
-		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
-			h.log.Warn("Invalid metadata format", logger.Error(err))
-		}
-	}
 
 	// Get request metadata
 	deviceID := request.GetDeviceInfo(r).ID

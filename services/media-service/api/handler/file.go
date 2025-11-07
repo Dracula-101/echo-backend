@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -12,15 +11,12 @@ import (
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
-
-	"github.com/gorilla/mux"
 )
 
 // GetFile handles getting a file's metadata
 func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	vars := mux.Vars(r)
-	fileID := vars["file_id"]
+	fileID := request.PathParam(r, "file_id")
 
 	if fileID == "" {
 		response.BadRequestError(ctx, r, w, "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
@@ -31,9 +27,10 @@ func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	accessToken := request.GetAuthToken(r)
 
 	output, err := h.service.GetFile(ctx, models.GetFileInput{
-		FileID:      fileID,
-		UserID:      userID,
-		AccessToken: accessToken,
+		FileID:         fileID,
+		UserID:         userID,
+		AccessToken:    accessToken,
+		AllowedFormats: h.cfg.Features.ImageProcessing.AllowedFormats,
 	})
 
 	if err != nil {
@@ -66,9 +63,9 @@ func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 // DeleteFile handles file deletion
 func (h *MediaHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	vars := mux.Vars(r)
-	fileID := vars["file_id"]
+	handler := request.NewHandler(r, w).AllowEmptyBody()
 
+	fileID := request.PathParam(r, "file_id")
 	if fileID == "" {
 		response.BadRequestError(ctx, r, w, "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
 		return
@@ -80,11 +77,14 @@ func (h *MediaHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request body for permanent deletion flag
 	var req dto.DeleteFileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Default to soft delete if no body provided
-		req.Permanent = false
+	handler = handler.WithMaxBodySize(h.cfg.Security.MaxBodySize).WithAllowUnknown()
+	if ok := handler.ParseValidateAndSend(&req); !ok {
+		h.log.Error("Failed to parse delete file request body",
+			logger.String("file_id", fileID),
+			logger.String("user_id", userID),
+		)
+		return
 	}
 
 	err := h.service.DeleteFile(ctx, models.DeleteFileInput{

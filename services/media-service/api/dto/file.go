@@ -1,6 +1,11 @@
 package dto
 
-import "time"
+import (
+	"shared/server/request"
+	"time"
+
+	"github.com/go-playground/validator/v10"
+)
 
 // GetFileResponse represents the response for getting a file
 type GetFileResponse struct {
@@ -18,7 +23,6 @@ type GetFileResponse struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
-// ListFilesRequest represents the request to list files
 type ListFilesRequest struct {
 	FileCategory string `json:"file_category,omitempty"`
 	Limit        int    `json:"limit,omitempty" validate:"omitempty,min=1,max=100"`
@@ -27,14 +31,12 @@ type ListFilesRequest struct {
 	SortOrder    string `json:"sort_order,omitempty" validate:"omitempty,oneof=asc desc"`
 }
 
-// ListFilesResponse represents the response for listing files
 type ListFilesResponse struct {
 	Files      []FileItem `json:"files"`
 	TotalCount int        `json:"total_count"`
 	HasMore    bool       `json:"has_more"`
 }
 
-// FileItem represents a file in a list
 type FileItem struct {
 	FileID       string    `json:"file_id"`
 	FileName     string    `json:"file_name"`
@@ -44,12 +46,23 @@ type FileItem struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// DeleteFileRequest represents the request to delete a file
 type DeleteFileRequest struct {
 	Permanent bool `json:"permanent,omitempty"`
 }
 
-// DeleteFileResponse represents the response after deleting a file
+func NewDeleteFileRequest() *DeleteFileRequest {
+	return &DeleteFileRequest{}
+}
+
+func (r *DeleteFileRequest) GetValue() interface{} {
+	return r
+}
+
+func (r *DeleteFileRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
+	var errors []request.ValidationErrorDetail
+	return errors, nil
+}
+
 type DeleteFileResponse struct {
 	Message string `json:"message"`
 	FileID  string `json:"file_id"`

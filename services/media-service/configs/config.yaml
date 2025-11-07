@@ -72,7 +72,7 @@ security:
   allowed_headers: ${SECURITY_ALLOWED_HEADERS:Content-Type,Authorization,X-Request-ID}
   allow_credentials: ${SECURITY_ALLOW_CREDENTIALS:true}
   max_age: ${SECURITY_MAX_AGE:3600}
-  max_body_size: ${SECURITY_MAX_BODY_SIZE:104857600} # 100MB
+  max_body_size: ${SECURITY_MAX_BODY_SIZE:1000000} # 100MB
   security_headers:
     x_frame_options: ${SECURITY_X_FRAME_OPTIONS:DENY}
     x_content_type_options: ${SECURITY_X_CONTENT_TYPE_OPTIONS:nosniff}
@@ -135,10 +135,10 @@ features:
     max_height: ${FEATURE_IMAGE_MAX_HEIGHT:4096}
     quality: ${FEATURE_IMAGE_QUALITY:85}
     allowed_formats:
-      - jpeg
-      - png
-      - gif
-      - webp
+      - image/jpeg
+      - image/png
+      - image/webp
+      - image/gif
     auto_orient: ${FEATURE_IMAGE_AUTO_ORIENT:true}
     strip_metadata: ${FEATURE_IMAGE_STRIP_METADATA:false}
   video_processing:

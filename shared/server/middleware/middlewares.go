@@ -309,6 +309,27 @@ func BodyLimit(maxBytes int64) Handler {
 	}
 }
 
+// PathBasedBodyLimit applies different body size limits based on request path
+// pathLimits maps request paths to their specific limits
+// defaultLimit is used for paths not in pathLimits
+func PathBasedBodyLimit(defaultLimit int64, pathLimits map[string]int64) Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			limit := defaultLimit
+
+			// Check if there's a specific limit for this path
+			if pathLimits != nil {
+				if pathLimit, exists := pathLimits[r.URL.Path]; exists {
+					limit = pathLimit
+				}
+			}
+
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func RealIP(trustedProxies []string) Handler {
 	trustedMap := make(map[string]bool)
 	for _, proxy := range trustedProxies {
@@ -894,22 +915,4 @@ func GetAPIVersion(ctx context.Context) string {
 		return version
 	}
 	return "v1"
-}
-
-// ExtractUserIDFromHeader extracts the user ID from X-User-ID header
-// (set by the Auth middleware) and adds it to the request context.
-// This is useful for services behind a proxy/gateway that receive
-// authenticated requests with the user ID in a header.
-func ExtractUserIDFromHeader() Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID := r.Header.Get("X-User-ID")
-			if userID != "" {
-				ctx := SetUserID(r.Context(), userID)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }

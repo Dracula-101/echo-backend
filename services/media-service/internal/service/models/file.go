@@ -7,52 +7,53 @@ import (
 
 // UploadFileInput represents input for uploading a file
 type UploadFileInput struct {
-	UserID           string
-	FileReader       io.Reader
-	FileName         string
-	FileSize         int64
-	ContentType      string
-	Visibility       string
-	DeviceID         string
-	IPAddress        string
-	UserAgent        string
-	Metadata         map[string]interface{}
+	UserID      string
+	FileReader  io.Reader
+	FileName    string
+	FileSize    int64
+	ContentType string
+	Visibility  string
+	DeviceID    string
+	IPAddress   string
+	UserAgent   string
+	Metadata    map[string]interface{}
 }
 
 // UploadFileOutput represents output from file upload
 type UploadFileOutput struct {
-	FileID          string
-	FileName        string
-	FileSize        int64
-	FileType        string
-	StorageURL      string
-	CDNURL          string
+	FileID           string
+	FileName         string
+	FileSize         int64
+	FileType         string
+	StorageURL       string
+	CDNURL           string
 	ProcessingStatus string
-	AccessToken     string
-	UploadedAt      time.Time
+	AccessToken      string
+	UploadedAt       time.Time
 }
 
 // GetFileInput represents input for getting a file
 type GetFileInput struct {
-	FileID      string
-	UserID      string
-	AccessToken string
+	FileID         string
+	UserID         string
+	AccessToken    string
+	AllowedFormats []string
 }
 
 // GetFileOutput represents output from getting a file
 type GetFileOutput struct {
-	FileID          string
-	FileName        string
-	FileSize        int64
-	FileType        string
-	StorageURL      string
-	CDNURL          string
-	ThumbnailURL    string
+	FileID           string
+	FileName         string
+	FileSize         int64
+	FileType         string
+	StorageURL       string
+	CDNURL           string
+	ThumbnailURL     string
 	ProcessingStatus string
-	Visibility      string
-	DownloadCount   int
-	ViewCount       int
-	CreatedAt       time.Time
+	Visibility       string
+	DownloadCount    int
+	ViewCount        int
+	CreatedAt        time.Time
 }
 
 // ListFilesInput represents input for listing files
@@ -84,9 +85,9 @@ type FileItem struct {
 
 // DeleteFileInput represents input for deleting a file
 type DeleteFileInput struct {
-	FileID      string
-	UserID      string
-	Permanent   bool
+	FileID    string
+	UserID    string
+	Permanent bool
 }
 
 // CreateAlbumInput represents input for creating an album
@@ -100,10 +101,10 @@ type CreateAlbumInput struct {
 
 // CreateAlbumOutput represents output from creating an album
 type CreateAlbumOutput struct {
-	AlbumID    string
-	Title      string
-	AlbumType  string
-	CreatedAt  time.Time
+	AlbumID   string
+	Title     string
+	AlbumType string
+	CreatedAt time.Time
 }
 
 // AddFileToAlbumInput represents input for adding a file to an album
@@ -116,12 +117,12 @@ type AddFileToAlbumInput struct {
 
 // CreateShareInput represents input for creating a share
 type CreateShareInput struct {
-	FileID      string
-	UserID      string
-	AccessType  string
-	ExpiresIn   *time.Duration
-	MaxViews    *int
-	Password    string
+	FileID     string
+	UserID     string
+	AccessType string
+	ExpiresIn  *time.Duration
+	MaxViews   *int
+	Password   string
 }
 
 // CreateShareOutput represents output from creating a share

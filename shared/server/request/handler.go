@@ -2,8 +2,10 @@ package request
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"shared/server/env"
 	"shared/server/headers"
@@ -33,6 +35,11 @@ func NewHandler(req *http.Request, writer http.ResponseWriter) *RequestHandler {
 	}
 }
 
+func (h *RequestHandler) AllowEmptyBody() *RequestHandler {
+	h.config.AllowEmptyBody = true
+	return h
+}
+
 func (h *RequestHandler) WithConfig(config *Config) *RequestHandler {
 	h.config = config
 	return h
@@ -59,12 +66,17 @@ type FieldErrorDetail struct {
 	Message string
 }
 
+var errEmptyBody = errors.New("request body is empty")
+
 func (h *RequestHandler) ParseAndValidate(req Validator) ([]response.FieldError, error) {
 	if err := h.validateRequest(); err != nil {
 		return nil, err
 	}
 
 	if err := h.parseJSON(req.GetValue()); err != nil {
+		if errors.Is(err, errEmptyBody) && h.config.AllowEmptyBody {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -133,6 +145,21 @@ func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 	return true
 }
 
+func (h *RequestHandler) ParseMultipartForm(maxMemory int64) error {
+	if err := h.request.ParseMultipartForm(maxMemory); err != nil {
+		return fmt.Errorf("failed to parse multipart form: %v", err)
+	}
+	return nil
+}
+
+func (h *RequestHandler) GetFormFile(key string) (multipart.File, *multipart.FileHeader, error) {
+	file, fileHeader, err := h.request.FormFile(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get form file: %v", err)
+	}
+	return file, fileHeader, nil
+}
+
 func (h *RequestHandler) validateRequest() error {
 	if h.config.RequireContentType {
 		contentType := h.request.Header.Get(headers.ContentType)
@@ -150,7 +177,7 @@ func (h *RequestHandler) validateRequest() error {
 
 func (h *RequestHandler) parseJSON(v interface{}) error {
 	if h.request.Body == nil {
-		return fmt.Errorf("request body is empty")
+		return errEmptyBody
 	}
 
 	h.request.Body = http.MaxBytesReader(nil, h.request.Body, h.config.MaxBodySize)
@@ -162,7 +189,7 @@ func (h *RequestHandler) parseJSON(v interface{}) error {
 
 	if err := decoder.Decode(v); err != nil {
 		if err == io.EOF {
-			return fmt.Errorf("request body is empty")
+			return errEmptyBody
 		}
 		if jsonErr, ok := err.(*json.SyntaxError); ok {
 			return fmt.Errorf("invalid JSON at position %d", jsonErr.Offset)
