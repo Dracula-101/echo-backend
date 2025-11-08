@@ -16,6 +16,7 @@ import (
 	"media-service/internal/model"
 	"media-service/internal/repo"
 	"media-service/internal/service/models"
+	dbModels "shared/pkg/database/postgres/models"
 
 	"shared/pkg/cache"
 	"shared/pkg/circuitbreaker"
@@ -24,7 +25,7 @@ import (
 )
 
 type MediaService struct {
-	fileRepo        *repo.FileRepository
+	repo            *repo.FileRepository
 	cache           cache.Cache
 	cfg             *config.Config
 	log             logger.Logger
@@ -130,7 +131,7 @@ func (b *MediaServiceBuilder) Build() *MediaService {
 	})
 
 	return &MediaService{
-		fileRepo:        b.fileRepo,
+		repo:            b.fileRepo,
 		cache:           b.cache,
 		cfg:             b.cfg,
 		log:             b.log,
@@ -155,14 +156,14 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 			logger.Int64("file_size", input.FileSize),
 			logger.Int64("max_size", s.cfg.Storage.MaxFileSize),
 		)
-		return nil, fmt.Errorf("file size exceeds maximum allowed: %w", fmt.Errorf(mediaErrors.CodeFileTooBarge))
+		return nil, fmt.Errorf("file size exceeds maximum allowed: %w", fmt.Errorf(mediaErrors.CodeFileTooLarge))
 	}
 
 	// Check storage quota
 	var storageUsed int64
 	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			usage, err := s.fileRepo.GetUserStorageUsage(ctx, input.UserID)
+			usage, err := s.repo.GetUserStorageUsage(ctx, input.UserID)
 			if err != nil {
 				return err
 			}
@@ -203,7 +204,7 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 		var existingFile *model.File
 		err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 			return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-				file, err := s.fileRepo.GetFileByContentHash(ctx, contentHash)
+				file, err := s.repo.GetFileByContentHash(ctx, contentHash)
 				existingFile = file
 				return err
 			})
@@ -242,31 +243,51 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 	// Determine file category
 	fileCategory := determineFileCategory(input.ContentType)
 
-	visibility := normalizeVisibility(input.Visibility)
-
 	// Create database record
 	var fileID string
 	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			id, err := s.fileRepo.CreateFile(ctx, repo.CreateFileParams{
-				UploaderUserID:   input.UserID,
-				FileName:         input.FileName,
-				OriginalFileName: input.FileName,
-				FileType:         input.ContentType,
-				MimeType:         input.ContentType,
-				FileCategory:     fileCategory,
-				FileExtension:    strings.TrimPrefix(fileExt, "."),
-				FileSizeBytes:    input.FileSize,
-				StorageProvider:  s.cfg.Storage.Provider,
-				StorageBucket:    s.cfg.Storage.Bucket,
-				StorageKey:       storageKey,
-				StorageURL:       storageURL,
-				StorageRegion:    s.cfg.Storage.Region,
-				CDNURL:           s.buildCDNURL(storageKey),
-				ContentHash:      contentHash,
-				Visibility:       string(visibility),
-				DeviceID:         input.DeviceID,
-				IPAddress:        input.IPAddress,
+			var deviceIDPtr *string
+			if input.DeviceID != "" {
+				deviceID := input.DeviceID
+				deviceIDPtr = &deviceID
+			}
+
+			storageRegion := strings.TrimSpace(s.cfg.Storage.Region)
+			var storageRegionPtr *string
+			if storageRegion != "" {
+				storageRegionPtr = &storageRegion
+			}
+
+			// Helper to convert string to pointer
+			strPtr := func(s string) *string {
+				if s == "" {
+					return nil
+				}
+				return &s
+			}
+
+			// Build CDN URL
+			cdnURL := s.buildCDNURL(storageKey)
+			id, err := s.repo.CreateFile(ctx, dbModels.MediaFile{
+				UploaderUserID:       input.UserID,
+				FileName:             input.FileName,
+				OriginalFileName:     strPtr(input.FileName),
+				FileType:             input.ContentType,
+				MimeType:             input.ContentType,
+				FileCategory:         strPtr(fileCategory),
+				FileExtension:        strPtr(strings.TrimPrefix(fileExt, ".")),
+				FileSizeBytes:        input.FileSize,
+				StorageProvider:      strPtr(s.cfg.Storage.Provider),
+				StorageBucket:        strPtr(s.cfg.Storage.Bucket),
+				StorageKey:           storageKey,
+				StorageURL:           storageURL,
+				StorageRegion:        storageRegionPtr,
+				CDNURL:               strPtr(cdnURL),
+				ContentHash:          strPtr(contentHash),
+				Visibility:           dbModels.MediaVisibility(input.Visibility),
+				UploadedFromDeviceID: deviceIDPtr,
+				UploadedFromIP:       strPtr(input.IPAddress),
 			})
 			fileID = id
 			return err
@@ -286,7 +307,7 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 	)
 
 	// Log access
-	_ = s.fileRepo.CreateAccessLog(ctx, fileID, input.UserID, "upload", input.IPAddress, input.UserAgent, input.DeviceID, true, input.FileSize)
+	_ = s.repo.CreateAccessLog(ctx, fileID, input.UserID, "upload", input.IPAddress, input.UserAgent, input.DeviceID, true, input.FileSize)
 
 	return &models.UploadFileOutput{
 		FileID:           fileID,
@@ -310,11 +331,34 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 	var file *model.File
 	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			f, err := s.fileRepo.GetFileByID(ctx, input.FileID)
-			file = f
+			fileParam, err := s.repo.GetFileByID(ctx, input.FileID)
+			file = &model.File{
+				ID:               fileParam.ID,
+				UploaderUserID:   fileParam.UploaderUserID,
+				FileName:         fileParam.FileName,
+				FileSizeBytes:    fileParam.FileSizeBytes,
+				FileType:         fileParam.FileType,
+				StorageURL:       fileParam.StorageURL,
+				CDNURL:           *fileParam.CDNURL,
+				ThumbnailURL:     *fileParam.ThumbnailURL,
+				ProcessingStatus: fileParam.ProcessingStatus.String(),
+				Visibility:       model.VisibilityType(fileParam.Visibility),
+				DownloadCount:    fileParam.DownloadCount,
+				ViewCount:        fileParam.ViewCount,
+				CreatedAt:        fileParam.CreatedAt,
+			}
 			return err
 		})
 	})
+
+	if err != nil {
+		s.log.Error("Failed to get file", logger.Error(err))
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+
+	if file == nil {
+		return nil, fmt.Errorf("file not found: %w", fmt.Errorf(mediaErrors.CodeFileNotFound))
+	}
 
 	if err != nil {
 		s.log.Error("Failed to get file", logger.Error(err))
@@ -335,7 +379,7 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 	}
 
 	// Increment view count
-	_ = s.fileRepo.IncrementViewCount(ctx, input.FileID)
+	_ = s.repo.IncrementViewCount(ctx, input.FileID)
 
 	return &models.GetFileOutput{
 		FileID:           file.ID,
@@ -361,12 +405,26 @@ func (s *MediaService) DeleteFile(ctx context.Context, input models.DeleteFileIn
 		logger.Bool("permanent", input.Permanent),
 	)
 
-	// Get file to verify ownership
 	var file *model.File
+	// Get file to verify ownership
 	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			f, err := s.fileRepo.GetFileByID(ctx, input.FileID)
-			file = f
+			f, err := s.repo.GetFileByID(ctx, input.FileID)
+			file = &model.File{
+				ID:               f.ID,
+				UploaderUserID:   f.UploaderUserID,
+				FileName:         f.FileName,
+				FileSizeBytes:    f.FileSizeBytes,
+				FileType:         f.FileType,
+				StorageURL:       f.StorageURL,
+				CDNURL:           *f.CDNURL,
+				ThumbnailURL:     *f.ThumbnailURL,
+				ProcessingStatus: f.ProcessingStatus.String(),
+				Visibility:       model.VisibilityType(f.Visibility),
+				DownloadCount:    f.DownloadCount,
+				ViewCount:        f.ViewCount,
+				CreatedAt:        f.CreatedAt,
+			}
 			return err
 		})
 	})
@@ -389,14 +447,14 @@ func (s *MediaService) DeleteFile(ctx context.Context, input models.DeleteFileIn
 		// Hard delete from database
 		err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 			return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-				return s.fileRepo.HardDeleteFile(ctx, input.FileID)
+				return s.repo.HardDeleteFile(ctx, input.FileID)
 			})
 		})
 	} else {
 		// Soft delete
 		err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
 			return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-				return s.fileRepo.SoftDeleteFile(ctx, input.FileID)
+				return s.repo.SoftDeleteFile(ctx, input.FileID)
 			})
 		})
 	}
@@ -433,24 +491,5 @@ func determineFileCategory(contentType string) string {
 		return "document"
 	default:
 		return "other"
-	}
-}
-
-type Visibility string
-
-const (
-	VisibilityPrivate  Visibility = "private"
-	VisibilityPublic   Visibility = "public"
-	VisibilityUnlisted Visibility = "unlisted"
-)
-
-func normalizeVisibility(raw string) Visibility {
-	switch Visibility(strings.TrimSpace(strings.ToLower(raw))) {
-	case VisibilityPublic:
-		return VisibilityPublic
-	case VisibilityUnlisted:
-		return VisibilityUnlisted
-	default:
-		return VisibilityPrivate
 	}
 }

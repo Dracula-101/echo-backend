@@ -11,17 +11,17 @@ import (
 )
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	requestID := request.GetRequestID(r)
-	correlationID := request.GetCorrelationID(r)
+	handler := request.NewHandler(r, w)
+	requestID := handler.GetRequestID()
+	correlationID := handler.GetCorrelationID()
 
 	h.log.Info("Registration request received",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("request_id", requestID),
 		logger.String("correlation_id", correlationID),
-		logger.String("client_ip", request.GetClientIP(r)),
+		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	handler := request.NewHandler(r, w)
 	req := dto.NewRegisterRequest()
 	if ok := handler.ParseValidateAndSend(req); !ok {
 		h.log.Warn("Registration request validation failed",
@@ -31,7 +31,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientIp := request.GetClientIP(r)
+	clientIp := handler.GetClientIP()
 
 	h.log.Debug("Checking if email is already registered",
 		logger.String("service", authErrors.ServiceName),
@@ -66,7 +66,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		PhoneNumber:      req.PhoneNumber,
 		PhoneCountryCode: req.PhoneCountryCode,
 		IPAddress:        clientIp,
-		UserAgent:        request.GetUserAgent(r),
+		UserAgent:        handler.GetUserAgent(),
 		AcceptTerms:      req.AcceptTerms,
 	})
 	if authErr != nil {

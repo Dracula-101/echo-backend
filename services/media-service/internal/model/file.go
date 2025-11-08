@@ -76,7 +76,6 @@ func (v VisibilityType) String() string {
 	return string(v)
 }
 
-// Album represents a collection of media files
 type Album struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`
@@ -90,7 +89,6 @@ type Album struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// Share represents a file share
 type Share struct {
 	ID               string     `json:"id"`
 	FileID           string     `json:"file_id"`

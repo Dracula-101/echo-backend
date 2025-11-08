@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -13,22 +12,18 @@ const (
 	DefaultMaxBodySize = 1 << 20 // 1MB
 )
 
-var defaultValidator = validator.New()
-
 // ParseJSON parses JSON body from request
-func ParseJSON(r *http.Request, v interface{}) error {
-	return ParseJSONWithMaxSize(r, v, DefaultMaxBodySize)
+func (h *RequestHandler) ParseJSON(v interface{}) error {
+	return h.ParseJSONWithMaxSize(v, DefaultMaxBodySize)
 }
 
 // ParseJSONWithMaxSize parses JSON body with custom max size
-func ParseJSONWithMaxSize(r *http.Request, v interface{}, maxSize int64) error {
-	if r.Body == nil {
+func (h *RequestHandler) ParseJSONWithMaxSize(v interface{}, maxSize int64) error {
+	if h.request.Body == nil {
 		return fmt.Errorf("request body is empty")
 	}
 
-	r.Body = http.MaxBytesReader(nil, r.Body, maxSize)
-
-	decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(h.request.Body)
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(v); err != nil {
@@ -52,13 +47,12 @@ func ParseJSONWithMaxSize(r *http.Request, v interface{}, maxSize int64) error {
 }
 
 // ParseJSONAllowUnknown parses JSON body allowing unknown fields
-func ParseJSONAllowUnknown(r *http.Request, v interface{}) error {
-	if r.Body == nil {
+func (h *RequestHandler) ParseJSONAllowUnknown(v interface{}) error {
+	if h.request.Body == nil {
 		return fmt.Errorf("request body is empty")
 	}
 
-	r.Body = http.MaxBytesReader(nil, r.Body, DefaultMaxBodySize)
-	decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(h.request.Body)
 
 	if err := decoder.Decode(v); err != nil {
 		if err == io.EOF {
@@ -70,12 +64,12 @@ func ParseJSONAllowUnknown(r *http.Request, v interface{}) error {
 	return nil
 }
 
-// Validate validates a struct using the default validator
-func Validate(v interface{}) error {
-	return defaultValidator.Struct(v)
+// Validate validates a struct using the handler's validator
+func (h *RequestHandler) Validate(v interface{}) error {
+	return h.validator.Struct(v)
 }
 
 // ValidateWithValidator validates a struct using a custom validator
-func ValidateWithValidator(v interface{}, validate *validator.Validate) error {
+func (h *RequestHandler) ValidateWithValidator(v interface{}, validate *validator.Validate) error {
 	return validate.Struct(v)
 }

@@ -16,7 +16,8 @@ import (
 // GetFile handles getting a file's metadata
 func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	fileID := request.PathParam(r, "file_id")
+	handler := request.NewHandler(r, w)
+	fileID := handler.PathParam("file_id")
 
 	if fileID == "" {
 		response.BadRequestError(ctx, r, w, "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
@@ -24,7 +25,7 @@ func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID, _ := request.GetUserIDFromContext(ctx)
-	accessToken := request.GetAuthToken(r)
+	accessToken := handler.GetAuthToken()
 
 	output, err := h.service.GetFile(ctx, models.GetFileInput{
 		FileID:         fileID,
@@ -65,7 +66,7 @@ func (h *MediaHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handler := request.NewHandler(r, w).AllowEmptyBody()
 
-	fileID := request.PathParam(r, "file_id")
+	fileID := handler.PathParam("file_id")
 	if fileID == "" {
 		response.BadRequestError(ctx, r, w, "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
 		return

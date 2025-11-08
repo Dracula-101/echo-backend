@@ -125,17 +125,17 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	requestID := request.GetRequestID(r)
-	correlationID := request.GetCorrelationID(r)
+	handler := request.NewHandler(r, w)
+	requestID := handler.GetRequestID()
+	correlationID := handler.GetCorrelationID()
 
 	h.log.Info("Login request received",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("request_id", requestID),
 		logger.String("correlation_id", correlationID),
-		logger.String("client_ip", request.GetClientIP(r)),
+		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	handler := request.NewHandler(r, w)
 	loginRequest := dto.NewLoginRequest()
 	if !handler.ParseValidateAndSend(loginRequest) {
 		h.log.Warn("Login request validation failed",
@@ -145,10 +145,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deviceInfo := request.GetDeviceInfo(r)
-	browserInfo := request.GetBrowserInfo(r)
-	userAgent := request.GetUserAgent(r)
-	clientIP := request.GetClientIP(r)
+	deviceInfo := handler.GetDeviceInfo()
+	browserInfo := handler.GetBrowserInfo()
+	userAgent := handler.GetUserAgent()
+	clientIP := handler.GetClientIP()
 
 	h.log.Debug("Extracting request metadata",
 		logger.String("service", authErrors.ServiceName),
@@ -218,7 +218,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			RefreshToken:    userResult.Session.RefreshToken,
 			Device:          deviceInfo,
 			Browser:         browserInfo,
-			UserAgent:       request.GetUserAgent(r),
+			UserAgent:       userAgent,
 			IP:              *locationInfo,
 			Latitude:        locationInfo.Latitude,
 			Longitude:       locationInfo.Longitude,
@@ -233,8 +233,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				return dbModels.SessionTypeWeb
 			}(),
 			Metadata: map[string]interface{}{
-				"request_id":     request.GetRequestID(r),
-				"correlation_id": request.GetCorrelationID(r),
+				"request_id":     requestID,
+				"correlation_id": correlationID,
 			},
 		})
 		if err != nil {

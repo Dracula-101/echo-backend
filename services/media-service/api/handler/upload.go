@@ -17,7 +17,6 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handler := request.NewHandler(r, w)
 
-	// Clean up multipart form at the end of request handling
 	defer func() {
 		if r.MultipartForm != nil {
 			r.MultipartForm.RemoveAll()
@@ -30,7 +29,6 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// MultipartForm is already parsed and validated by middleware
 	file, fileHeader, err := handler.GetFormFile("file")
 	if err != nil {
 		h.log.Error("Failed to get file from form", logger.Error(err))
@@ -43,8 +41,8 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	var metadata map[string]interface{}
 
 	// Get request metadata
-	deviceID := request.GetDeviceInfo(r).ID
-	ipAddress := request.GetClientIP(r)
+	deviceID := handler.GetDeviceInfo().ID
+	ipAddress := handler.GetClientIP()
 	if ipAddress == "" {
 		ipAddress = r.RemoteAddr
 	}

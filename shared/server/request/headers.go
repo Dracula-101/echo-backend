@@ -1,19 +1,18 @@
 package request
 
 import (
-	"net/http"
 	sContext "shared/server/context"
 	"shared/server/headers"
 	"strings"
 )
 
 // GetRequestID extracts request ID from headers or context
-func GetRequestID(r *http.Request) string {
-	if reqID := r.Header.Get(headers.XRequestID); reqID != "" {
+func (h *RequestHandler) GetRequestID() string {
+	if reqID := h.request.Header.Get(headers.XRequestID); reqID != "" {
 		return reqID
 	}
 
-	if reqID := r.Context().Value(sContext.RequestIDKey); reqID != nil {
+	if reqID := h.request.Context().Value(sContext.RequestIDKey); reqID != nil {
 		if id, ok := reqID.(string); ok {
 			return id
 		}
@@ -23,12 +22,12 @@ func GetRequestID(r *http.Request) string {
 }
 
 // GetCorrelationID extracts correlation ID from headers or context
-func GetCorrelationID(r *http.Request) string {
-	if corrID := r.Header.Get(headers.XCorrelationID); corrID != "" {
+func (h *RequestHandler) GetCorrelationID() string {
+	if corrID := h.request.Header.Get(headers.XCorrelationID); corrID != "" {
 		return corrID
 	}
 
-	if corrID := r.Context().Value(sContext.CorrelationIDKey); corrID != nil {
+	if corrID := h.request.Context().Value(sContext.CorrelationIDKey); corrID != nil {
 		if id, ok := corrID.(string); ok {
 			return id
 		}
@@ -38,8 +37,8 @@ func GetCorrelationID(r *http.Request) string {
 }
 
 // GetAuthToken extracts bearer token from Authorization header
-func GetAuthToken(r *http.Request) string {
-	auth := r.Header.Get(headers.Authorization)
+func (h *RequestHandler) GetAuthToken() string {
+	auth := h.request.Header.Get(headers.Authorization)
 	if auth == "" {
 		return ""
 	}
@@ -52,14 +51,19 @@ func GetAuthToken(r *http.Request) string {
 	return parts[1]
 }
 
+// GetBearerToken extracts bearer token from Authorization header (alias)
+func (h *RequestHandler) GetBearerToken() string {
+	return h.GetAuthToken()
+}
+
 // GetAcceptLanguage extracts Accept-Language header
-func GetAcceptLanguage(r *http.Request) string {
-	return r.Header.Get(headers.AcceptLanguage)
+func (h *RequestHandler) GetAcceptLanguage() string {
+	return h.request.Header.Get(headers.AcceptLanguage)
 }
 
 // GetPreferredLanguage extracts the preferred language from Accept-Language header
-func GetPreferredLanguage(r *http.Request, defaultLang string) string {
-	acceptLang := GetAcceptLanguage(r)
+func (h *RequestHandler) GetPreferredLanguage(defaultLang string) string {
+	acceptLang := h.GetAcceptLanguage()
 	if acceptLang == "" {
 		return defaultLang
 	}
@@ -77,36 +81,23 @@ func GetPreferredLanguage(r *http.Request, defaultLang string) string {
 }
 
 // GetReferer extracts Referer header
-func GetReferer(r *http.Request) string {
-	return r.Header.Get(headers.Referer)
+func (h *RequestHandler) GetReferer() string {
+	return h.request.Header.Get(headers.Referer)
 }
 
 // GetOrigin extracts Origin header
-func GetOrigin(r *http.Request) string {
-	return r.Header.Get(headers.Origin)
+func (h *RequestHandler) GetOrigin() string {
+	return h.request.Header.Get(headers.Origin)
 }
 
 // IsWebSocket checks if the request is a WebSocket upgrade request
-func IsWebSocket(r *http.Request) bool {
-	return strings.ToLower(r.Header.Get(headers.Connection)) == "upgrade" &&
-		strings.ToLower(r.Header.Get(headers.Upgrade)) == "websocket"
+func (h *RequestHandler) IsWebSocket() bool {
+	return strings.ToLower(h.request.Header.Get(headers.Connection)) == "upgrade" &&
+		strings.ToLower(h.request.Header.Get(headers.Upgrade)) == "websocket"
 }
 
-func GetBearerToken(r *http.Request) string {
-	authHeader := r.Header.Get(headers.Authorization)
-	if authHeader == "" {
-		return ""
-	}
-
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-
-	return parts[1]
-}
-
-func GetUserIDFromHeader(r *http.Request) (string, bool) {
-	userID, ok := r.Context().Value(sContext.UserIDKey).(string)
+// GetUserIDFromHeader extracts user ID from context
+func (h *RequestHandler) GetUserIDFromHeader() (string, bool) {
+	userID, ok := h.request.Context().Value(sContext.UserIDKey).(string)
 	return userID, ok
 }

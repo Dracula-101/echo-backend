@@ -12,8 +12,9 @@ import (
 
 func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	handler := request.NewHandler(r, w)
 
-	userID := request.PathParam(r, "user_id")
+	userID := handler.PathParam("user_id")
 	if userID == "" {
 		response.BadRequestError(ctx, r, w, "User ID is required", errors.New("user_id path parameter is missing"))
 		return
@@ -21,7 +22,7 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Info("Getting user profile",
 		logger.String("user_id", userID),
-		logger.String("request_id", request.GetRequestID(r)),
+		logger.String("request_id", handler.GetRequestID()),
 	)
 
 	user, err := h.service.GetProfile(ctx, userID)

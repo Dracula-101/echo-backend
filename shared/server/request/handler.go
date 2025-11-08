@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"shared/server/env"
 	"shared/server/headers"
@@ -35,6 +34,8 @@ func NewHandler(req *http.Request, writer http.ResponseWriter) *RequestHandler {
 	}
 }
 
+// Configuration methods
+
 func (h *RequestHandler) AllowEmptyBody() *RequestHandler {
 	h.config.AllowEmptyBody = true
 	return h
@@ -58,6 +59,8 @@ func (h *RequestHandler) WithAllowUnknown() *RequestHandler {
 func (h *RequestHandler) RegisterValidation(tag string, fn validator.Func) error {
 	return h.validator.RegisterValidation(tag, fn)
 }
+
+// Validation methods
 
 type FieldErrorDetail struct {
 	Field   string
@@ -143,21 +146,6 @@ func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 		}
 	}
 	return true
-}
-
-func (h *RequestHandler) ParseMultipartForm(maxMemory int64) error {
-	if err := h.request.ParseMultipartForm(maxMemory); err != nil {
-		return fmt.Errorf("failed to parse multipart form: %v", err)
-	}
-	return nil
-}
-
-func (h *RequestHandler) GetFormFile(key string) (multipart.File, *multipart.FileHeader, error) {
-	file, fileHeader, err := h.request.FormFile(key)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get form file: %v", err)
-	}
-	return file, fileHeader, nil
 }
 
 func (h *RequestHandler) validateRequest() error {
