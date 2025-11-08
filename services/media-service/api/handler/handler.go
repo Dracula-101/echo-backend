@@ -4,19 +4,22 @@ import (
 	"media-service/internal/config"
 	"media-service/internal/service"
 
+	"github.com/go-playground/validator/v10"
 	"shared/pkg/logger"
 )
 
-type MediaHandler struct {
-	service *service.MediaService
-	cfg     *config.Config
-	log     logger.Logger
+type Handler struct {
+	mediaService *service.MediaService
+	cfg          *config.Config
+	log          logger.Logger
+	validator    *validator.Validate
 }
 
-func NewMediaHandler(service *service.MediaService, cfg *config.Config, log logger.Logger) *MediaHandler {
-	return &MediaHandler{
-		service: service,
-		cfg:     cfg,
-		log:     log,
+func NewHandler(mediaService *service.MediaService, cfg *config.Config, log logger.Logger) *Handler {
+	return &Handler{
+		mediaService: mediaService,
+		cfg:          cfg,
+		log:          log,
+		validator:    validator.New(),
 	}
 }

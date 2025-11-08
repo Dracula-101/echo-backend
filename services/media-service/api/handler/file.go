@@ -14,7 +14,7 @@ import (
 )
 
 // GetFile handles getting a file's metadata
-func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handler := request.NewHandler(r, w)
 	fileID := handler.PathParam("file_id")
@@ -27,7 +27,7 @@ func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	userID, _ := request.GetUserIDFromContext(ctx)
 	accessToken := handler.GetAuthToken()
 
-	output, err := h.service.GetFile(ctx, models.GetFileInput{
+	output, err := h.mediaService.GetFile(ctx, models.GetFileInput{
 		FileID:         fileID,
 		UserID:         userID,
 		AccessToken:    accessToken,
@@ -62,7 +62,7 @@ func (h *MediaHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteFile handles file deletion
-func (h *MediaHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handler := request.NewHandler(r, w).AllowEmptyBody()
 
@@ -88,7 +88,7 @@ func (h *MediaHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.service.DeleteFile(ctx, models.DeleteFileInput{
+	err := h.mediaService.DeleteFile(ctx, models.DeleteFileInput{
 		FileID:    fileID,
 		UserID:    userID,
 		Permanent: req.Permanent,

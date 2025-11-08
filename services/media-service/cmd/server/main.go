@@ -159,22 +159,42 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 	return healthMgr
 }
 
-func setupRoutes(builder *router.Builder, h *handler.MediaHandler, cfg *config.Config, log logger.Logger) *router.Builder {
+func setupRoutes(builder *router.Builder, h *handler.Handler, cfg *config.Config, log logger.Logger) *router.Builder {
 	log.Debug("Registering media routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.With(middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes))
 		r.Post("/upload", coreMiddleware.ApplyMiddlewares(
 			h.Upload,
 			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
 		))
-		r.Get("/file/get/{file_id}", h.GetFile)
-		r.Post("/file/delete/{file_id}", h.DeleteFile)
+
+		r.Post("/profile-photo", coreMiddleware.ApplyMiddlewares(
+			h.UploadProfilePhoto,
+			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
+		))
+
+		r.Post("/message-media", coreMiddleware.ApplyMiddlewares(
+			h.UploadMessageMedia,
+			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes),
+		))
+
+		r.Get("/files/{file_id}", h.GetFile)
+		r.Delete("/files/{file_id}", h.DeleteFile)
+		r.Post("/albums", h.CreateAlbum)
+		r.Get("/albums/{id}", h.GetAlbum)
+		r.Get("/albums", h.ListAlbums)
+		r.Post("/albums/{id}/files", h.AddFileToAlbum)
+		r.Delete("/albums/{id}/files/{file_id}", h.RemoveFileFromAlbum)
+
+		r.Post("/shares", h.CreateShare)
+		r.Delete("/shares/{id}", h.RevokeShare)
+
+		r.Get("/stats", h.GetStorageStats)
 	})
 	log.Debug("Media routes registered successfully")
 	return builder
 }
 
-func createRouter(h *handler.MediaHandler, healthHandler *health.Handler, cfg *config.Config, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.Handler, healthHandler *health.Handler, cfg *config.Config, log logger.Logger) (*router.Router, error) {
 
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", healthHandler.Health).
@@ -311,7 +331,7 @@ func main() {
 		Build()
 
 	// Create handlers
-	mediaHandler := handler.NewMediaHandler(mediaService, cfg, log)
+	mediaHandler := handler.NewHandler(mediaService, cfg, log)
 
 	// Setup health checks
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)

@@ -13,7 +13,7 @@ import (
 )
 
 // Upload handles file upload
-func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handler := request.NewHandler(r, w)
 
@@ -48,8 +48,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	userAgent := r.UserAgent()
 
-	// Call service
-	output, err := h.service.UploadFile(ctx, models.UploadFileInput{
+	output, err := h.mediaService.UploadFile(ctx, models.UploadFileInput{
 		UserID:      userID,
 		FileReader:  file,
 		FileName:    fileHeader.Filename,

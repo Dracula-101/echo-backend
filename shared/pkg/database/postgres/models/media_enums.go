@@ -340,3 +340,52 @@ func (s *ShareAccessType) Scan(value interface{}) error {
 	}
 	return nil
 }
+
+// FileContext represents the context in which a file is used
+type FileContext string
+
+const (
+	FileContextProfilePhoto  FileContext = "profile_photo"
+	FileContextMessageMedia  FileContext = "message_media"
+	FileContextAlbum         FileContext = "album"
+	FileContextSticker       FileContext = "sticker"
+	FileContextDocument      FileContext = "document"
+	FileContextVoiceNote     FileContext = "voice_note"
+	FileContextGeneral       FileContext = "general"
+)
+
+func (f FileContext) IsValid() bool {
+	switch f {
+	case FileContextProfilePhoto, FileContextMessageMedia, FileContextAlbum,
+		FileContextSticker, FileContextDocument, FileContextVoiceNote, FileContextGeneral:
+		return true
+	}
+	return false
+}
+
+func (f FileContext) Value() (driver.Value, error) {
+	if !f.IsValid() {
+		return nil, fmt.Errorf("invalid file context: %s", f)
+	}
+	return string(f), nil
+}
+
+func (f *FileContext) Scan(value interface{}) error {
+	if value == nil {
+		*f = ""
+		return nil
+	}
+	str, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("failed to scan FileContext: expected string, got %T", value)
+	}
+	*f = FileContext(str)
+	if !f.IsValid() {
+		return fmt.Errorf("invalid file context value: %s", str)
+	}
+	return nil
+}
+
+func (f FileContext) String() string {
+	return string(f)
+}

@@ -87,14 +87,50 @@ type AddFileToAlbumInput struct {
 	DisplayOrder int
 }
 
+// GetAlbumInput represents input for getting an album
+type GetAlbumInput struct {
+	AlbumID string
+	UserID  string
+}
+
+// GetAlbumOutput represents output from getting an album
+type GetAlbumOutput struct {
+	AlbumID     string    `json:"album_id"`
+	UserID      string    `json:"user_id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
+	CoverFileID string    `json:"cover_file_id,omitempty"`
+	AlbumType   string    `json:"album_type"`
+	FileCount   int       `json:"file_count"`
+	Visibility  string    `json:"visibility"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// ListAlbumsInput represents input for listing albums
+type ListAlbumsInput struct {
+	UserID string
+	Limit  int
+	Offset int
+}
+
+// RemoveFileFromAlbumInput represents input for removing a file from an album
+type RemoveFileFromAlbumInput struct {
+	AlbumID string
+	FileID  string
+	UserID  string
+}
+
 // CreateShareInput represents input for creating a share
 type CreateShareInput struct {
-	FileID     string
-	UserID     string
-	AccessType string
-	ExpiresIn  *time.Duration
-	MaxViews   *int
-	Password   string
+	FileID         string
+	UserID         string
+	SharedWithUser string
+	ConversationID string
+	AccessType     string
+	ExpiresIn      *time.Duration
+	MaxViews       *int
+	Password       string
 }
 
 // CreateShareOutput represents output from creating a share
@@ -104,4 +140,17 @@ type CreateShareOutput struct {
 	ShareURL   string
 	ExpiresAt  *time.Time
 	CreatedAt  time.Time
+}
+
+// GetSharedFileInput represents input for getting a shared file
+type GetSharedFileInput struct {
+	ShareToken string
+	Password   string
+	UserID     string
+}
+
+// RevokeShareInput represents input for revoking a share
+type RevokeShareInput struct {
+	ShareID string
+	UserID  string
 }
