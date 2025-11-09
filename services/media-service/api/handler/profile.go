@@ -28,9 +28,6 @@ func (h *Handler) UploadProfilePhoto(w http.ResponseWriter, r *http.Request) {
 
 	deviceID := handler.GetDeviceInfo().ID
 	ipAddress := handler.GetClientIP()
-	if ipAddress == "" {
-		ipAddress = r.RemoteAddr
-	}
 
 	input := models.UploadProfilePhotoInput{
 		UserID:      userID,
@@ -40,7 +37,7 @@ func (h *Handler) UploadProfilePhoto(w http.ResponseWriter, r *http.Request) {
 		ContentType: fileHeader.Header.Get("Content-Type"),
 		DeviceID:    deviceID,
 		IPAddress:   ipAddress,
-		UserAgent:   r.UserAgent(),
+		UserAgent:   handler.GetUserAgent(),
 	}
 
 	output, err := h.mediaService.UploadProfilePhoto(ctx, input)

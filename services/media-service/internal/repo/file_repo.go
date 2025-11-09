@@ -2,11 +2,11 @@ package repo
 
 import (
 	"context"
-	"fmt"
 	"media-service/internal/model"
 
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
@@ -19,36 +19,33 @@ func NewFileRepository(db database.Database, log logger.Logger) *FileRepository 
 	return &FileRepository{db: db, log: log}
 }
 
-func (r *FileRepository) CreateFile(ctx context.Context, model models.MediaFile) (string, error) {
-	var fileID string
+func (r *FileRepository) CreateFile(ctx context.Context, model models.MediaFile) (string, pkgErrors.AppError) {
 	id, err := r.db.Create(ctx, &model)
-
 	if err != nil {
-		r.log.Error("Failed to create file record", logger.Error(err))
-		// Just return the error - stack trace will be captured automatically
-		return "", fmt.Errorf("failed to create file: %w", err)
+		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create file").
+			WithDetail("file_name", model.FileName).
+			WithDetail("uploader_user_id", model.UploaderUserID)
 	}
 
-	r.log.Info("File record created", logger.String("file_id", id))
-	return fileID, nil
+	return *id, nil
 }
 
-func (r *FileRepository) GetFileByID(ctx context.Context, fileID string) (*models.MediaFile, error) {
+func (r *FileRepository) GetFileByID(ctx context.Context, fileID string) (*models.MediaFile, pkgErrors.AppError) {
 	var model models.MediaFile
 	err := r.db.FindByID(ctx, &model, fileID)
-
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "file not found").
+				WithDetail("file_id", fileID)
 		}
-		r.log.Error("Failed to get file", logger.String("file_id", fileID), logger.Error(err))
-		return nil, fmt.Errorf("failed to get file: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get file").
+			WithDetail("file_id", fileID)
 	}
 
 	return &model, nil
 }
 
-func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, limit, offset int) ([]*models.MediaFile, error) {
+func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, limit, offset int) ([]*models.MediaFile, pkgErrors.AppError) {
 	query := `
 		SELECT
 			id, uploader_user_id, file_name, file_type, file_size_bytes,
@@ -62,8 +59,10 @@ func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, lim
 
 	rows, err := r.db.Query(ctx, query, userID, limit, offset)
 	if err != nil {
-		r.log.Error("Failed to list files", logger.String("user_id", userID), logger.Error(err))
-		return nil, fmt.Errorf("failed to list files: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to list files").
+			WithDetail("user_id", userID).
+			WithDetail("limit", limit).
+			WithDetail("offset", offset)
 	}
 	defer rows.Close()
 
@@ -75,7 +74,8 @@ func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, lim
 			&file.FileSizeBytes, &file.ThumbnailURL, &file.StorageURL,
 			&file.ProcessingStatus, &file.Visibility, &file.CreatedAt,
 		); err != nil {
-			r.log.Error("Failed to scan file row", logger.Error(err))
+			// Log scan errors but continue (partial success)
+			r.log.Debug("Failed to scan file row", logger.Error(err))
 			continue
 		}
 		files = append(files, file)
@@ -84,7 +84,7 @@ func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, lim
 	return files, nil
 }
 
-func (r *FileRepository) UpdateFileProcessingStatus(ctx context.Context, fileID, status string, errorMsg string) error {
+func (r *FileRepository) UpdateFileProcessingStatus(ctx context.Context, fileID, status string, errorMsg string) pkgErrors.AppError {
 	query := `
 		UPDATE media.files
 		SET processing_status = $2,
@@ -96,17 +96,15 @@ func (r *FileRepository) UpdateFileProcessingStatus(ctx context.Context, fileID,
 
 	_, err := r.db.Exec(ctx, query, fileID, status, errorMsg)
 	if err != nil {
-		r.log.Error("Failed to update file processing status",
-			logger.String("file_id", fileID),
-			logger.Error(err),
-		)
-		return fmt.Errorf("failed to update processing status: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update processing status").
+			WithDetail("file_id", fileID).
+			WithDetail("status", status)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) IncrementDownloadCount(ctx context.Context, fileID string) error {
+func (r *FileRepository) IncrementDownloadCount(ctx context.Context, fileID string) pkgErrors.AppError {
 	query := `
 		UPDATE media.files
 		SET download_count = download_count + 1,
@@ -116,17 +114,14 @@ func (r *FileRepository) IncrementDownloadCount(ctx context.Context, fileID stri
 
 	_, err := r.db.Exec(ctx, query, fileID)
 	if err != nil {
-		r.log.Error("Failed to increment download count",
-			logger.String("file_id", fileID),
-			logger.Error(err),
-		)
-		return fmt.Errorf("failed to increment download count: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to increment download count").
+			WithDetail("file_id", fileID)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) IncrementViewCount(ctx context.Context, fileID string) error {
+func (r *FileRepository) IncrementViewCount(ctx context.Context, fileID string) pkgErrors.AppError {
 	query := `
 		UPDATE media.files
 		SET view_count = view_count + 1,
@@ -136,17 +131,14 @@ func (r *FileRepository) IncrementViewCount(ctx context.Context, fileID string) 
 
 	_, err := r.db.Exec(ctx, query, fileID)
 	if err != nil {
-		r.log.Error("Failed to increment view count",
-			logger.String("file_id", fileID),
-			logger.Error(err),
-		)
-		return fmt.Errorf("failed to increment view count: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to increment view count").
+			WithDetail("file_id", fileID)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) SoftDeleteFile(ctx context.Context, fileID string) error {
+func (r *FileRepository) SoftDeleteFile(ctx context.Context, fileID string) pkgErrors.AppError {
 	query := `
 		UPDATE media.files
 		SET deleted_at = NOW(),
@@ -157,32 +149,26 @@ func (r *FileRepository) SoftDeleteFile(ctx context.Context, fileID string) erro
 
 	_, err := r.db.Exec(ctx, query, fileID)
 	if err != nil {
-		r.log.Error("Failed to soft delete file",
-			logger.String("file_id", fileID),
-			logger.Error(err),
-		)
-		return fmt.Errorf("failed to soft delete file: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to soft delete file").
+			WithDetail("file_id", fileID)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) HardDeleteFile(ctx context.Context, fileID string) error {
+func (r *FileRepository) HardDeleteFile(ctx context.Context, fileID string) pkgErrors.AppError {
 	query := `DELETE FROM media.files WHERE id = $1`
 
 	_, err := r.db.Exec(ctx, query, fileID)
 	if err != nil {
-		r.log.Error("Failed to hard delete file",
-			logger.String("file_id", fileID),
-			logger.Error(err),
-		)
-		return fmt.Errorf("failed to hard delete file: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to hard delete file").
+			WithDetail("file_id", fileID)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) GetFileByContentHash(ctx context.Context, contentHash string) (*model.File, error) {
+func (r *FileRepository) GetFileByContentHash(ctx context.Context, contentHash string) (*model.File, pkgErrors.AppError) {
 	query := `
 		SELECT id, storage_url, cdn_url, file_size_bytes, file_type
 		FROM media.files
@@ -197,29 +183,30 @@ func (r *FileRepository) GetFileByContentHash(ctx context.Context, contentHash s
 
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "file not found by content hash").
+				WithDetail("content_hash", contentHash)
 		}
-		r.log.Error("Failed to get file by content hash", logger.Error(err))
-		return nil, fmt.Errorf("failed to get file by hash: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get file by hash").
+			WithDetail("content_hash", contentHash)
 	}
 
 	return file, nil
 }
 
-func (r *FileRepository) CountFilesByUser(ctx context.Context, userID string) (int, error) {
+func (r *FileRepository) CountFilesByUser(ctx context.Context, userID string) (int, pkgErrors.AppError) {
 	query := `SELECT COUNT(*) FROM media.files WHERE uploader_user_id = $1 AND deleted_at IS NULL`
 
 	var count int
 	err := r.db.QueryRow(ctx, query, userID).Scan(&count)
 	if err != nil {
-		r.log.Error("Failed to count files", logger.String("user_id", userID), logger.Error(err))
-		return 0, fmt.Errorf("failed to count files: %w", err)
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count files").
+			WithDetail("user_id", userID)
 	}
 
 	return count, nil
 }
 
-func (r *FileRepository) GetUserStorageUsage(ctx context.Context, userID string) (int64, error) {
+func (r *FileRepository) GetUserStorageUsage(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
 	query := `
 		SELECT COALESCE(SUM(file_size_bytes), 0)
 		FROM media.files
@@ -229,14 +216,14 @@ func (r *FileRepository) GetUserStorageUsage(ctx context.Context, userID string)
 	var totalBytes int64
 	err := r.db.QueryRow(ctx, query, userID).Scan(&totalBytes)
 	if err != nil {
-		r.log.Error("Failed to get storage usage", logger.String("user_id", userID), logger.Error(err))
-		return 0, fmt.Errorf("failed to get storage usage: %w", err)
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get storage usage").
+			WithDetail("user_id", userID)
 	}
 
 	return totalBytes, nil
 }
 
-func (r *FileRepository) CreateAccessLog(ctx context.Context, fileID, userID, accessType, ipAddress, userAgent, deviceID string, success bool, bytesTransferred int64) error {
+func (r *FileRepository) CreateAccessLog(ctx context.Context, fileID, userID, accessType, ipAddress, userAgent, deviceID string, success bool, bytesTransferred int64) pkgErrors.AppError {
 	query := `
 		INSERT INTO media.access_log (
 			file_id, user_id, access_type, ip_address, user_agent, device_id,
@@ -246,36 +233,40 @@ func (r *FileRepository) CreateAccessLog(ctx context.Context, fileID, userID, ac
 
 	_, err := r.db.Exec(ctx, query, fileID, userID, accessType, ipAddress, userAgent, deviceID, success, bytesTransferred)
 	if err != nil {
-		r.log.Error("Failed to create access log", logger.Error(err))
-		return fmt.Errorf("failed to create access log: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create access log").
+			WithDetail("file_id", fileID).
+			WithDetail("user_id", userID).
+			WithDetail("access_type", accessType)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) CreateAlbum(ctx context.Context, album *models.Album) (string, error) {
+func (r *FileRepository) CreateAlbum(ctx context.Context, album *models.Album) (string, pkgErrors.AppError) {
 	id, err := r.db.Create(ctx, album)
 	if err != nil {
-		r.log.Error("Failed to create album", logger.Error(err))
-		return "", fmt.Errorf("failed to create album: %w", err)
+		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create album").
+			WithDetail("user_id", album.UserID).
+			WithDetail("title", album.Title)
 	}
-	return id, nil
+	return *id, nil
 }
 
-func (r *FileRepository) GetAlbumByID(ctx context.Context, albumID string) (*models.Album, error) {
+func (r *FileRepository) GetAlbumByID(ctx context.Context, albumID string) (*models.Album, pkgErrors.AppError) {
 	var album models.Album
 	err := r.db.FindByID(ctx, &album, albumID)
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "album not found").
+				WithDetail("album_id", albumID)
 		}
-		r.log.Error("Failed to get album", logger.String("album_id", albumID), logger.Error(err))
-		return nil, fmt.Errorf("failed to get album: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get album").
+			WithDetail("album_id", albumID)
 	}
 	return &album, nil
 }
 
-func (r *FileRepository) ListAlbumsByUser(ctx context.Context, userID string, limit, offset int) ([]*models.Album, error) {
+func (r *FileRepository) ListAlbumsByUser(ctx context.Context, userID string, limit, offset int) ([]*models.Album, pkgErrors.AppError) {
 	query := `
 		SELECT id, user_id, title, description, cover_file_id, album_type,
 		       is_system_album, file_count, visibility, sort_order, created_at, updated_at
@@ -287,8 +278,10 @@ func (r *FileRepository) ListAlbumsByUser(ctx context.Context, userID string, li
 
 	rows, err := r.db.Query(ctx, query, userID, limit, offset)
 	if err != nil {
-		r.log.Error("Failed to list albums", logger.String("user_id", userID), logger.Error(err))
-		return nil, fmt.Errorf("failed to list albums: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to list albums").
+			WithDetail("user_id", userID).
+			WithDetail("limit", limit).
+			WithDetail("offset", offset)
 	}
 	defer rows.Close()
 
@@ -301,7 +294,8 @@ func (r *FileRepository) ListAlbumsByUser(ctx context.Context, userID string, li
 			&album.FileCount, &album.Visibility, &album.SortOrder,
 			&album.CreatedAt, &album.UpdatedAt,
 		); err != nil {
-			r.log.Error("Failed to scan album row", logger.Error(err))
+			// Log scan errors but continue (partial success)
+			r.log.Debug("Failed to scan album row", logger.Error(err))
 			continue
 		}
 		albums = append(albums, album)
@@ -310,45 +304,47 @@ func (r *FileRepository) ListAlbumsByUser(ctx context.Context, userID string, li
 	return albums, nil
 }
 
-func (r *FileRepository) UpdateAlbum(ctx context.Context, album *models.Album) error {
+func (r *FileRepository) UpdateAlbum(ctx context.Context, album *models.Album) pkgErrors.AppError {
 	err := r.db.Update(ctx, album)
 	if err != nil {
-		r.log.Error("Failed to update album", logger.String("album_id", album.ID), logger.Error(err))
-		return fmt.Errorf("failed to update album: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update album").
+			WithDetail("album_id", album.ID)
 	}
 	return nil
 }
 
-func (r *FileRepository) DeleteAlbum(ctx context.Context, albumID string) error {
+func (r *FileRepository) DeleteAlbum(ctx context.Context, albumID string) pkgErrors.AppError {
 	query := `DELETE FROM media.albums WHERE id = $1`
 	_, err := r.db.Exec(ctx, query, albumID)
 	if err != nil {
-		r.log.Error("Failed to delete album", logger.String("album_id", albumID), logger.Error(err))
-		return fmt.Errorf("failed to delete album: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete album").
+			WithDetail("album_id", albumID)
 	}
 	return nil
 }
 
-func (r *FileRepository) AddFileToAlbum(ctx context.Context, albumFile *models.AlbumFile) error {
+func (r *FileRepository) AddFileToAlbum(ctx context.Context, albumFile *models.AlbumFile) pkgErrors.AppError {
 	_, err := r.db.Create(ctx, albumFile)
 	if err != nil {
-		r.log.Error("Failed to add file to album", logger.Error(err))
-		return fmt.Errorf("failed to add file to album: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to add file to album").
+			WithDetail("album_id", albumFile.AlbumID).
+			WithDetail("file_id", albumFile.FileID)
 	}
 	return nil
 }
 
-func (r *FileRepository) RemoveFileFromAlbum(ctx context.Context, albumID, fileID string) error {
+func (r *FileRepository) RemoveFileFromAlbum(ctx context.Context, albumID, fileID string) pkgErrors.AppError {
 	query := `DELETE FROM media.album_files WHERE album_id = $1 AND file_id = $2`
 	_, err := r.db.Exec(ctx, query, albumID, fileID)
 	if err != nil {
-		r.log.Error("Failed to remove file from album", logger.Error(err))
-		return fmt.Errorf("failed to remove file from album: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to remove file from album").
+			WithDetail("album_id", albumID).
+			WithDetail("file_id", fileID)
 	}
 	return nil
 }
 
-func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, limit, offset int) ([]*models.MediaFile, error) {
+func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, limit, offset int) ([]*models.MediaFile, pkgErrors.AppError) {
 	query := `
 		SELECT f.id, f.uploader_user_id, f.file_name, f.file_type, f.file_size_bytes,
 		       f.thumbnail_url, f.storage_url, f.processing_status, f.visibility, f.created_at
@@ -361,8 +357,10 @@ func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, lim
 
 	rows, err := r.db.Query(ctx, query, albumID, limit, offset)
 	if err != nil {
-		r.log.Error("Failed to list album files", logger.String("album_id", albumID), logger.Error(err))
-		return nil, fmt.Errorf("failed to list album files: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to list album files").
+			WithDetail("album_id", albumID).
+			WithDetail("limit", limit).
+			WithDetail("offset", offset)
 	}
 	defer rows.Close()
 
@@ -374,7 +372,8 @@ func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, lim
 			&file.FileSizeBytes, &file.ThumbnailURL, &file.StorageURL,
 			&file.ProcessingStatus, &file.Visibility, &file.CreatedAt,
 		); err != nil {
-			r.log.Error("Failed to scan file row", logger.Error(err))
+			// Log scan errors but continue (partial success)
+			r.log.Debug("Failed to scan file row", logger.Error(err))
 			continue
 		}
 		files = append(files, file)
@@ -383,29 +382,31 @@ func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, lim
 	return files, nil
 }
 
-func (r *FileRepository) CreateShare(ctx context.Context, share *models.Share) (string, error) {
+func (r *FileRepository) CreateShare(ctx context.Context, share *models.Share) (string, pkgErrors.AppError) {
 	id, err := r.db.Create(ctx, share)
 	if err != nil {
-		r.log.Error("Failed to create share", logger.Error(err))
-		return "", fmt.Errorf("failed to create share: %w", err)
+		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create share").
+			WithDetail("file_id", share.FileID).
+			WithDetail("shared_by_user_id", share.SharedByUserID)
 	}
-	return id, nil
+	return *id, nil
 }
 
-func (r *FileRepository) GetShareByID(ctx context.Context, shareID string) (*models.Share, error) {
+func (r *FileRepository) GetShareByID(ctx context.Context, shareID string) (*models.Share, pkgErrors.AppError) {
 	var share models.Share
 	err := r.db.FindByID(ctx, &share, shareID)
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "share not found").
+				WithDetail("share_id", shareID)
 		}
-		r.log.Error("Failed to get share", logger.String("share_id", shareID), logger.Error(err))
-		return nil, fmt.Errorf("failed to get share: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get share").
+			WithDetail("share_id", shareID)
 	}
 	return &share, nil
 }
 
-func (r *FileRepository) GetShareByToken(ctx context.Context, token string) (*models.Share, error) {
+func (r *FileRepository) GetShareByToken(ctx context.Context, token string) (*models.Share, pkgErrors.AppError) {
 	query := `
 		SELECT id, file_id, shared_by_user_id, shared_with_user_id,
 		       shared_with_conversation_id, share_token, access_type,
@@ -425,16 +426,17 @@ func (r *FileRepository) GetShareByToken(ctx context.Context, token string) (*mo
 
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "share not found by token").
+				WithDetail("share_token", token)
 		}
-		r.log.Error("Failed to get share by token", logger.Error(err))
-		return nil, fmt.Errorf("failed to get share by token: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get share by token").
+			WithDetail("share_token", token)
 	}
 
 	return &share, nil
 }
 
-func (r *FileRepository) RevokeShare(ctx context.Context, shareID string) error {
+func (r *FileRepository) RevokeShare(ctx context.Context, shareID string) pkgErrors.AppError {
 	query := `
 		UPDATE media.shares
 		SET is_active = false, revoked_at = NOW()
@@ -442,13 +444,13 @@ func (r *FileRepository) RevokeShare(ctx context.Context, shareID string) error 
 	`
 	_, err := r.db.Exec(ctx, query, shareID)
 	if err != nil {
-		r.log.Error("Failed to revoke share", logger.String("share_id", shareID), logger.Error(err))
-		return fmt.Errorf("failed to revoke share: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke share").
+			WithDetail("share_id", shareID)
 	}
 	return nil
 }
 
-func (r *FileRepository) IncrementShareViewCount(ctx context.Context, shareID string) error {
+func (r *FileRepository) IncrementShareViewCount(ctx context.Context, shareID string) pkgErrors.AppError {
 	query := `
 		UPDATE media.shares
 		SET view_count = view_count + 1
@@ -456,13 +458,13 @@ func (r *FileRepository) IncrementShareViewCount(ctx context.Context, shareID st
 	`
 	_, err := r.db.Exec(ctx, query, shareID)
 	if err != nil {
-		r.log.Error("Failed to increment share view count", logger.String("share_id", shareID), logger.Error(err))
-		return fmt.Errorf("failed to increment share view count: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to increment share view count").
+			WithDetail("share_id", shareID)
 	}
 	return nil
 }
 
-func (r *FileRepository) IncrementShareDownloadCount(ctx context.Context, shareID string) error {
+func (r *FileRepository) IncrementShareDownloadCount(ctx context.Context, shareID string) pkgErrors.AppError {
 	query := `
 		UPDATE media.shares
 		SET download_count = download_count + 1
@@ -470,13 +472,13 @@ func (r *FileRepository) IncrementShareDownloadCount(ctx context.Context, shareI
 	`
 	_, err := r.db.Exec(ctx, query, shareID)
 	if err != nil {
-		r.log.Error("Failed to increment share download count", logger.String("share_id", shareID), logger.Error(err))
-		return fmt.Errorf("failed to increment share download count: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to increment share download count").
+			WithDetail("share_id", shareID)
 	}
 	return nil
 }
 
-func (r *FileRepository) GetStorageStats(ctx context.Context, userID string) (*models.StorageStat, error) {
+func (r *FileRepository) GetStorageStats(ctx context.Context, userID string) (*models.StorageStat, pkgErrors.AppError) {
 	var stats models.StorageStat
 	query := `SELECT * FROM media.storage_stats WHERE user_id = $1`
 
@@ -490,16 +492,17 @@ func (r *FileRepository) GetStorageStats(ctx context.Context, userID string) (*m
 
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "storage stats not found").
+				WithDetail("user_id", userID)
 		}
-		r.log.Error("Failed to get storage stats", logger.String("user_id", userID), logger.Error(err))
-		return nil, fmt.Errorf("failed to get storage stats: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get storage stats").
+			WithDetail("user_id", userID)
 	}
 
 	return &stats, nil
 }
 
-func (r *FileRepository) CreateOrUpdateStorageStats(ctx context.Context, stats *models.StorageStat) error {
+func (r *FileRepository) CreateOrUpdateStorageStats(ctx context.Context, stats *models.StorageStat) pkgErrors.AppError {
 	query := `
 		INSERT INTO media.storage_stats (
 			user_id, total_files, total_size_bytes, images_count, images_size_bytes,
@@ -534,14 +537,14 @@ func (r *FileRepository) CreateOrUpdateStorageStats(ctx context.Context, stats *
 	)
 
 	if err != nil {
-		r.log.Error("Failed to create/update storage stats", logger.Error(err))
-		return fmt.Errorf("failed to create/update storage stats: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create/update storage stats").
+			WithDetail("user_id", stats.UserID)
 	}
 
 	return nil
 }
 
-func (r *FileRepository) CalculateStorageStats(ctx context.Context, userID string) (*models.StorageStat, error) {
+func (r *FileRepository) CalculateStorageStats(ctx context.Context, userID string) (*models.StorageStat, pkgErrors.AppError) {
 	query := `
 		SELECT COUNT(*) as total_files,
 			COALESCE(SUM(file_size_bytes), 0) as total_size_bytes,
@@ -568,8 +571,8 @@ func (r *FileRepository) CalculateStorageStats(ctx context.Context, userID strin
 	)
 
 	if err != nil {
-		r.log.Error("Failed to calculate storage stats", logger.String("user_id", userID), logger.Error(err))
-		return nil, fmt.Errorf("failed to calculate storage stats: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to calculate storage stats").
+			WithDetail("user_id", userID)
 	}
 
 	stats.UserID = userID

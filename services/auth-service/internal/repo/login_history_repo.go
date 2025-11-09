@@ -5,6 +5,7 @@ import (
 	"context"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
@@ -28,7 +29,7 @@ func NewLoginHistoryRepo(db database.Database, log logger.Logger) *LoginHistoryR
 // Login History Operations
 // ============================================================================
 
-func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) error {
+func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) pkgErrors.AppError {
 	r.log.Debug("Creating login history entry",
 		logger.String("user_id", input.UserID),
 		logger.String("status", safeDerefString(input.Status)),
@@ -52,11 +53,12 @@ func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoMod
 		IsNewLocation:     *input.IsNewLocation,
 	})
 	if err != nil {
-		r.log.Error("Failed to create login history", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create login history").
+			WithDetail("user_id", input.UserID).
+			WithDetail("status", safeDerefString(input.Status))
 	}
 	r.log.Debug("Login history created successfully",
-		logger.String("login_history_id", id),
+		logger.String("login_history_id", *id),
 	)
 	return nil
 }
@@ -76,8 +78,9 @@ func (r *LoginHistoryRepo) GetLoginHistoryByUserID(ctx context.Context, userID s
 		LIMIT $2`
 	err := r.db.FindMany(ctx, &histories, query, userID, limit)
 	if err != nil {
-		r.log.Error("Failed to get login history by user ID", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get login history by user ID").
+			WithDetail("user_id", userID).
+			WithDetail("limit", limit)
 	}
 	r.log.Debug("Login history fetched successfully",
 		logger.String("user_id", userID),
@@ -99,8 +102,8 @@ func (r *LoginHistoryRepo) GetLoginHistoryByID(ctx context.Context, id string) (
 		LIMIT 1`
 	err := r.db.FindOne(ctx, &history, query, id)
 	if err != nil {
-		r.log.Error("Failed to get login history by ID", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get login history by ID").
+			WithDetail("login_history_id", id)
 	}
 	r.log.Debug("Login history fetched successfully",
 		logger.String("login_history_id", history.ID),
@@ -121,8 +124,9 @@ func (r *LoginHistoryRepo) GetFailedLoginAttempts(ctx context.Context, userID st
 		AND created_at > NOW() - INTERVAL '1 ' || $2`
 	err := r.db.QueryRow(ctx, query, userID, duration).Scan(&count)
 	if err != nil {
-		r.log.Error("Failed to count failed login attempts", logger.Error(err))
-		return 0, err
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count failed login attempts").
+			WithDetail("user_id", userID).
+			WithDetail("duration", duration)
 	}
 	r.log.Debug("Failed login attempts counted",
 		logger.String("user_id", userID),
@@ -131,15 +135,15 @@ func (r *LoginHistoryRepo) GetFailedLoginAttempts(ctx context.Context, userID st
 	return count, nil
 }
 
-func (r *LoginHistoryRepo) DeleteLoginHistoryByUserID(ctx context.Context, userID string) error {
+func (r *LoginHistoryRepo) DeleteLoginHistoryByUserID(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Debug("Deleting login history by user ID",
 		logger.String("user_id", userID),
 	)
 	query := `DELETE FROM auth.login_history WHERE user_id = $1`
 	result, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.log.Error("Failed to delete login history", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete login history").
+			WithDetail("user_id", userID)
 	}
 	rowsAffected, _ := result.RowsAffected()
 	r.log.Debug("Login history deleted successfully",
@@ -149,15 +153,15 @@ func (r *LoginHistoryRepo) DeleteLoginHistoryByUserID(ctx context.Context, userI
 	return nil
 }
 
-func (r *LoginHistoryRepo) DeleteLoginHistoryByID(ctx context.Context, id string) error {
+func (r *LoginHistoryRepo) DeleteLoginHistoryByID(ctx context.Context, id string) pkgErrors.AppError {
 	r.log.Debug("Deleting login history by ID",
 		logger.String("login_history_id", id),
 	)
 	query := `DELETE FROM auth.login_history WHERE id = $1`
 	_, err := r.db.Exec(ctx, query, id)
 	if err != nil {
-		r.log.Error("Failed to delete login history", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete login history").
+			WithDetail("login_history_id", id)
 	}
 	r.log.Debug("Login history deleted successfully",
 		logger.String("login_history_id", id),

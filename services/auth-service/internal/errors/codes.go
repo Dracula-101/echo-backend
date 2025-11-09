@@ -104,6 +104,6 @@ func HTTPStatus(code string) int {
 // ============================================================================
 
 // NewAuthError creates a new auth service error with service context
-func NewAuthError(code, message string) pkgErrors.Error {
+func NewAuthError(code, message string) pkgErrors.AppError {
 	return pkgErrors.New(code, message).WithService(ServiceName)
 }

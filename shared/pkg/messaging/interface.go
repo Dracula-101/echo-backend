@@ -2,23 +2,25 @@ package messaging
 
 import (
 	"context"
+
+	pkgErrors "shared/pkg/errors"
 )
 
 type Broker interface {
-	Publish(ctx context.Context, topic string, message *Message) error
-	Subscribe(ctx context.Context, topic string, handler Handler) error
-	Unsubscribe(ctx context.Context, topic string) error
+	Publish(ctx context.Context, topic string, message *Message) pkgErrors.AppError
+	Subscribe(ctx context.Context, topic string, handler Handler) pkgErrors.AppError
+	Unsubscribe(ctx context.Context, topic string) pkgErrors.AppError
 	Close() error
 }
 
 type Producer interface {
-	Send(ctx context.Context, topic string, message *Message) error
-	SendBatch(ctx context.Context, topic string, messages []*Message) error
+	Send(ctx context.Context, topic string, message *Message) pkgErrors.AppError
+	SendBatch(ctx context.Context, topic string, messages []*Message) pkgErrors.AppError
 	Close() error
 }
 
 type Consumer interface {
-	Consume(ctx context.Context, topics []string, handler Handler) error
+	Consume(ctx context.Context, topics []string, handler Handler) pkgErrors.AppError
 	Close() error
 }
 

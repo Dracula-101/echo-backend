@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	pkgErrors "shared/pkg/errors"
 )
 
 type Model interface {
@@ -12,14 +14,14 @@ type Model interface {
 }
 
 type Database interface {
-	Create(ctx context.Context, model Model) (id string, err error)
-	FindByID(ctx context.Context, model Model, id interface{}) error
-	Update(ctx context.Context, model Model) error
-	Delete(ctx context.Context, model Model) error
-	HardDelete(ctx context.Context, model Model) error
+	Create(ctx context.Context, model Model) (id *string, err error)
+	FindByID(ctx context.Context, model Model, id interface{}) pkgErrors.AppError
+	Update(ctx context.Context, model Model) pkgErrors.AppError
+	Delete(ctx context.Context, model Model) pkgErrors.AppError
+	HardDelete(ctx context.Context, model Model) pkgErrors.AppError
 
-	FindOne(ctx context.Context, model Model, query string, args ...interface{}) error
-	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	FindOne(ctx context.Context, model Model, query string, args ...interface{}) pkgErrors.AppError
+	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) pkgErrors.AppError
 	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, error)
 	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, error)
 
@@ -32,19 +34,19 @@ type Database interface {
 	WithTransaction(ctx context.Context, fn func(tx Transaction) error) error
 
 	Close() error
-	Ping(ctx context.Context) error
+	Ping(ctx context.Context) pkgErrors.AppError
 	Stats() Stats
 }
 
 type Transaction interface {
-	Create(ctx context.Context, model Model) error
-	FindByID(ctx context.Context, model Model, id interface{}) error
-	Update(ctx context.Context, model Model) error
-	Delete(ctx context.Context, model Model) error
-	HardDelete(ctx context.Context, model Model) error
+	Create(ctx context.Context, model Model) pkgErrors.AppError
+	FindByID(ctx context.Context, model Model, id interface{}) pkgErrors.AppError
+	Update(ctx context.Context, model Model) pkgErrors.AppError
+	Delete(ctx context.Context, model Model) pkgErrors.AppError
+	HardDelete(ctx context.Context, model Model) pkgErrors.AppError
 
-	FindOne(ctx context.Context, model Model, query string, args ...interface{}) error
-	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	FindOne(ctx context.Context, model Model, query string, args ...interface{}) pkgErrors.AppError
+	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) pkgErrors.AppError
 
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
 	QueryRow(ctx context.Context, query string, args ...interface{}) Row
@@ -63,7 +65,7 @@ type Rows interface {
 
 type Row interface {
 	Scan(dest ...interface{}) error
-	ScanOne(model Model) error
+	ScanOne(model Model) pkgErrors.AppError
 }
 
 type Result interface {

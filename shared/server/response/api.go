@@ -72,13 +72,24 @@ func RespondWithError(ctx context.Context, r *http.Request, w http.ResponseWrite
 
 // BadRequestError creates a 400 Bad Request error response
 func BadRequestError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
-	err := errors.New(errors.CodeInvalidArgument, message)
+	var err errors.AppError
+
+	// Use the existing AppError if provided, otherwise create a new one
+	if reqError != nil {
+		if appErr, ok := reqError.(errors.AppError); ok {
+			err = appErr
+		} else {
+			err = errors.New(errors.CodeInvalidArgument, message)
+			err = err.WithDetail("original_error", reqError.Error())
+		}
+	} else {
+		err = errors.New(errors.CodeInvalidArgument, message)
+	}
+
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Type = ErrorTypeBadRequest
-	if reqError != nil {
+	if reqError != nil && errorDetails.InnerError == "" {
 		errorDetails.InnerError = reqError.Error()
-	} else {
-		errorDetails.InnerError = ""
 	}
 	errorDetails.Description = "The request could not be understood or was missing required parameters."
 
@@ -92,14 +103,25 @@ func BadRequestError(ctx context.Context, r *http.Request, w http.ResponseWriter
 
 // UnauthorizedError creates a 401 Unauthorized error response
 func UnauthorizedError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
-	err := errors.New(errors.CodeUnauthenticated, message)
+	var err errors.AppError
+
+	// Use the existing AppError if provided, otherwise create a new one
+	if reqError != nil {
+		if appErr, ok := reqError.(errors.AppError); ok {
+			err = appErr
+		} else {
+			err = errors.New(errors.CodeUnauthenticated, message)
+			err = err.WithDetail("original_error", reqError.Error())
+		}
+	} else {
+		err = errors.New(errors.CodeUnauthenticated, message)
+	}
+
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Type = ErrorTypeAuthentication
 	errorDetails.Description = "Authentication is required and has failed or has not been provided."
-	if reqError != nil {
+	if reqError != nil && errorDetails.InnerError == "" {
 		errorDetails.InnerError = reqError.Error()
-	} else {
-		errorDetails.InnerError = ""
 	}
 
 	return Error().
@@ -112,10 +134,25 @@ func UnauthorizedError(ctx context.Context, r *http.Request, w http.ResponseWrit
 
 // ForbiddenError creates a 403 Forbidden error response
 func ForbiddenError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
-	err := errors.New(errors.CodePermissionDenied, message)
+	var err errors.AppError
+
+	// Use the existing AppError if provided, otherwise create a new one
+	if reqError != nil {
+		if appErr, ok := reqError.(errors.AppError); ok {
+			err = appErr
+		} else {
+			err = errors.New(errors.CodePermissionDenied, message)
+			err = err.WithDetail("original_error", reqError.Error())
+		}
+	} else {
+		err = errors.New(errors.CodePermissionDenied, message)
+	}
+
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "You do not have permission to access this resource."
-	errorDetails.InnerError = reqError.Error()
+	if reqError != nil && errorDetails.InnerError == "" {
+		errorDetails.InnerError = reqError.Error()
+	}
 
 	return Error().
 		WithContext(ctx).
@@ -146,14 +183,25 @@ func NotFoundError(ctx context.Context, r *http.Request, w http.ResponseWriter, 
 
 // ConflictError creates a 409 Conflict error response
 func ConflictError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, reqError error) error {
-	err := errors.New(errors.CodeConflict, message)
+	var err errors.AppError
+
+	// Use the existing AppError if provided, otherwise create a new one
+	if reqError != nil {
+		if appErr, ok := reqError.(errors.AppError); ok {
+			err = appErr
+		} else {
+			err = errors.New(errors.CodeConflict, message)
+			err = err.WithDetail("original_error", reqError.Error())
+		}
+	} else {
+		err = errors.New(errors.CodeConflict, message)
+	}
+
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The request could not be completed due to a conflict."
 	errorDetails.Type = ErrorTypeConflict
-	if reqError != nil {
+	if reqError != nil && errorDetails.InnerError == "" {
 		errorDetails.InnerError = reqError.Error()
-	} else {
-		errorDetails.InnerError = ""
 	}
 
 	return Error().
@@ -201,9 +249,9 @@ func RateLimitError(ctx context.Context, r *http.Request, w http.ResponseWriter,
 func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWriter, message string, err error) error {
 	config := GetGlobalConfig()
 
-	var appErr errors.Error
+	var appErr errors.AppError
 	if err != nil {
-		if e, ok := err.(errors.Error); ok {
+		if e, ok := err.(errors.AppError); ok {
 			appErr = e
 		} else {
 			appErr = errors.New(errors.CodeInternal, err.Error())
@@ -216,7 +264,6 @@ func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWr
 	errorDetails.Description = "An unexpected error occurred. Please try again later."
 	errorDetails.Type = ErrorTypeInternal
 
-	// Don't expose internal details in production
 	if config.IsProduction() {
 		errorDetails.InnerError = ""
 		errorDetails.Context = nil
@@ -269,28 +316,6 @@ func GatewayTimeoutError(ctx context.Context, r *http.Request, w http.ResponseWr
 		WithError(errorDetails).
 		WithMessage(message).
 		GatewayTimeout(w)
-}
-
-// CircuitOpenError creates a circuit breaker open error
-func CircuitOpenError(ctx context.Context, r *http.Request, w http.ResponseWriter, service string) error {
-	message := fmt.Sprintf("%s service circuit is open", service)
-	err := errors.New(errors.CodeUnavailable, message)
-	errorDetails := ErrorDetailsFromError(err, false)
-	errorDetails.Type = ErrorTypeCircuitOpen
-	errorDetails.Description = "The service is currently unavailable due to too many failures."
-	errorDetails.Context = map[string]interface{}{
-		"service":       service,
-		"circuit_state": "open",
-	}
-
-	w.Header().Set("Retry-After", "30")
-
-	return Error().
-		WithContext(ctx).
-		WithRequest(r).
-		WithError(errorDetails).
-		WithMessage(message).
-		ServiceUnavailable(w)
 }
 
 // TooManyRequestsError creates a 429 Too Many Requests error response

@@ -170,10 +170,6 @@ func validateKafka(kafka *KafkaConfig) error {
 		kafka.Compression = "snappy"
 	}
 
-	if kafka.RetryMax == 0 {
-		kafka.RetryMax = 3
-	}
-
 	if kafka.Acks == "" {
 		kafka.Acks = "all"
 	}

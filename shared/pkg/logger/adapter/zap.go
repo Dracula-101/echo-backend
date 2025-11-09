@@ -49,7 +49,7 @@ const (
 	routePathColumnWidth = 25
 
 	minTerminalWidth     = 80
-	defaultTerminalWidth = 130
+	defaultTerminalWidth = 200
 	columnSeparatorWidth = 3
 	boxBorderWidth       = 2
 

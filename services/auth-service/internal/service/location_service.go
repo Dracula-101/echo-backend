@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/request"
 	"time"
@@ -35,33 +36,39 @@ func NewLocationService(endpoint string, log logger.Logger) *LocationService {
 
 func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
 	if ip == "" {
-		return nil, fmt.Errorf("ip address is required")
+		return nil, pkgErrors.New(pkgErrors.CodeInvalidArgument, "ip address is required")
 	}
 
 	url := fmt.Sprintf("%s?ip=%s", s.Endpoint, url.QueryEscape(ip))
 	s.log.Info("Looking up location", logger.String("url", url))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to create location lookup request").
+			WithDetail("ip", ip)
 	}
 
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeServiceUnavailable, "failed to execute location lookup request").
+			WithDetail("ip", ip)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, pkgErrors.New(pkgErrors.CodeServiceUnavailable, "location lookup request failed").
+			WithDetail("status_code", resp.StatusCode).
+			WithDetail("response_body", string(body)).
+			WithDetail("ip", ip)
 	}
 
 	var locationData model.LocationData
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(&locationData); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to decode location response").
+			WithDetail("ip", ip)
 	}
 
 	return &request.IpAddressInfo{

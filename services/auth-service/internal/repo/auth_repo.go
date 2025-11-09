@@ -11,6 +11,7 @@ import (
 
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
@@ -45,7 +46,7 @@ func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository 
 // Email Operations
 // ============================================================================
 
-func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (bool, pkgErrors.AppError) {
 	r.log.Debug("Checking if email exists",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -55,12 +56,8 @@ func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 	var exists bool
 	err := r.db.QueryRow(ctx, query, email).Scan(&exists)
 	if err != nil {
-		r.log.Error("Failed to check if user exists",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("email", email),
-			logger.Error(err),
-		)
-		return false, err
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check email existence").
+			WithDetail("email", email)
 	}
 
 	r.log.Debug("Email existence check completed",
@@ -87,19 +84,13 @@ type CreateUserParams struct {
 	UserAgent         string
 }
 
-func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams) (string, error) {
+func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams) (string, pkgErrors.AppError) {
 	if params.Email == "" {
-		r.log.Error("Email is required for user creation",
-			logger.String("service", authErrors.ServiceName),
-		)
-		return "", fmt.Errorf("email is required")
+		return "", pkgErrors.New(pkgErrors.CodeInvalidArgument, "email is required for user creation")
 	}
 	if params.PasswordHash == "" {
-		r.log.Error("Password hash is required for user creation",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("email", params.Email),
-		)
-		return "", fmt.Errorf("password hash is required")
+		return "", pkgErrors.New(pkgErrors.CodeInvalidArgument, "password hash is required for user creation").
+			WithDetail("email", params.Email)
 	}
 
 	r.log.Info("Creating user",
@@ -149,28 +140,24 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams
 		CreatedByUserAgent:     &params.UserAgent,
 	})
 	if err != nil {
-		r.log.Error("Failed to create user in database",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("email", params.Email),
-			logger.Error(err),
-		)
-		return "", err
+		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
+			WithDetail("email", params.Email)
 	}
 
 	r.log.Info("User created successfully",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", id),
+		logger.String("user_id", *id),
 		logger.String("email", params.Email),
 	)
 
-	return id, nil
+	return *id, nil
 }
 
 // ============================================================================
 // User Retrieval
 // ============================================================================
 
-func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*models.AuthUser, error) {
+func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*models.AuthUser, pkgErrors.AppError) {
 	r.log.Debug("Fetching user by email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -188,12 +175,8 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 			)
 			return nil, nil
 		}
-		r.log.Error("Failed to get user by email",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("email", email),
-			logger.Error(err),
-		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get user by email").
+			WithDetail("email", email)
 	}
 
 	r.log.Debug("User fetched successfully",
@@ -210,7 +193,7 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 // Login Tracking
 // ============================================================================
 
-func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) error {
+func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Recording failed login attempt",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -223,12 +206,8 @@ func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) e
 		WHERE id = $1`
 	result, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.log.Error("Failed to record failed login",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to record failed login").
+			WithDetail("user_id", userID)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
@@ -240,7 +219,7 @@ func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) e
 	return nil
 }
 
-func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID string) error {
+func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Recording successful login",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -254,12 +233,8 @@ func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID strin
 		WHERE id = $1`
 	result, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.log.Error("Failed to record successful login",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to record successful login").
+			WithDetail("user_id", userID)
 	}
 
 	rowsAffected, _ := result.RowsAffected()

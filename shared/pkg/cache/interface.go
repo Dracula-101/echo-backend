@@ -3,27 +3,29 @@ package cache
 import (
 	"context"
 	"time"
+
+	pkgErrors "shared/pkg/errors"
 )
 
 type Cache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
-	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
-	Delete(ctx context.Context, key string) error
+	Set(ctx context.Context, key string, value []byte, ttl time.Duration) pkgErrors.AppError
+	Delete(ctx context.Context, key string) pkgErrors.AppError
 	Exists(ctx context.Context, key string) (bool, error)
-	Expire(ctx context.Context, key string, ttl time.Duration) error
+	Expire(ctx context.Context, key string, ttl time.Duration) pkgErrors.AppError
 	TTL(ctx context.Context, key string) (time.Duration, error)
 
 	GetMulti(ctx context.Context, keys []string) (map[string][]byte, error)
-	SetMulti(ctx context.Context, items map[string][]byte, ttl time.Duration) error
-	DeleteMulti(ctx context.Context, keys []string) error
+	SetMulti(ctx context.Context, items map[string][]byte, ttl time.Duration) pkgErrors.AppError
+	DeleteMulti(ctx context.Context, keys []string) pkgErrors.AppError
 
 	Increment(ctx context.Context, key string, delta int64) (int64, error)
 	Decrement(ctx context.Context, key string, delta int64) (int64, error)
 
-	Ping(ctx context.Context) error
+	Ping(ctx context.Context) pkgErrors.AppError
 	Info(ctx context.Context) (map[string]string, error)
 
-	Flush(ctx context.Context) error
+	Flush(ctx context.Context) pkgErrors.AppError
 	Close() error
 }
 

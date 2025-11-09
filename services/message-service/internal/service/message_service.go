@@ -10,10 +10,9 @@ import (
 	"echo-backend/services/message-service/internal/repo"
 	"echo-backend/services/message-service/internal/websocket"
 
-	"shared/pkg/circuitbreaker"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/messaging"
-	"shared/pkg/retry"
 
 	"github.com/google/uuid"
 )
@@ -32,13 +31,10 @@ type MessageService interface {
 }
 
 type messageService struct {
-	repo         repo.MessageRepository
-	hub          *websocket.Hub
-	kafka        messaging.Producer
-	logger       logger.Logger
-	dbCircuit    *circuitbreaker.CircuitBreaker
-	kafkaCircuit *circuitbreaker.CircuitBreaker
-	retryer      *retry.Retryer
+	repo   repo.MessageRepository
+	hub    *websocket.Hub
+	kafka  messaging.Producer
+	logger logger.Logger
 }
 
 func NewMessageService(
@@ -47,45 +43,11 @@ func NewMessageService(
 	kafka messaging.Producer,
 	log logger.Logger,
 ) MessageService {
-	dbCircuit := circuitbreaker.New("message-db", circuitbreaker.Config{
-		MaxRequests: 3,
-		Interval:    10 * time.Second,
-		Timeout:     30 * time.Second,
-		ReadyToTrip: func(counts circuitbreaker.Counts) bool {
-			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
-			return counts.Requests >= 10 && failureRatio >= 0.6
-		},
-		OnStateChange: func(name string, from, to circuitbreaker.State) {
-			log.Warn("Circuit breaker state changed",
-				logger.String("name", name),
-				logger.String("from", from.String()),
-				logger.String("to", to.String()),
-			)
-		},
-	})
-
-	kafkaCircuit := circuitbreaker.New("message-kafka", circuitbreaker.Config{
-		MaxRequests: 2,
-		Interval:    5 * time.Second,
-		Timeout:     15 * time.Second,
-		ReadyToTrip: func(counts circuitbreaker.Counts) bool {
-			return counts.ConsecutiveFailures > 5
-		},
-	})
-
-	retryConfig := retry.DefaultConfig()
-	retryConfig.MaxAttempts = 3
-	retryConfig.InitialDelay = 100 * time.Millisecond
-	retryConfig.MaxDelay = 2 * time.Second
-
 	return &messageService{
-		repo:         repo,
-		hub:          hub,
-		kafka:        kafka,
-		logger:       log,
-		dbCircuit:    dbCircuit,
-		kafkaCircuit: kafkaCircuit,
-		retryer:      retry.New(retryConfig),
+		repo:   repo,
+		hub:    hub,
+		kafka:  kafka,
+		logger: log,
 	}
 }
 
@@ -93,19 +55,17 @@ func NewMessageService(
 // This is the core function - production-ready with all checks and broadcasts
 func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessageRequest) (*model.Message, error) {
 	var canSend bool
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		var err error
-		canSend, err = s.repo.ValidateParticipant(ctx, req.ConversationID, req.SenderUserID)
-		return err
-	})
+	var err error
+	canSend, err = s.repo.ValidateParticipant(ctx, req.ConversationID, req.SenderUserID)
 
 	if err != nil {
-		s.logger.Error("Failed to validate participant",
-			logger.String("conversation_id", req.ConversationID.String()),
-			logger.String("user_id", req.SenderUserID.String()),
-			logger.Error(err),
-		)
-		return nil, fmt.Errorf("failed to validate participant: %w", err)
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService("message-service")
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to validate participant").
+			WithService("message-service").
+			WithDetail("conversation_id", req.ConversationID.String()).
+			WithDetail("user_id", req.SenderUserID.String())
 	}
 
 	if !canSend {
@@ -113,7 +73,10 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 			logger.String("conversation_id", req.ConversationID.String()),
 			logger.String("user_id", req.SenderUserID.String()),
 		)
-		return nil, fmt.Errorf("user not authorized to send messages in this conversation")
+		return nil, pkgErrors.New(pkgErrors.CodeUnauthorized, "user not authorized to send messages in this conversation").
+			WithService("message-service").
+			WithDetail("conversation_id", req.ConversationID.String()).
+			WithDetail("user_id", req.SenderUserID.String())
 	}
 
 	now := time.Now()
@@ -134,7 +97,9 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 	if len(req.Mentions) > 0 {
 		mentionsJSON, err := json.Marshal(req.Mentions)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal mentions: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal mentions").
+				WithService("message-service").
+				WithDetail("message_id", message.ID.String())
 		}
 		message.Mentions = mentionsJSON
 	}
@@ -142,23 +107,22 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 	if req.Metadata != (model.Metadata{}) {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal metadata").
+				WithService("message-service").
+				WithDetail("message_id", message.ID.String())
 		}
 		message.Metadata = metadataJSON
 	}
 
-	err = s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-		return s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-			return s.repo.CreateMessage(ctx, message)
-		})
-	})
+	err = s.repo.CreateMessage(ctx, message)
 
 	if err != nil {
-		s.logger.Error("Failed to create message",
-			logger.String("message_id", message.ID.String()),
-			logger.Error(err),
-		)
-		return nil, fmt.Errorf("failed to create message: %w", err)
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService("message-service")
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create message").
+			WithService("message-service").
+			WithDetail("message_id", message.ID.String())
 	}
 
 	s.logger.Info("Message created",
@@ -168,11 +132,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 	)
 
 	var participantIDs []uuid.UUID
-	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		var err error
-		participantIDs, err = s.repo.GetParticipantUserIDs(ctx, req.ConversationID)
-		return err
-	})
+	participantIDs, err = s.repo.GetParticipantUserIDs(ctx, req.ConversationID)
 
 	if err != nil {
 		s.logger.Error("Failed to get participants",
@@ -184,9 +144,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 
 	go func() {
 		bgCtx := context.Background()
-		s.dbCircuit.ExecuteWithContext(bgCtx, func(ctx context.Context) error {
-			return s.repo.UpdateConversationLastMessage(ctx, req.ConversationID, message.ID)
-		})
+		s.repo.UpdateConversationLastMessage(bgCtx, req.ConversationID, message.ID)
 	}()
 
 	recipientIDs := make([]uuid.UUID, 0)
@@ -199,9 +157,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 	if len(recipientIDs) > 0 {
 		go func() {
 			bgCtx := context.Background()
-			s.dbCircuit.ExecuteWithContext(bgCtx, func(ctx context.Context) error {
-				return s.repo.CreateDeliveryStatus(ctx, message.ID, recipientIDs)
-			})
+			s.repo.CreateDeliveryStatus(bgCtx, message.ID, recipientIDs)
 		}()
 	}
 
@@ -328,11 +284,12 @@ func (s *messageService) sendPushNotification(message *model.Message, recipientI
 func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) (*model.MessagesResponse, error) {
 	messages, err := s.repo.GetMessages(ctx, conversationID, params)
 	if err != nil {
-		s.logger.Error("Failed to get messages",
-			logger.String("conversation_id", conversationID.String()),
-			logger.Error(err),
-		)
-		return nil, fmt.Errorf("failed to get messages: %w", err)
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService("message-service")
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get messages").
+			WithService("message-service").
+			WithDetail("conversation_id", conversationID.String())
 	}
 
 	hasMore := len(messages) == params.Limit

@@ -16,21 +16,14 @@ func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbum
 		logger.String("title", input.Title),
 	)
 
-	var albumID string
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			album := &dbModels.Album{
-				UserID:      input.UserID,
-				Title:       input.Title,
-				Description: &input.Description,
-				AlbumType:   dbModels.AlbumType(input.AlbumType),
-				Visibility:  dbModels.MediaVisibility(input.Visibility),
-			}
-			id, err := s.repo.CreateAlbum(ctx, album)
-			albumID = id
-			return err
-		})
-	})
+	album := &dbModels.Album{
+		UserID:      input.UserID,
+		Title:       input.Title,
+		Description: &input.Description,
+		AlbumType:   dbModels.AlbumType(input.AlbumType),
+		Visibility:  dbModels.MediaVisibility(input.Visibility),
+	}
+	albumID, err := s.repo.CreateAlbum(ctx, album)
 
 	if err != nil {
 		s.log.Error("Failed to create album", logger.Error(err))
@@ -46,15 +39,7 @@ func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbum
 }
 
 func (s *MediaService) GetAlbum(ctx context.Context, input models.GetAlbumInput) (*models.GetAlbumOutput, error) {
-	var album *dbModels.Album
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			a, err := s.repo.GetAlbumByID(ctx, input.AlbumID)
-			album = a
-			return err
-		})
-	})
-
+	album, err := s.repo.GetAlbumByID(ctx, input.AlbumID)
 	if err != nil || album == nil {
 		return nil, fmt.Errorf("album not found")
 	}
@@ -88,15 +73,7 @@ func (s *MediaService) GetAlbum(ctx context.Context, input models.GetAlbumInput)
 }
 
 func (s *MediaService) ListAlbums(ctx context.Context, input models.ListAlbumsInput) ([]*models.GetAlbumOutput, error) {
-	var albums []*dbModels.Album
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			a, err := s.repo.ListAlbumsByUser(ctx, input.UserID, input.Limit, input.Offset)
-			albums = a
-			return err
-		})
-	})
-
+	albums, err := s.repo.ListAlbumsByUser(ctx, input.UserID, input.Limit, input.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list albums: %w", err)
 	}

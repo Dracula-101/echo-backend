@@ -6,6 +6,7 @@ import (
 
 	"github.com/IBM/sarama"
 
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/messaging"
 )
 
@@ -31,7 +32,7 @@ func NewProducer(cfg messaging.Config) (messaging.Producer, error) {
 	return &producer{producer: prod}, nil
 }
 
-func (p *producer) Send(ctx context.Context, topic string, message *messaging.Message) error {
+func (p *producer) Send(ctx context.Context, topic string, message *messaging.Message) pkgErrors.AppError {
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
 		Key:   sarama.ByteEncoder(message.Key),
@@ -45,11 +46,15 @@ func (p *producer) Send(ctx context.Context, topic string, message *messaging.Me
 		})
 	}
 
-	_, _, err := p.producer.SendMessage(msg)
-	return err
+	if _, _, err := p.producer.SendMessage(msg); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to send message").
+			WithService("kafka-producer").
+			WithDetail("topic", topic)
+	}
+	return nil
 }
 
-func (p *producer) SendBatch(ctx context.Context, topic string, messages []*messaging.Message) error {
+func (p *producer) SendBatch(ctx context.Context, topic string, messages []*messaging.Message) pkgErrors.AppError {
 	msgs := make([]*sarama.ProducerMessage, 0, len(messages))
 
 	for _, message := range messages {
@@ -69,7 +74,13 @@ func (p *producer) SendBatch(ctx context.Context, topic string, messages []*mess
 		msgs = append(msgs, msg)
 	}
 
-	return p.producer.SendMessages(msgs)
+	if err := p.producer.SendMessages(msgs); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to send batch messages").
+			WithService("kafka-producer").
+			WithDetail("topic", topic).
+			WithDetail("count", len(messages))
+	}
+	return nil
 }
 
 func (p *producer) Close() error {

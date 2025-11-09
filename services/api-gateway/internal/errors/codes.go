@@ -27,10 +27,6 @@ const (
 	CodeRateLimitExceeded = "GW_RATE_LIMIT_EXCEEDED"
 	CodeQuotaExceeded     = "GW_QUOTA_EXCEEDED"
 
-	// Circuit Breaker Errors
-	CodeCircuitBreakerOpen  = "GW_CIRCUIT_BREAKER_OPEN"
-	CodeCircuitBreakerError = "GW_CIRCUIT_BREAKER_ERROR"
-
 	// Authentication/Authorization Errors
 	CodeMissingAuthHeader    = "GW_MISSING_AUTH_HEADER"
 	CodeInvalidAuthToken     = "GW_INVALID_AUTH_TOKEN"
@@ -77,10 +73,6 @@ var HTTPStatusMap = map[string]int{
 	CodeRateLimitExceeded: 429,
 	CodeQuotaExceeded:     429,
 
-	// Circuit Breaker Errors
-	CodeCircuitBreakerOpen:  503,
-	CodeCircuitBreakerError: 500,
-
 	// Authentication/Authorization Errors
 	CodeMissingAuthHeader:    401,
 	CodeInvalidAuthToken:     401,
@@ -110,6 +102,6 @@ func HTTPStatus(code string) int {
 // ============================================================================
 
 // NewGatewayError creates a new api-gateway error with service context
-func NewGatewayError(code, message string) pkgErrors.Error {
+func NewGatewayError(code, message string) pkgErrors.AppError {
 	return pkgErrors.New(code, message).WithService(ServiceName)
 }

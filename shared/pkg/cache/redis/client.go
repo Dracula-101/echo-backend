@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"shared/pkg/cache"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/logger/adapter"
 )
@@ -63,14 +64,24 @@ func (c *client) Get(ctx context.Context, key string) ([]byte, error) {
 	return result, err
 }
 
-func (c *client) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *client) Set(ctx context.Context, key string, value []byte, ttl time.Duration) pkgErrors.AppError {
 	c.logger.Debug("Setting key in Redis", logger.String("key", key))
-	return c.rdb.Set(ctx, key, value, ttl).Err()
+	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to set cache key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return nil
 }
 
-func (c *client) Delete(ctx context.Context, key string) error {
+func (c *client) Delete(ctx context.Context, key string) pkgErrors.AppError {
 	c.logger.Debug("Deleting key from Redis", logger.String("key", key))
-	return c.rdb.Del(ctx, key).Err()
+	if err := c.rdb.Del(ctx, key).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to delete cache key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return nil
 }
 
 func (c *client) Exists(ctx context.Context, key string) (bool, error) {
@@ -79,9 +90,14 @@ func (c *client) Exists(ctx context.Context, key string) (bool, error) {
 	return count > 0, err
 }
 
-func (c *client) Expire(ctx context.Context, key string, ttl time.Duration) error {
+func (c *client) Expire(ctx context.Context, key string, ttl time.Duration) pkgErrors.AppError {
 	c.logger.Debug("Setting expiration for key in Redis", logger.String("key", key), logger.Duration("ttl", ttl))
-	return c.rdb.Expire(ctx, key, ttl).Err()
+	if err := c.rdb.Expire(ctx, key, ttl).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to set expiration").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return nil
 }
 
 func (c *client) TTL(ctx context.Context, key string) (time.Duration, error) {
@@ -111,7 +127,7 @@ func (c *client) GetMulti(ctx context.Context, keys []string) (map[string][]byte
 	return data, nil
 }
 
-func (c *client) SetMulti(ctx context.Context, items map[string][]byte, ttl time.Duration) error {
+func (c *client) SetMulti(ctx context.Context, items map[string][]byte, ttl time.Duration) pkgErrors.AppError {
 	c.logger.Debug("Setting multiple keys in Redis", logger.Int("count", len(items)))
 	pipe := c.rdb.Pipeline()
 
@@ -119,16 +135,25 @@ func (c *client) SetMulti(ctx context.Context, items map[string][]byte, ttl time
 		pipe.Set(ctx, key, value, ttl)
 	}
 
-	_, err := pipe.Exec(ctx)
-	return err
+	if _, err := pipe.Exec(ctx); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to set multiple keys").
+			WithService("redis-client").
+			WithDetail("count", len(items))
+	}
+	return nil
 }
 
-func (c *client) DeleteMulti(ctx context.Context, keys []string) error {
+func (c *client) DeleteMulti(ctx context.Context, keys []string) pkgErrors.AppError {
 	c.logger.Debug("Deleting multiple keys from Redis", logger.Int("count", len(keys)))
 	if len(keys) == 0 {
 		return nil
 	}
-	return c.rdb.Del(ctx, keys...).Err()
+	if err := c.rdb.Del(ctx, keys...).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to delete multiple keys").
+			WithService("redis-client").
+			WithDetail("count", len(keys))
+	}
+	return nil
 }
 
 func (c *client) Increment(ctx context.Context, key string, delta int64) (int64, error) {
@@ -141,9 +166,13 @@ func (c *client) Decrement(ctx context.Context, key string, delta int64) (int64,
 	return c.rdb.DecrBy(ctx, key, delta).Result()
 }
 
-func (c *client) Ping(ctx context.Context) error {
+func (c *client) Ping(ctx context.Context) pkgErrors.AppError {
 	c.logger.Debug("Pinging Redis server")
-	return c.rdb.Ping(ctx).Err()
+	if err := c.rdb.Ping(ctx).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to ping redis").
+			WithService("redis-client")
+	}
+	return nil
 }
 
 func (c *client) Info(ctx context.Context) (map[string]string, error) {
@@ -201,9 +230,13 @@ func splitKeyValue(s string) []string {
 	return []string{s}
 }
 
-func (c *client) Flush(ctx context.Context) error {
+func (c *client) Flush(ctx context.Context) pkgErrors.AppError {
 	c.logger.Debug("Flushing Redis database")
-	return c.rdb.FlushDB(ctx).Err()
+	if err := c.rdb.FlushDB(ctx).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to flush redis").
+			WithService("redis-client")
+	}
+	return nil
 }
 
 func (c *client) Close() error {

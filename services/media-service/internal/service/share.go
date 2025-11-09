@@ -9,21 +9,25 @@ import (
 
 	"media-service/internal/service/models"
 	dbModels "shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 )
 
-func (s *MediaService) CreateShare(ctx context.Context, input models.CreateShareInput) (*models.CreateShareOutput, error) {
-	file, err := s.repo.GetFileByID(ctx, input.FileID)
-	if err != nil || file == nil {
-		return nil, fmt.Errorf("file not found")
+func (s *MediaService) CreateShare(ctx context.Context, input models.CreateShareInput) (*models.CreateShareOutput, pkgErrors.AppError) {
+	file, repoErr := s.repo.GetFileByID(ctx, input.FileID)
+	if repoErr != nil || file == nil {
+		return nil, pkgErrors.FromError(fmt.Errorf("file not found"), pkgErrors.CodeNotFound, "file not found").
+			WithService("media-service")
 	}
 
 	if file.UploaderUserID != input.UserID {
-		return nil, fmt.Errorf("access denied")
+		return nil, pkgErrors.FromError(fmt.Errorf("access denied"), pkgErrors.CodePermissionDenied, "access denied").
+			WithService("media-service")
 	}
 
-	token, err := generateShareToken()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate share token: %w", err)
+	token, tokenErr := generateShareToken()
+	if tokenErr != nil {
+		return nil, pkgErrors.FromError(fmt.Errorf("failed to generate share token: %w", tokenErr), pkgErrors.CodeInternal, "failed to generate share token").
+			WithService("media-service")
 	}
 
 	var expiresAt *time.Time
@@ -54,17 +58,12 @@ func (s *MediaService) CreateShare(ctx context.Context, input models.CreateShare
 		IsActive:                 true,
 	}
 
-	var shareID string
-	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			id, err := s.repo.CreateShare(ctx, share)
-			shareID = id
-			return err
-		})
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create share: %w", err)
+	shareID, execErr := s.repo.CreateShare(ctx, share)
+	if execErr != nil {
+		return nil, pkgErrors.FromError(execErr, pkgErrors.CodeInternal, "failed to create share").
+			WithDetail("file_id", input.FileID).
+			WithDetail("user_id", input.UserID).
+			WithService("media-service")
 	}
 
 	shareURL := fmt.Sprintf("%s/share/%s", s.cfg.Server.Host, token)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/IBM/sarama"
 
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/messaging"
 )
 
@@ -36,11 +37,13 @@ func NewBroker(cfg messaging.Config) (messaging.Broker, error) {
 	}, nil
 }
 
-func (b *broker) Publish(ctx context.Context, topic string, message *messaging.Message) error {
+func (b *broker) Publish(ctx context.Context, topic string, message *messaging.Message) pkgErrors.AppError {
 	if b.producer == nil {
 		producer, err := sarama.NewAsyncProducerFromClient(b.client)
 		if err != nil {
-			return fmt.Errorf("failed to create producer: %w", err)
+			return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to create producer").
+				WithService("kafka-broker").
+				WithDetail("topic", topic)
 		}
 		b.producer = producer
 
@@ -64,16 +67,20 @@ func (b *broker) Publish(ctx context.Context, topic string, message *messaging.M
 	case b.producer.Input() <- msg:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return pkgErrors.FromError(ctx.Err(), pkgErrors.CodeInternal, "context cancelled while publishing").
+			WithService("kafka-broker").
+			WithDetail("topic", topic)
 	}
 }
 
-func (b *broker) Subscribe(ctx context.Context, topic string, handler messaging.Handler) error {
-	return fmt.Errorf("not implemented: use consumer group instead")
+func (b *broker) Subscribe(ctx context.Context, topic string, handler messaging.Handler) pkgErrors.AppError {
+	return pkgErrors.New(pkgErrors.CodeNotImplemented, "not implemented: use consumer group instead").
+		WithService("kafka-broker")
 }
 
-func (b *broker) Unsubscribe(ctx context.Context, topic string) error {
-	return fmt.Errorf("not implemented")
+func (b *broker) Unsubscribe(ctx context.Context, topic string) pkgErrors.AppError {
+	return pkgErrors.New(pkgErrors.CodeNotImplemented, "not implemented").
+		WithService("kafka-broker")
 }
 
 func (b *broker) Close() error {

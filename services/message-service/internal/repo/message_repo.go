@@ -9,6 +9,7 @@ import (
 	"echo-backend/services/message-service/internal/model"
 
 	"shared/pkg/database"
+	pkgErrors "shared/pkg/errors"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -16,29 +17,29 @@ import (
 
 type MessageRepository interface {
 	// Core message operations
-	CreateMessage(ctx context.Context, msg *model.Message) error
+	CreateMessage(ctx context.Context, msg *model.Message) pkgErrors.AppError
 	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*model.Message, error)
 	GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) ([]model.Message, error)
-	UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) error
-	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
+	UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) pkgErrors.AppError
+	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
 
 	// Delivery tracking
-	CreateDeliveryStatus(ctx context.Context, messageID uuid.UUID, userIDs []uuid.UUID) error
-	UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) error
-	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error
-	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) error
+	CreateDeliveryStatus(ctx context.Context, messageID uuid.UUID, userIDs []uuid.UUID) pkgErrors.AppError
+	UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) pkgErrors.AppError
+	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError
+	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError
 	GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]model.DeliveryStatus, error)
 
 	// Conversation operations
 	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]model.ConversationParticipant, error)
 	GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error)
 	ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, error)
-	UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) error
-	UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) error
-	ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) error
+	UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) pkgErrors.AppError
+	UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) pkgErrors.AppError
+	ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) pkgErrors.AppError
 
 	// Typing indicators
-	SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) error
+	SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) pkgErrors.AppError
 	GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error)
 }
 
@@ -51,7 +52,7 @@ func NewMessageRepository(db database.Database) MessageRepository {
 }
 
 // CreateMessage creates a new message in the database
-func (r *messageRepository) CreateMessage(ctx context.Context, msg *model.Message) error {
+func (r *messageRepository) CreateMessage(ctx context.Context, msg *model.Message) pkgErrors.AppError {
 	query := `
 		INSERT INTO messages.messages (
 			id, conversation_id, sender_user_id, parent_message_id,
@@ -62,12 +63,14 @@ func (r *messageRepository) CreateMessage(ctx context.Context, msg *model.Messag
 
 	mentionsJSON, err := json.Marshal(msg.Mentions)
 	if err != nil {
-		return fmt.Errorf("failed to marshal mentions: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal mentions").
+			WithDetail("message_id", msg.ID.String())
 	}
 
 	metadataJSON, err := json.Marshal(msg.Metadata)
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal metadata").
+			WithDetail("message_id", msg.ID.String())
 	}
 
 	row := r.db.QueryRow(ctx, query,
@@ -86,7 +89,9 @@ func (r *messageRepository) CreateMessage(ctx context.Context, msg *model.Messag
 	err = row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt)
 
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create message").
+			WithDetail("message_id", msg.ID.String()).
+			WithDetail("conversation_id", msg.ConversationID.String())
 	}
 
 	return nil
@@ -122,10 +127,12 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.U
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("message not found")
+		return nil, pkgErrors.New(pkgErrors.CodeNotFound, "message not found").
+			WithDetail("message_id", messageID.String())
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get message: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get message").
+			WithDetail("message_id", messageID.String())
 	}
 
 	return msg, nil
@@ -173,7 +180,9 @@ func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query messages: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query messages").
+			WithDetail("conversation_id", conversationID.String()).
+			WithDetail("limit", params.Limit)
 	}
 	defer rows.Close()
 
@@ -199,7 +208,8 @@ func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid
 			&msg.ReadCount,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan message: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan message").
+				WithDetail("conversation_id", conversationID.String())
 		}
 		messages = append(messages, msg)
 	}
@@ -208,7 +218,7 @@ func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid
 }
 
 // UpdateMessage updates message content
-func (r *messageRepository) UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) error {
+func (r *messageRepository) UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) pkgErrors.AppError {
 	query := `
 		UPDATE messages.messages
 		SET content = $1, is_edited = TRUE, edited_at = NOW(), updated_at = NOW()
@@ -217,23 +227,26 @@ func (r *messageRepository) UpdateMessage(ctx context.Context, messageID uuid.UU
 
 	result, err := r.db.Exec(ctx, query, content, messageID)
 	if err != nil {
-		return fmt.Errorf("failed to update message: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update message").
+			WithDetail("message_id", messageID.String())
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get affected rows: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get affected rows").
+			WithDetail("message_id", messageID.String())
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("message not found or already deleted")
+		return pkgErrors.New(pkgErrors.CodeNotFound, "message not found or already deleted").
+			WithDetail("message_id", messageID.String())
 	}
 
 	return nil
 }
 
 // DeleteMessage soft deletes a message
-func (r *messageRepository) DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error {
+func (r *messageRepository) DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) pkgErrors.AppError {
 	query := `
 		UPDATE messages.messages
 		SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW()
@@ -242,23 +255,28 @@ func (r *messageRepository) DeleteMessage(ctx context.Context, messageID uuid.UU
 
 	result, err := r.db.Exec(ctx, query, messageID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to delete message: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete message").
+			WithDetail("message_id", messageID.String()).
+			WithDetail("user_id", userID.String())
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get affected rows: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get affected rows").
+			WithDetail("message_id", messageID.String())
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("message not found or unauthorized")
+		return pkgErrors.New(pkgErrors.CodeNotFound, "message not found or unauthorized").
+			WithDetail("message_id", messageID.String()).
+			WithDetail("user_id", userID.String())
 	}
 
 	return nil
 }
 
 // CreateDeliveryStatus creates delivery status records for all participants
-func (r *messageRepository) CreateDeliveryStatus(ctx context.Context, messageID uuid.UUID, userIDs []uuid.UUID) error {
+func (r *messageRepository) CreateDeliveryStatus(ctx context.Context, messageID uuid.UUID, userIDs []uuid.UUID) pkgErrors.AppError {
 	if len(userIDs) == 0 {
 		return nil
 	}
@@ -271,14 +289,16 @@ func (r *messageRepository) CreateDeliveryStatus(ctx context.Context, messageID 
 
 	_, err := r.db.Exec(ctx, query, messageID, pq.Array(userIDs))
 	if err != nil {
-		return fmt.Errorf("failed to create delivery status: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create delivery status").
+			WithDetail("message_id", messageID.String()).
+			WithDetail("recipient_count", len(userIDs))
 	}
 
 	return nil
 }
 
 // UpdateDeliveryStatus updates the delivery status for a message
-func (r *messageRepository) UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) error {
+func (r *messageRepository) UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) pkgErrors.AppError {
 	query := `
 		UPDATE messages.delivery_status
 		SET status = $1,
@@ -289,19 +309,22 @@ func (r *messageRepository) UpdateDeliveryStatus(ctx context.Context, messageID,
 
 	_, err := r.db.Exec(ctx, query, status, messageID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to update delivery status: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update delivery status").
+			WithDetail("message_id", messageID.String()).
+			WithDetail("user_id", userID.String()).
+			WithDetail("status", status)
 	}
 
 	return nil
 }
 
 // MarkAsDelivered marks a message as delivered to a user
-func (r *messageRepository) MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error {
+func (r *messageRepository) MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError {
 	return r.UpdateDeliveryStatus(ctx, messageID, userID, "delivered")
 }
 
 // MarkAsRead marks a message as read by a user
-func (r *messageRepository) MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) error {
+func (r *messageRepository) MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError {
 	return r.UpdateDeliveryStatus(ctx, messageID, userID, "read")
 }
 
@@ -316,7 +339,8 @@ func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uui
 
 	rows, err := r.db.Query(ctx, query, messageID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query delivery status: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query delivery status").
+			WithDetail("message_id", messageID.String())
 	}
 	defer rows.Close()
 
@@ -333,7 +357,8 @@ func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uui
 			&ds.CreatedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan delivery status: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan delivery status").
+				WithDetail("message_id", messageID.String())
 		}
 		statuses = append(statuses, ds)
 	}
@@ -353,7 +378,8 @@ func (r *messageRepository) GetConversationParticipants(ctx context.Context, con
 
 	rows, err := r.db.Query(ctx, query, conversationID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query participants: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query participants").
+			WithDetail("conversation_id", conversationID.String())
 	}
 	defer rows.Close()
 
@@ -373,7 +399,8 @@ func (r *messageRepository) GetConversationParticipants(ctx context.Context, con
 			&p.LeftAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan participant: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan participant").
+				WithDetail("conversation_id", conversationID.String())
 		}
 		participants = append(participants, p)
 	}
@@ -390,7 +417,8 @@ func (r *messageRepository) GetParticipantUserIDs(ctx context.Context, conversat
 
 	rows, err := r.db.Query(ctx, query, conversationID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query participant user IDs: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query participant user IDs").
+			WithDetail("conversation_id", conversationID.String())
 	}
 	defer rows.Close()
 
@@ -398,7 +426,8 @@ func (r *messageRepository) GetParticipantUserIDs(ctx context.Context, conversat
 	for rows.Next() {
 		var userID uuid.UUID
 		if err := rows.Scan(&userID); err != nil {
-			return nil, fmt.Errorf("failed to scan user ID: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan user ID").
+				WithDetail("conversation_id", conversationID.String())
 		}
 		userIDs = append(userIDs, userID)
 	}
@@ -418,14 +447,16 @@ func (r *messageRepository) ValidateParticipant(ctx context.Context, conversatio
 	var exists bool
 	err := r.db.QueryRow(ctx, query, conversationID, userID).Scan(&exists)
 	if err != nil {
-		return false, fmt.Errorf("failed to validate participant: %w", err)
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to validate participant").
+			WithDetail("conversation_id", conversationID.String()).
+			WithDetail("user_id", userID.String())
 	}
 
 	return exists, nil
 }
 
 // UpdateConversationLastMessage updates conversation metadata
-func (r *messageRepository) UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) error {
+func (r *messageRepository) UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) pkgErrors.AppError {
 	query := `
 		UPDATE messages.conversations
 		SET last_message_id = $1,
@@ -438,14 +469,16 @@ func (r *messageRepository) UpdateConversationLastMessage(ctx context.Context, c
 
 	_, err := r.db.Exec(ctx, query, messageID, conversationID)
 	if err != nil {
-		return fmt.Errorf("failed to update conversation: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update conversation").
+			WithDetail("conversation_id", conversationID.String()).
+			WithDetail("message_id", messageID.String())
 	}
 
 	return nil
 }
 
 // UpdateParticipantUnreadCount updates unread count for a participant
-func (r *messageRepository) UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) error {
+func (r *messageRepository) UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) pkgErrors.AppError {
 	var query string
 	if increment {
 		query = `
@@ -463,14 +496,16 @@ func (r *messageRepository) UpdateParticipantUnreadCount(ctx context.Context, co
 
 	_, err := r.db.Exec(ctx, query, conversationID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to update unread count: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update unread count").
+			WithDetail("conversation_id", conversationID.String()).
+			WithDetail("user_id", userID.String())
 	}
 
 	return nil
 }
 
 // ResetUnreadCount resets unread count for a participant
-func (r *messageRepository) ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) error {
+func (r *messageRepository) ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) pkgErrors.AppError {
 	query := `
 		UPDATE messages.conversation_participants
 		SET unread_count = 0, last_read_at = NOW(), updated_at = NOW()
@@ -479,14 +514,16 @@ func (r *messageRepository) ResetUnreadCount(ctx context.Context, conversationID
 
 	_, err := r.db.Exec(ctx, query, conversationID, userID)
 	if err != nil {
-		return fmt.Errorf("failed to reset unread count: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to reset unread count").
+			WithDetail("conversation_id", conversationID.String()).
+			WithDetail("user_id", userID.String())
 	}
 
 	return nil
 }
 
 // SetTypingIndicator sets typing indicator for a user in a conversation
-func (r *messageRepository) SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) error {
+func (r *messageRepository) SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) pkgErrors.AppError {
 	if isTyping {
 		query := `
 			INSERT INTO messages.typing_indicators (conversation_id, user_id, started_at, expires_at)
@@ -496,11 +533,21 @@ func (r *messageRepository) SetTypingIndicator(ctx context.Context, conversation
 				expires_at = NOW() + INTERVAL '10 seconds'
 		`
 		_, err := r.db.Exec(ctx, query, conversationID, userID)
-		return err
+		if err != nil {
+			return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to set typing indicator").
+				WithDetail("conversation_id", conversationID.String()).
+				WithDetail("user_id", userID.String())
+		}
+		return nil
 	} else {
 		query := `DELETE FROM messages.typing_indicators WHERE conversation_id = $1 AND user_id = $2`
 		_, err := r.db.Exec(ctx, query, conversationID, userID)
-		return err
+		if err != nil {
+			return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to clear typing indicator").
+				WithDetail("conversation_id", conversationID.String()).
+				WithDetail("user_id", userID.String())
+		}
+		return nil
 	}
 }
 
@@ -513,7 +560,8 @@ func (r *messageRepository) GetTypingUsers(ctx context.Context, conversationID u
 
 	rows, err := r.db.Query(ctx, query, conversationID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query typing users: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query typing users").
+			WithDetail("conversation_id", conversationID.String())
 	}
 	defer rows.Close()
 
@@ -521,7 +569,8 @@ func (r *messageRepository) GetTypingUsers(ctx context.Context, conversationID u
 	for rows.Next() {
 		var userID uuid.UUID
 		if err := rows.Scan(&userID); err != nil {
-			return nil, fmt.Errorf("failed to scan typing user: %w", err)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan typing user").
+				WithDetail("conversation_id", conversationID.String())
 		}
 		userIDs = append(userIDs, userID)
 	}

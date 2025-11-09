@@ -117,7 +117,7 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 	producer, err := kafka.NewProducer(messaging.Config{
 		Brokers:    cfg.Brokers,
 		ClientID:   "message-service",
-		MaxRetries: cfg.RetryMax,
+		MaxRetries: 3,
 	})
 	if err != nil {
 		return nil, err

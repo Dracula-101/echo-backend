@@ -6,8 +6,7 @@ import (
 	"strings"
 )
 
-// Error is our custom error interface with rich context
-type Error interface {
+type AppError interface {
 	error
 	Code() string
 	Message() string
@@ -16,9 +15,9 @@ type Error interface {
 	Unwrap() error
 	Service() string
 	CorrelationID() string
-	WithService(service string) Error
-	WithCorrelationID(correlationID string) Error
-	WithDetail(key string, value interface{}) Error
+	WithService(service string) AppError
+	WithCorrelationID(correlationID string) AppError
+	WithDetail(key string, value interface{}) AppError
 }
 
 type appError struct {
@@ -31,13 +30,43 @@ type appError struct {
 	correlationID string
 }
 
-// New creates a new error with automatic stack trace capture
-func New(code, message string) Error {
+func New(code, message string) AppError {
 	return &appError{
 		code:       code,
 		message:    message,
 		details:    make(map[string]interface{}),
-		stackTrace: captureCleanStack(),
+		stackTrace: captureCleanStack(3),
+	}
+}
+
+func FromError(err error, code, message string) AppError {
+	if err == nil {
+		return nil
+	}
+
+	if appErr, ok := err.(AppError); ok {
+		wrapLocation := captureCleanStack(3)
+
+		combinedStack := make([]string, 0, len(appErr.StackTrace())+len(wrapLocation)+1)
+		combinedStack = append(combinedStack, appErr.StackTrace()...)
+
+		return &appError{
+			code:          code,
+			message:       message,
+			stackTrace:    combinedStack,
+			wrapped:       err,
+			details:       appErr.Details(),
+			service:       appErr.Service(),
+			correlationID: appErr.CorrelationID(),
+		}
+	}
+
+	return &appError{
+		code:       code,
+		message:    message,
+		details:    make(map[string]interface{}),
+		stackTrace: captureCleanStack(3),
+		wrapped:    err,
 	}
 }
 
@@ -92,25 +121,25 @@ func (e *appError) CorrelationID() string {
 	return e.correlationID
 }
 
-func (e *appError) WithService(service string) Error {
+func (e *appError) WithService(service string) AppError {
 	e.service = service
 	return e
 }
 
-func (e *appError) WithCorrelationID(correlationID string) Error {
+func (e *appError) WithCorrelationID(correlationID string) AppError {
 	e.correlationID = correlationID
 	return e
 }
 
-func (e *appError) WithDetail(key string, value interface{}) Error {
+func (e *appError) WithDetail(key string, value interface{}) AppError {
 	e.details[key] = value
 	return e
 }
 
-func captureCleanStack() []string {
-	const maxDepth = 32
+func captureCleanStack(skip int) []string {
+	const maxDepth = 50
 	pcs := make([]uintptr, maxDepth)
-	n := runtime.Callers(3, pcs)
+	n := runtime.Callers(skip, pcs)
 
 	if n == 0 {
 		return nil
@@ -123,7 +152,7 @@ func captureCleanStack() []string {
 		frame, more := frames.Next()
 
 		if shouldIncludeFrame(frame) {
-			stack = append(stack, formatFrame(frame))
+			stack = append(stack, formatFrame(frame)...)
 		}
 
 		if !more {
@@ -157,29 +186,15 @@ func shouldIncludeFrame(frame runtime.Frame) bool {
 		}
 	}
 
-	if strings.Contains(fn, "/errors.") || strings.HasSuffix(fn, "/errors.New") {
-		return false
-	}
-
 	return true
 }
 
-func formatFrame(frame runtime.Frame) string {
-	file := frame.File
-	if idx := strings.LastIndex(file, "/"); idx >= 0 {
-		if idx2 := strings.LastIndex(file[:idx], "/"); idx2 >= 0 {
-			file = file[idx2+1:]
-		} else {
-			file = file[idx+1:]
-		}
+func formatFrame(frame runtime.Frame) []string {
+	return []string{
+		frame.Function,
+		fmt.Sprintf("%s:%d", frame.File, frame.Line),
+		string(""),
 	}
-
-	fn := frame.Function
-	if idx := strings.LastIndex(fn, "/"); idx >= 0 {
-		fn = fn[idx+1:]
-	}
-
-	return fmt.Sprintf("%s:%d %s", file, frame.Line, fn)
 }
 
 func GetCode(err error) string {
@@ -187,7 +202,7 @@ func GetCode(err error) string {
 		return ""
 	}
 
-	if e, ok := err.(Error); ok {
+	if e, ok := err.(AppError); ok {
 		return e.Code()
 	}
 
@@ -199,7 +214,7 @@ func GetDetails(err error) map[string]interface{} {
 		return nil
 	}
 
-	if e, ok := err.(Error); ok {
+	if e, ok := err.(AppError); ok {
 		return e.Details()
 	}
 

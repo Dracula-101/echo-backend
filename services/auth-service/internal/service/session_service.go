@@ -14,6 +14,7 @@ import (
 	"shared/pkg/cache"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/common/token"
 
@@ -52,12 +53,8 @@ func NewSessionService(repo *repository.SessionRepo, cache cache.Cache, token to
 func (s *SessionService) generateSessionToken(userID string) (string, error) {
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
-		s.log.Error("Failed to generate session nonce",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		return "", fmt.Errorf("generate session nonce: %w", err)
+		return "", pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to generate session nonce").
+			WithDetail("user_id", userID)
 	}
 
 	payload := append(append([]byte{}, nonce...), []byte(userID)...)
@@ -92,13 +89,12 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 
 	sessionToken, err := s.generateSessionToken(input.UserID)
 	if err != nil {
-		s.log.Error("Failed to generate session token",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", input.UserID),
-			logger.String("error_code", authErrors.CodeSessionCreationFailed),
-			logger.Error(err),
-		)
-		return nil, fmt.Errorf("create session: %w", err)
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService(authErrors.ServiceName)
+		}
+		return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to generate session token").
+			WithService(authErrors.ServiceName).
+			WithDetail("user_id", input.UserID)
 	}
 
 	sessionID := uuid.NewString()
@@ -142,14 +138,13 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		PushEnabled:        pushEnabled,
 	})
 	if err != nil {
-		s.log.Error("Failed to store session in database",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("session_id", sessionID),
-			logger.String("user_id", input.UserID),
-			logger.String("error_code", authErrors.CodeSessionCreationFailed),
-			logger.Error(err),
-		)
-		return nil, fmt.Errorf("create session: %w", err)
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService(authErrors.ServiceName)
+		}
+		return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to store session in database").
+			WithService(authErrors.ServiceName).
+			WithDetail("session_id", sessionID).
+			WithDetail("user_id", input.UserID)
 	}
 
 	if s.cache != nil {
@@ -196,12 +191,12 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 
 	session, err := s.repo.GetSessionByUserId(ctx, userID)
 	if err != nil && !database.IsNoRowsError(err) {
-		s.log.Error("Failed to get session by user ID",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		return nil, err
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService(authErrors.ServiceName)
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by user ID").
+			WithService(authErrors.ServiceName).
+			WithDetail("user_id", userID)
 	}
 
 	if session == nil {
@@ -229,12 +224,7 @@ func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string
 
 	err := s.repo.DeleteSessionByID(ctx, sessionID)
 	if err != nil {
-		s.log.Error("Failed to delete session",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("session_id", sessionID),
-			logger.Error(err),
-		)
-		return err
+		return err.WithService(authErrors.ServiceName)
 	}
 
 	s.log.Info("Session deleted successfully",

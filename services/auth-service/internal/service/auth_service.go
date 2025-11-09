@@ -6,28 +6,16 @@ import (
 	"auth-service/internal/model"
 	repository "auth-service/internal/repo"
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	serviceModels "auth-service/internal/service/models"
 	"encoding/base64"
 	"shared/pkg/database"
-	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/common/token"
 )
-
-// ============================================================================
-// Error Types
-// ============================================================================
-
-type AuthError struct {
-	Message string
-	Code    string
-	Error   error
-}
 
 // ============================================================================
 // Helper Functions
@@ -45,18 +33,7 @@ func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (bool, err
 	s.log.Info("Checking if email is taken", logger.String("email", email))
 	email = normalizeEmail(email)
 
-	var exists bool
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			result, err := s.repo.ExistsByEmail(ctx, email)
-			if err != nil {
-				return err
-			}
-			exists = result
-			return nil
-		})
-	})
-
+	exists, err := s.repo.ExistsByEmail(ctx, email)
 	return exists, err
 }
 
@@ -64,31 +41,15 @@ func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (bool, err
 // User Retrieval
 // ============================================================================
 
-func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.User, *AuthError) {
+func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	s.log.Info("Fetching user by email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
 
-	var user *models.AuthUser
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			result, err := s.repo.GetUserByEmail(ctx, email)
-			if err != nil {
-				return err
-			}
-			user = result
-			return nil
-		})
-	})
-
+	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
-		s.log.Error("Failed to fetch user",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", pkgErrors.CodeDatabaseError),
-			logger.Error(err),
-		)
-		return nil, &AuthError{Message: "Failed to fetch user", Code: pkgErrors.CodeDatabaseError, Error: err}
+		return nil, err.WithService(authErrors.ServiceName)
 	}
 	if user == nil {
 		s.log.Info("User not found",
@@ -127,7 +88,7 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.
 // User Registration
 // ============================================================================
 
-func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.RegisterUserInput) (*serviceModels.RegisterUserOutput, *AuthError) {
+func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.RegisterUserInput) (*serviceModels.RegisterUserOutput, error) {
 	s.log.Info("Registering new user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", input.Email),
@@ -136,12 +97,9 @@ func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.Regi
 
 	result, err := s.hashingService.HashPassword(ctx, input.Password)
 	if err != nil {
-		s.log.Error("Failed to hash password",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", authErrors.CodePasswordHashingFailed),
-			logger.Error(err),
-		)
-		return nil, &AuthError{Message: "Failed to process registration", Code: authErrors.CodePasswordHashingFailed, Error: err}
+		return nil, pkgErrors.FromError(err, authErrors.CodePasswordHashingFailed, "failed to hash password").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", input.Email)
 	}
 	s.log.Debug("Password hashed successfully",
 		logger.String("service", authErrors.ServiceName),
@@ -157,46 +115,33 @@ func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.Regi
 		Audience: []string{"auth_service_email_verification"},
 	})
 	if err != nil {
-		s.log.Error("Failed to generate verification token",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", authErrors.CodeTokenGenerationFailed),
-			logger.Error(err),
-		)
-		return nil, &AuthError{Message: "Failed to process registration", Code: authErrors.CodeTokenGenerationFailed, Error: err}
+		return nil, pkgErrors.FromError(err, authErrors.CodeTokenGenerationFailed, "failed to generate verification token").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", input.Email)
 	}
 	s.log.Debug("Email verification token generated successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("token", tokenResult.Token),
 	)
 
-	var userID string
-	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			id, err := s.repo.CreateUser(ctx, repository.CreateUserParams{
-				Email:             input.Email,
-				PasswordHash:      result.Encoded,
-				PasswordSalt:      base64.StdEncoding.EncodeToString(result.Salt),
-				PasswordAlgorithm: string(result.Algorithm),
-				PhoneNumber:       input.PhoneNumber,
-				PhoneCountryCode:  input.PhoneCountryCode,
-				IPAddress:         input.IPAddress,
-				UserAgent:         input.UserAgent,
-			})
-			if err != nil {
-				return err
-			}
-			userID = id
-			return nil
-		})
+	userID, err := s.repo.CreateUser(ctx, repository.CreateUserParams{
+		Email:             input.Email,
+		PasswordHash:      result.Encoded,
+		PasswordSalt:      base64.StdEncoding.EncodeToString(result.Salt),
+		PasswordAlgorithm: string(result.Algorithm),
+		PhoneNumber:       input.PhoneNumber,
+		PhoneCountryCode:  input.PhoneCountryCode,
+		IPAddress:         input.IPAddress,
+		UserAgent:         input.UserAgent,
 	})
 
 	if err != nil {
-		s.log.Error("Failed to create user",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", pkgErrors.CodeDatabaseError),
-			logger.Error(err),
-		)
-		return nil, &AuthError{Message: "Failed to process registration", Code: pkgErrors.CodeDatabaseError, Error: err}
+		if appErr, ok := err.(pkgErrors.AppError); ok {
+			return nil, appErr.WithService(authErrors.ServiceName)
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", input.Email)
 	}
 
 	s.log.Info("User registered successfully",
@@ -217,38 +162,24 @@ func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.Regi
 // User Authentication
 // ============================================================================
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.LoginResponse, *AuthError) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.LoginResponse, error) {
 	s.log.Info("User login",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
 
-	var user *models.AuthUser
-	err := s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			result, err := s.repo.GetUserByEmail(ctx, email)
-			if err != nil && !database.IsNoRowsError(err) {
-				return err
-			}
-			user = result
-			return nil
-		})
-	})
-
-	if err != nil {
-		s.log.Error("Database error during login",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", pkgErrors.CodeDatabaseError),
-			logger.Error(err),
-		)
-		return nil, &AuthError{Message: "Failed to process login", Code: pkgErrors.CodeDatabaseError, Error: err}
+	user, err := s.repo.GetUserByEmail(ctx, email)
+	if err != nil && !database.IsNoRowsError(err) {
+		return nil, err.WithService(authErrors.ServiceName)
 	}
 	if user == nil {
 		s.log.Warn("Login attempt for non-existent user",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
 		)
-		return nil, &AuthError{Message: "Invalid credentials", Code: authErrors.CodeUserNotFound, Error: nil}
+		return nil, pkgErrors.New(authErrors.CodeUserNotFound, "invalid credentials").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", email)
 	}
 	s.log.Debug("User fetched for login",
 		logger.String("service", authErrors.ServiceName),
@@ -257,19 +188,19 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 
 	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, password, user.PasswordHash)
 	if verifyErr != nil {
-		s.log.Error(fmt.Sprintf("Password verification failed using algorithm %s", algo),
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", authErrors.CodeInvalidCredentials),
-			logger.Error(verifyErr),
-		)
-		return nil, &AuthError{Message: "Error verifying credentials", Code: authErrors.CodeInvalidCredentials, Error: verifyErr}
+		return nil, pkgErrors.FromError(verifyErr, authErrors.CodeInvalidCredentials, "password verification failed").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", email).
+			WithDetail("algorithm", algo)
 	}
 	if !success {
 		s.log.Warn("Invalid password attempt",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
 		)
-		return nil, &AuthError{Message: "Invalid credentials", Code: authErrors.CodeInvalidCredentials, Error: nil}
+		return nil, pkgErrors.New(authErrors.CodeInvalidCredentials, "invalid credentials").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", email)
 	}
 
 	accessToken, tokenErr := s.tokenService.IssueAccessToken(ctx, user.ID, token.IssueOptions{
@@ -282,12 +213,9 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		Audience: []string{s.cfg.JWT.Audience},
 	})
 	if tokenErr != nil {
-		s.log.Error("Failed to generate access token",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", authErrors.CodeTokenGenerationFailed),
-			logger.Error(tokenErr),
-		)
-		return nil, &AuthError{Message: "Failed to generate access token", Code: authErrors.CodeTokenGenerationFailed, Error: tokenErr}
+		return nil, pkgErrors.FromError(tokenErr, authErrors.CodeTokenGenerationFailed, "failed to generate access token").
+			WithService(authErrors.ServiceName).
+			WithDetail("user_id", user.ID)
 	}
 
 	expiresAt := accessToken.Claims.IssuedAt.Add(s.cfg.JWT.AccessTokenTTL)
@@ -299,12 +227,9 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		Audience: []string{s.cfg.JWT.Audience},
 	})
 	if refreshErr != nil {
-		s.log.Error("Failed to generate refresh token",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("error_code", authErrors.CodeTokenGenerationFailed),
-			logger.Error(refreshErr),
-		)
-		return nil, &AuthError{Message: "Failed to generate refresh token", Code: authErrors.CodeTokenGenerationFailed, Error: refreshErr}
+		return nil, pkgErrors.FromError(refreshErr, authErrors.CodeTokenGenerationFailed, "failed to generate refresh token").
+			WithService(authErrors.ServiceName).
+			WithDetail("user_id", user.ID)
 	}
 
 	return &dto.LoginResponse{

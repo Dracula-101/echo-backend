@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"shared/pkg/cache"
+	pkgErrors "shared/pkg/errors"
 )
 
 type item struct {
@@ -45,7 +46,7 @@ func (c *memoryCache) Get(ctx context.Context, key string) ([]byte, error) {
 	return item.value, nil
 }
 
-func (c *memoryCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memoryCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -62,7 +63,7 @@ func (c *memoryCache) Set(ctx context.Context, key string, value []byte, ttl tim
 	return nil
 }
 
-func (c *memoryCache) Delete(ctx context.Context, key string) error {
+func (c *memoryCache) Delete(ctx context.Context, key string) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -86,13 +87,15 @@ func (c *memoryCache) Exists(ctx context.Context, key string) (bool, error) {
 	return true, nil
 }
 
-func (c *memoryCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+func (c *memoryCache) Expire(ctx context.Context, key string, ttl time.Duration) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	item, found := c.items[key]
 	if !found {
-		return cache.ErrNotFound
+		return pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("memory-cache").
+			WithDetail("key", key)
 	}
 
 	item.expiration = time.Now().Add(ttl).UnixNano()
@@ -138,7 +141,7 @@ func (c *memoryCache) GetMulti(ctx context.Context, keys []string) (map[string][
 	return result, nil
 }
 
-func (c *memoryCache) SetMulti(ctx context.Context, items map[string][]byte, ttl time.Duration) error {
+func (c *memoryCache) SetMulti(ctx context.Context, items map[string][]byte, ttl time.Duration) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -157,7 +160,7 @@ func (c *memoryCache) SetMulti(ctx context.Context, items map[string][]byte, ttl
 	return nil
 }
 
-func (c *memoryCache) DeleteMulti(ctx context.Context, keys []string) error {
+func (c *memoryCache) DeleteMulti(ctx context.Context, keys []string) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -176,7 +179,7 @@ func (c *memoryCache) Decrement(ctx context.Context, key string, delta int64) (i
 	return 0, cache.ErrNotSupported
 }
 
-func (c *memoryCache) Ping(ctx context.Context) error {
+func (c *memoryCache) Ping(ctx context.Context) pkgErrors.AppError {
 	return nil
 }
 
@@ -193,7 +196,7 @@ func (c *memoryCache) Info(ctx context.Context) (map[string]string, error) {
 	return info, nil
 }
 
-func (c *memoryCache) Flush(ctx context.Context) error {
+func (c *memoryCache) Flush(ctx context.Context) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

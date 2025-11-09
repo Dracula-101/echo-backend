@@ -45,8 +45,6 @@ kafka:
   compression: ${KAFKA_COMPRESSION:snappy}
   batch_size: ${KAFKA_BATCH_SIZE:16384}
   linger_ms: ${KAFKA_LINGER_MS:10}
-  retry_max: ${KAFKA_RETRY_MAX:3}
-  retry_backoff_ms: ${KAFKA_RETRY_BACKOFF_MS:100}
   acks: ${KAFKA_ACKS:all}
   enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
   max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}

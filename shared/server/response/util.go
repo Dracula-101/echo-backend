@@ -10,16 +10,21 @@ func ErrorDetailsFromError(err error, includeStackTrace bool) *ErrorDetails {
 	if err == nil {
 		return nil
 	}
-
 	details := &ErrorDetails{
 		Message:   err.Error(),
 		Timestamp: time.Now(),
-		Context:   make(map[string]interface{}),
 	}
 
-	if appErr, ok := err.(errors.Error); ok {
+	if appErr, ok := err.(errors.AppError); ok {
 		details.Code = appErr.Code()
 		details.Message = appErr.Message()
+
+		if appErr.Details() != nil && len(appErr.Details()) > 0 {
+			details.Context = make(map[string]interface{})
+			for k, v := range appErr.Details() {
+				details.Context[k] = v
+			}
+		}
 
 		if includeStackTrace && appErr.StackTrace() != nil {
 			stackTrace := make([]string, len(appErr.StackTrace()))
@@ -27,12 +32,6 @@ func ErrorDetailsFromError(err error, includeStackTrace bool) *ErrorDetails {
 				stackTrace[i] = frame
 			}
 			details.StackTrace = stackTrace
-		}
-
-		if appErr.Details() != nil {
-			for k, v := range appErr.Details() {
-				details.Context[k] = v
-			}
 		}
 
 		if innerErr := appErr.Unwrap(); innerErr != nil {

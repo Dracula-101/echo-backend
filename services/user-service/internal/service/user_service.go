@@ -11,18 +11,14 @@ import (
 	"user-service/internal/service/models"
 
 	"shared/pkg/cache"
-	"shared/pkg/circuitbreaker"
 	dbmodels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
-	"shared/pkg/retry"
 )
 
 type UserService struct {
-	repo      *repository.UserRepository
-	cache     cache.Cache
-	log       logger.Logger
-	dbCircuit *circuitbreaker.CircuitBreaker
-	retryer   *retry.Retryer
+	repo  *repository.UserRepository
+	cache cache.Cache
+	log   logger.Logger
 }
 
 func NewUserServiceBuilder() *UserServiceBuilder {
@@ -62,44 +58,10 @@ func (b *UserServiceBuilder) Build() *UserService {
 		logger.String("service", "user-service"),
 	)
 
-	dbCircuit := circuitbreaker.New("user-db", circuitbreaker.Config{
-		MaxRequests: 2,
-		Interval:    10 * time.Second,
-		Timeout:     30 * time.Second,
-		ReadyToTrip: func(counts circuitbreaker.Counts) bool {
-			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
-			return counts.Requests >= 3 && failureRatio >= 0.6
-		},
-		OnStateChange: func(name string, from, to circuitbreaker.State) {
-			b.log.Info("Circuit breaker state changed",
-				logger.String("circuit", name),
-				logger.String("from", from.String()),
-				logger.String("to", to.String()),
-			)
-		},
-	})
-
-	retryer := retry.New(retry.Config{
-		MaxAttempts:  3,
-		InitialDelay: 100 * time.Millisecond,
-		MaxDelay:     2 * time.Second,
-		Strategy:     retry.StrategyExponential,
-		Multiplier:   2.0,
-		OnRetry: func(attempt int, delay time.Duration, err error) {
-			b.log.Warn("Retrying operation",
-				logger.Int("attempt", attempt),
-				logger.Duration("delay", delay),
-				logger.Error(err),
-			)
-		},
-	})
-
 	return &UserService{
-		repo:      b.repo,
-		cache:     b.cache,
-		log:       b.log,
-		dbCircuit: dbCircuit,
-		retryer:   retryer,
+		repo:  b.repo,
+		cache: b.cache,
+		log:   b.log,
 	}
 }
 
@@ -123,10 +85,7 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 	var repoProfile *dbmodels.Profile
 	var err error
 
-	err = s.dbCircuit.Execute(func() error {
-		repoProfile, err = s.repo.GetProfileByUserID(ctx, userID)
-		return err
-	})
+	repoProfile, err = s.repo.GetProfileByUserID(ctx, userID)
 
 	if err != nil {
 		s.log.Error("Failed to get profile",
@@ -162,15 +121,8 @@ func (s *UserService) CreateProfile(ctx context.Context, profile *models.Profile
 
 	var createdProfile *models.Profile
 
-	err := s.dbCircuit.Execute(func() error {
-		repoInput := toRepoProfile(profile)
-		result, err := s.repo.CreateProfile(ctx, repoInput)
-		if err != nil {
-			return err
-		}
-		createdProfile = fromRepoProfile(result)
-		return nil
-	})
+	repoInput := toRepoProfile(profile)
+	result, err := s.repo.CreateProfile(ctx, repoInput)
 	if err != nil {
 		s.log.Error("Failed to create profile",
 			logger.String("user_id", profile.UserID),
@@ -178,6 +130,7 @@ func (s *UserService) CreateProfile(ctx context.Context, profile *models.Profile
 		)
 		return nil, err
 	}
+	createdProfile = fromRepoProfile(result)
 
 	if createdProfile == nil {
 		createdProfile = profile

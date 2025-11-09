@@ -4,6 +4,7 @@ import (
 	"context"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
@@ -27,7 +28,7 @@ func NewSecurityEventRepo(db database.Database, log logger.Logger) *SecurityEven
 // Security Event Operations
 // ============================================================================
 
-func (r *SecurityEventRepo) LogSecurityEvent(ctx context.Context, event *models.SecurityEvent) error {
+func (r *SecurityEventRepo) LogSecurityEvent(ctx context.Context, event *models.SecurityEvent) pkgErrors.AppError {
 	r.log.Debug("Logging security event",
 		logger.Any("event_type", event.EventType),
 		logger.Any("severity", event.Severity),
@@ -37,8 +38,9 @@ func (r *SecurityEventRepo) LogSecurityEvent(ctx context.Context, event *models.
 	)
 	_, err := r.db.Create(ctx, event)
 	if err != nil {
-		r.log.Error("Failed to log security event", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to log security event").
+			WithDetail("event_type", string(event.EventType)).
+			WithDetail("severity", string(event.Severity))
 	}
 	r.log.Debug("Security event logged successfully",
 		logger.String("event_id", event.ID),
@@ -61,8 +63,9 @@ func (r *SecurityEventRepo) GetSecurityEventsByUserID(ctx context.Context, userI
 		LIMIT $2`
 	err := r.db.FindMany(ctx, &events, query, userID, limit)
 	if err != nil {
-		r.log.Error("Failed to get security events by user ID", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get security events by user ID").
+			WithDetail("user_id", userID).
+			WithDetail("limit", limit)
 	}
 	r.log.Debug("Security events fetched successfully",
 		logger.String("user_id", userID),
@@ -84,8 +87,8 @@ func (r *SecurityEventRepo) GetSecurityEventByID(ctx context.Context, id string)
 		LIMIT 1`
 	err := r.db.FindOne(ctx, &event, query, id)
 	if err != nil {
-		r.log.Error("Failed to get security event by ID", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get security event by ID").
+			WithDetail("event_id", id)
 	}
 	r.log.Debug("Security event fetched successfully",
 		logger.String("event_id", event.ID),
@@ -108,8 +111,9 @@ func (r *SecurityEventRepo) GetSuspiciousEvents(ctx context.Context, userID stri
 		LIMIT $2`
 	err := r.db.FindMany(ctx, &events, query, userID, limit)
 	if err != nil {
-		r.log.Error("Failed to get suspicious security events", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get suspicious security events").
+			WithDetail("user_id", userID).
+			WithDetail("limit", limit)
 	}
 	r.log.Debug("Suspicious security events fetched successfully",
 		logger.String("user_id", userID),
@@ -134,8 +138,10 @@ func (r *SecurityEventRepo) GetEventsByType(ctx context.Context, userID string, 
 		LIMIT $3`
 	err := r.db.FindMany(ctx, &events, query, userID, eventType, limit)
 	if err != nil {
-		r.log.Error("Failed to get security events by type", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get security events by type").
+			WithDetail("user_id", userID).
+			WithDetail("event_type", eventType).
+			WithDetail("limit", limit)
 	}
 	r.log.Debug("Security events by type fetched successfully",
 		logger.String("user_id", userID),
@@ -159,8 +165,10 @@ func (r *SecurityEventRepo) CountEventsBySeverity(ctx context.Context, userID st
 		AND created_at > NOW() - INTERVAL '1 ' || $3`
 	err := r.db.QueryRow(ctx, query, userID, severity, duration).Scan(&count)
 	if err != nil {
-		r.log.Error("Failed to count security events by severity", logger.Error(err))
-		return 0, err
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count security events by severity").
+			WithDetail("user_id", userID).
+			WithDetail("severity", severity).
+			WithDetail("duration", duration)
 	}
 	r.log.Debug("Security events counted by severity",
 		logger.String("user_id", userID),
@@ -170,15 +178,15 @@ func (r *SecurityEventRepo) CountEventsBySeverity(ctx context.Context, userID st
 	return count, nil
 }
 
-func (r *SecurityEventRepo) DeleteSecurityEventsByUserID(ctx context.Context, userID string) error {
+func (r *SecurityEventRepo) DeleteSecurityEventsByUserID(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Debug("Deleting security events by user ID",
 		logger.String("user_id", userID),
 	)
 	query := `DELETE FROM auth.security_events WHERE user_id = $1`
 	result, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.log.Error("Failed to delete security events", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete security events").
+			WithDetail("user_id", userID)
 	}
 	rowsAffected, _ := result.RowsAffected()
 	r.log.Debug("Security events deleted successfully",
@@ -188,15 +196,15 @@ func (r *SecurityEventRepo) DeleteSecurityEventsByUserID(ctx context.Context, us
 	return nil
 }
 
-func (r *SecurityEventRepo) DeleteSecurityEventByID(ctx context.Context, id string) error {
+func (r *SecurityEventRepo) DeleteSecurityEventByID(ctx context.Context, id string) pkgErrors.AppError {
 	r.log.Debug("Deleting security event by ID",
 		logger.String("event_id", id),
 	)
 	query := `DELETE FROM auth.security_events WHERE id = $1`
 	_, err := r.db.Exec(ctx, query, id)
 	if err != nil {
-		r.log.Error("Failed to delete security event", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete security event").
+			WithDetail("event_id", id)
 	}
 	r.log.Debug("Security event deleted successfully",
 		logger.String("event_id", id),

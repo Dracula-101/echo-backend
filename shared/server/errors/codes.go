@@ -203,7 +203,6 @@ const (
 	ErrRPCTimeout                  = "rpc_timeout"
 	ErrServiceDiscoveryFailed      = "service_discovery_failed"
 	ErrLoadBalancerError           = "load_balancer_error"
-	ErrCircuitBreakerOpen          = "circuit_breaker_open"
 	ErrBulkheadFull                = "bulkhead_full"
 	ErrRetryExhausted              = "retry_exhausted"
 	ErrBackpressure                = "backpressure"

@@ -74,6 +74,6 @@ func HTTPStatus(code string) int {
 // ============================================================================
 
 // NewLocationError creates a new location service error with service context
-func NewLocationError(code, message string) pkgErrors.Error {
+func NewLocationError(code, message string) pkgErrors.AppError {
 	return pkgErrors.New(code, message).WithService(ServiceName)
 }

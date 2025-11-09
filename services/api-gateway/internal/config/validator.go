@@ -132,19 +132,11 @@ func validateServices(cfg *Config) error {
 			service.Timeout = 10 * time.Second
 		}
 
-		if service.RetryAttempts == 0 {
-			service.RetryAttempts = 3
-		}
-
 		if service.LoadBalancer == "" {
 			service.LoadBalancer = cfg.LoadBalance.DefaultStrategy
 		}
 
 		if err := validateHealthCheck(name, &service.HealthCheck); err != nil {
-			return err
-		}
-
-		if err := validateCircuitBreaker(name, &service.CircuitBreaker); err != nil {
 			return err
 		}
 
@@ -177,30 +169,6 @@ func validateHealthCheck(serviceName string, hc *HealthCheckConfig) error {
 
 	if hc.Timeout >= hc.Interval {
 		return fmt.Errorf("service %s: health check timeout must be less than interval", serviceName)
-	}
-
-	return nil
-}
-
-func validateCircuitBreaker(serviceName string, cb *CircuitBreakerConfig) error {
-	if !cb.Enabled {
-		return nil
-	}
-
-	if cb.Threshold == 0 {
-		cb.Threshold = 5
-	}
-
-	if cb.Threshold < 1 {
-		return fmt.Errorf("service %s: circuit breaker threshold must be at least 1", serviceName)
-	}
-
-	if cb.Timeout == 0 {
-		cb.Timeout = 30 * time.Second
-	}
-
-	if cb.HalfOpenRequests == 0 {
-		cb.HalfOpenRequests = 1
 	}
 
 	return nil

@@ -7,6 +7,7 @@ import (
 
 	"github.com/IBM/sarama"
 
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/messaging"
 )
 
@@ -34,7 +35,7 @@ func NewConsumer(cfg messaging.Config) (messaging.Consumer, error) {
 	}, nil
 }
 
-func (c *consumer) Consume(ctx context.Context, topics []string, handler messaging.Handler) error {
+func (c *consumer) Consume(ctx context.Context, topics []string, handler messaging.Handler) pkgErrors.AppError {
 	c.handler = handler
 
 	c.wg.Add(1)

@@ -155,7 +155,7 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile models.Profi
 		r.log.Error("Failed to retrieve created profile",
 			logger.String("service", userErrors.ServiceName),
 			logger.String("user_id", profile.UserID),
-			logger.String("profile_id", id),
+			logger.String("profile_id", *id),
 			logger.Error(err),
 		)
 		return nil, err

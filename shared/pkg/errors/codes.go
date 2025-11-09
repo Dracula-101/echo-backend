@@ -26,6 +26,7 @@ const (
 	CodeMethodNotAllowed      = "METHOD_NOT_ALLOWED"
 	CodeNotAcceptable         = "NOT_ACCEPTABLE"
 	CodeProxyAuthRequired     = "PROXY_AUTHENTICATION_REQUIRED"
+	CodeTimeout               = "TIMEOUT"
 	CodeRequestTimeout        = "REQUEST_TIMEOUT"
 	CodeConflict              = "CONFLICT"
 	CodeGone                  = "GONE"
@@ -70,6 +71,7 @@ const (
 
 	// --- Cancellations ---
 	CodeCancelled = "CANCELLED"
+	CodeDeadlock  = "DEADLOCK_DETECTED"
 )
 
 var HTTPStatusMap = map[string]int{

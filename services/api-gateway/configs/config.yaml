@@ -45,13 +45,7 @@ services:
       timeout: 5s
       failure_threshold: 3
     loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
     timeout: 10s
-    retry_attempts: 3
 
   user-service:
     protocol: http
@@ -64,13 +58,7 @@ services:
       timeout: 5s
       failure_threshold: 3
     loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
     timeout: 10s
-    retry_attempts: 3
 
   message-service:
     protocol: http
@@ -83,13 +71,7 @@ services:
       timeout: 5s
       failure_threshold: 3
     loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
     timeout: 15s
-    retry_attempts: 3
 
   media-service:
     protocol: http
@@ -102,13 +84,7 @@ services:
       timeout: 5s
       failure_threshold: 3
     loadbalancer: roundrobin
-    circuit_breaker:
-      enabled: true
-      threshold: 5
-      timeout: 30s
-      half_open_requests: 1
     timeout: 15s
-    retry_attempts: 3
 
 router_groups:
   - name: auth_routes

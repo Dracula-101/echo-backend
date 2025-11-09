@@ -5,6 +5,7 @@ import (
 	authErrors "auth-service/internal/errors"
 	serviceModels "auth-service/internal/service/models"
 	"net/http"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
@@ -41,12 +42,18 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	emailTaken, dbErr := h.service.IsEmailTaken(r.Context(), req.Email)
 	if dbErr != nil {
-		h.log.Error("Failed to check if email is taken",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("email", req.Email),
-			logger.Error(dbErr),
-		)
+		if appErr, ok := dbErr.(pkgErrors.AppError); ok {
+			h.log.Error("Failed to check if email is taken",
+				logger.String("error_code", appErr.Code()),
+				logger.String("service", appErr.Service()),
+				logger.String("correlation_id", appErr.CorrelationID()),
+				logger.Any("error_details", appErr.Details()),
+				logger.Any("stack_trace", appErr.StackTrace()),
+				logger.Error(appErr),
+			)
+		} else {
+			h.log.Error("Failed to check if email is taken", logger.Error(dbErr))
+		}
 		response.InternalServerError(r.Context(), r, w, "Failed to process registration", dbErr)
 		return
 	}
@@ -70,17 +77,23 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		AcceptTerms:      req.AcceptTerms,
 	})
 	if authErr != nil {
-		h.log.Error("Failed to register user",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("email", req.Email),
-			logger.String("error_code", authErr.Code),
-			logger.Error(authErr.Error),
-		)
-		if authErr.Code == authErrors.CodePasswordTooWeak || authErr.Code == authErrors.CodeInvalidEmail {
-			response.BadRequestError(r.Context(), r, w, authErr.Message, nil)
+		if appErr, ok := authErr.(pkgErrors.AppError); ok {
+			h.log.Error("Failed to register user",
+				logger.String("error_code", appErr.Code()),
+				logger.String("service", appErr.Service()),
+				logger.String("correlation_id", appErr.CorrelationID()),
+				logger.Any("error_details", appErr.Details()),
+				logger.Any("stack_trace", appErr.StackTrace()),
+				logger.Error(appErr),
+			)
+			if appErr.Code() == authErrors.CodePasswordTooWeak || appErr.Code() == authErrors.CodeInvalidEmail {
+				response.BadRequestError(r.Context(), r, w, appErr.Message(), nil)
+			} else {
+				response.InternalServerError(r.Context(), r, w, appErr.Message(), authErr)
+			}
 		} else {
-			response.InternalServerError(r.Context(), r, w, authErr.Message, authErr.Error)
+			h.log.Error("Failed to register user", logger.Error(authErr))
+			response.InternalServerError(r.Context(), r, w, "Failed to register user", authErr)
 		}
 		return
 	}

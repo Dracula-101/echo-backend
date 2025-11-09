@@ -61,8 +61,6 @@ type KafkaConfig struct {
 	Compression       string   `yaml:"compression" mapstructure:"compression"`
 	BatchSize         int      `yaml:"batch_size" mapstructure:"batch_size"`
 	LingerMs          int      `yaml:"linger_ms" mapstructure:"linger_ms"`
-	RetryMax          int      `yaml:"retry_max" mapstructure:"retry_max"`
-	RetryBackoffMs    int      `yaml:"retry_backoff_ms" mapstructure:"retry_backoff_ms"`
 	Acks              string   `yaml:"acks" mapstructure:"acks"`
 	EnableIdempotence bool     `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`
 	MaxInFlight       int      `yaml:"max_in_flight" mapstructure:"max_in_flight"`

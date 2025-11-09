@@ -50,13 +50,11 @@ type JWTConfig struct {
 	SkipPaths       []string      `yaml:"skip_paths" mapstructure:"skip_paths"`
 }
 type ServiceConfig struct {
-	Protocol       string               `yaml:"protocol"`
-	Addresses      []string             `yaml:"addresses"`
-	HealthCheck    HealthCheckConfig    `yaml:"health_check"`
-	LoadBalancer   string               `yaml:"loadbalancer"`
-	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
-	Timeout        time.Duration        `yaml:"timeout"`
-	RetryAttempts  int                  `yaml:"retry_attempts"`
+	Protocol     string            `yaml:"protocol"`
+	Addresses    []string          `yaml:"addresses"`
+	HealthCheck  HealthCheckConfig `yaml:"health_check"`
+	LoadBalancer string            `yaml:"loadbalancer"`
+	Timeout      time.Duration     `yaml:"timeout"`
 }
 
 type HealthCheckConfig struct {
@@ -65,13 +63,6 @@ type HealthCheckConfig struct {
 	Interval         time.Duration `yaml:"interval"`
 	Timeout          time.Duration `yaml:"timeout"`
 	FailureThreshold int           `yaml:"failure_threshold"`
-}
-
-type CircuitBreakerConfig struct {
-	Enabled          bool          `yaml:"enabled"`
-	Threshold        int           `yaml:"threshold"`
-	Timeout          time.Duration `yaml:"timeout"`
-	HalfOpenRequests int           `yaml:"half_open_requests"`
 }
 
 type RouterGroup struct {

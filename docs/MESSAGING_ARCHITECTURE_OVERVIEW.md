@@ -684,9 +684,6 @@ services:
       - localhost:50053
     timeout: 30s
     retry_attempts: 3
-    circuit_breaker:
-      threshold: 5
-      timeout: 30s
 ```
 
 ---

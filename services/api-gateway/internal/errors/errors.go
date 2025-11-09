@@ -27,7 +27,6 @@ const (
 	ErrCodeInternal           ErrorCode = "INTERNAL_ERROR"
 	ErrCodeServiceUnavailable ErrorCode = "SERVICE_UNAVAILABLE"
 	ErrCodeGatewayTimeout     ErrorCode = "GATEWAY_TIMEOUT"
-	ErrCodeCircuitOpen        ErrorCode = "CIRCUIT_OPEN"
 	ErrCodeDependencyFailure  ErrorCode = "DEPENDENCY_FAILURE"
 )
 
@@ -152,15 +151,6 @@ func ServiceUnavailable(message string, retryAfter int) *APIError {
 func GatewayTimeout(message string, service string) *APIError {
 	return New(ErrCodeGatewayTimeout, message, http.StatusGatewayTimeout).
 		WithDetails("service", service)
-}
-
-// CircuitOpen creates a circuit breaker open error
-func CircuitOpen(service string) *APIError {
-	return New(ErrCodeCircuitOpen,
-		fmt.Sprintf("service %s is currently unavailable", service),
-		http.StatusServiceUnavailable).
-		WithDetails("service", service).
-		WithDetails("circuit_state", "open")
 }
 
 // DependencyFailure creates a dependency failure error
@@ -295,7 +285,7 @@ func GetCategory(err error) ErrorCategory {
 	case ErrCodeRequestTimeout, ErrCodeGatewayTimeout:
 		return CategoryTimeout
 
-	case ErrCodeCircuitOpen, ErrCodeDependencyFailure:
+	case ErrCodeDependencyFailure:
 		return CategoryDependency
 
 	default:
@@ -312,7 +302,7 @@ func IsRetriable(err error) bool {
 
 	switch apiErr.Code {
 	case ErrCodeServiceUnavailable, ErrCodeGatewayTimeout,
-		ErrCodeRequestTimeout, ErrCodeCircuitOpen:
+		ErrCodeRequestTimeout:
 		return true
 	default:
 		return false

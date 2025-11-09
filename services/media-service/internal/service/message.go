@@ -62,55 +62,48 @@ func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.Uplo
 
 	fileCategory := determineFileCategory(input.ContentType)
 
-	var fileID string
-	err = s.dbCircuit.ExecuteWithContext(ctx, func(ctx context.Context) error {
-		return s.retryer.DoWithContext(ctx, func(ctx context.Context) error {
-			strPtr := func(s string) *string {
-				if s == "" {
-					return nil
-				}
-				return &s
-			}
+	strPtr := func(s string) *string {
+		if s == "" {
+			return nil
+		}
+		return &s
+	}
 
-			var deviceIDPtr *string
-			if input.DeviceID != "" {
-				deviceID := input.DeviceID
-				deviceIDPtr = &deviceID
-			}
+	var deviceIDPtr *string
+	if input.DeviceID != "" {
+		deviceID := input.DeviceID
+		deviceIDPtr = &deviceID
+	}
 
-			cdnURL := s.buildCDNURL(storageKey)
+	cdnURL := s.buildCDNURL(storageKey)
 
-			// Initialize JSON fields with empty values
-			emptyArray := json.RawMessage("[]")
-			emptyObject := json.RawMessage("{}")
+	// Initialize JSON fields with empty values
+	emptyArray := json.RawMessage("[]")
+	emptyObject := json.RawMessage("{}")
 
-			id, err := s.repo.CreateFile(ctx, dbModels.MediaFile{
-				UploaderUserID:       input.UserID,
-				FileName:             input.FileName,
-				OriginalFileName:     strPtr(input.FileName),
-				FileType:             input.ContentType,
-				MimeType:             input.ContentType,
-				FileCategory:         strPtr(fileCategory),
-				FileExtension:        strPtr(filepath.Ext(input.FileName)[1:]),
-				FileSizeBytes:        input.FileSize,
-				StorageProvider:      strPtr(s.cfg.Storage.Provider),
-				StorageBucket:        strPtr(s.cfg.Storage.Bucket),
-				StorageKey:           storageKey,
-				StorageURL:           storageURL,
-				CDNURL:               strPtr(cdnURL),
-				ContentHash:          strPtr(contentHash),
-				SubtitleTracks:       &emptyArray,
-				ModerationLabels:     &emptyArray,
-				ExifData:             &emptyObject,
-				ProcessingStatus:     dbModels.FileProcessingStatusPending,
-				ModerationStatus:     dbModels.ModerationStatusPending,
-				Visibility:           dbModels.MediaVisibilityPrivate,
-				UploadedFromDeviceID: deviceIDPtr,
-				UploadedFromIP:       strPtr(input.IPAddress),
-			})
-			fileID = id
-			return err
-		})
+	fileID, err := s.repo.CreateFile(ctx, dbModels.MediaFile{
+		UploaderUserID:       input.UserID,
+		FileName:             input.FileName,
+		OriginalFileName:     strPtr(input.FileName),
+		FileType:             input.ContentType,
+		MimeType:             input.ContentType,
+		FileCategory:         strPtr(fileCategory),
+		FileExtension:        strPtr(filepath.Ext(input.FileName)[1:]),
+		FileSizeBytes:        input.FileSize,
+		StorageProvider:      strPtr(s.cfg.Storage.Provider),
+		StorageBucket:        strPtr(s.cfg.Storage.Bucket),
+		StorageKey:           storageKey,
+		StorageURL:           storageURL,
+		CDNURL:               strPtr(cdnURL),
+		ContentHash:          strPtr(contentHash),
+		SubtitleTracks:       &emptyArray,
+		ModerationLabels:     &emptyArray,
+		ExifData:             &emptyObject,
+		ProcessingStatus:     dbModels.FileProcessingStatusPending,
+		ModerationStatus:     dbModels.ModerationStatusPending,
+		Visibility:           dbModels.MediaVisibilityPrivate,
+		UploadedFromDeviceID: deviceIDPtr,
+		UploadedFromIP:       strPtr(input.IPAddress),
 	})
 
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
@@ -27,7 +28,7 @@ func NewSessionRepo(db database.Database, log logger.Logger) *SessionRepo {
 // Session Management
 // ============================================================================
 
-func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSession) error {
+func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSession) pkgErrors.AppError {
 	r.log.Debug("Creating new session",
 		logger.String("user_id", session.UserID),
 		logger.String("device_id", *session.DeviceID),
@@ -35,8 +36,9 @@ func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSes
 	)
 	_, err := r.db.Create(ctx, session)
 	if err != nil {
-		r.log.Error("Failed to create session", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create session").
+			WithDetail("user_id", session.UserID).
+			WithDetail("device_id", *session.DeviceID)
 	}
 	r.log.Debug("Session created successfully",
 		logger.String("session_id", session.ID),
@@ -52,8 +54,8 @@ func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*m
 	query := `SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1`
 	err := r.db.QueryRow(ctx, query, userID).ScanOne(&session)
 	if err != nil {
-		r.log.Error("Failed to get session by user ID", logger.Error(err))
-		return nil, err
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by user ID").
+			WithDetail("user_id", userID)
 	}
 	r.log.Debug("Session fetched successfully",
 		logger.String("session_id", session.ID),
@@ -61,15 +63,15 @@ func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*m
 	return &session, nil
 }
 
-func (r *SessionRepo) DeleteSessionByID(ctx context.Context, sessionID string) error {
+func (r *SessionRepo) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {
 	r.log.Debug("Deleting session",
 		logger.String("session_id", sessionID),
 	)
 	query := `DELETE FROM auth.sessions WHERE id = $1`
 	_, err := r.db.Exec(ctx, query, sessionID)
 	if err != nil {
-		r.log.Error("Failed to delete session", logger.Error(err))
-		return err
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete session").
+			WithDetail("session_id", sessionID)
 	}
 	r.log.Debug("Session deleted successfully",
 		logger.String("session_id", sessionID),
