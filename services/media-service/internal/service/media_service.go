@@ -266,6 +266,8 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 				StorageRegion:        storageRegionPtr,
 				CDNURL:               strPtr(cdnURL),
 				ContentHash:          strPtr(contentHash),
+				ProcessingStatus:     dbModels.FileProcessingStatusPending,
+				ModerationStatus:     dbModels.ModerationStatusPending,
 				Visibility:           dbModels.MediaVisibility(input.Visibility),
 				UploadedFromDeviceID: deviceIDPtr,
 				UploadedFromIP:       strPtr(input.IPAddress),

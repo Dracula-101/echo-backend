@@ -206,7 +206,7 @@ func InternalServerError(ctx context.Context, r *http.Request, w http.ResponseWr
 		if e, ok := err.(errors.Error); ok {
 			appErr = e
 		} else {
-			appErr = errors.Wrap(err, errors.CodeInternal, "Internal server error")
+			appErr = errors.New(errors.CodeInternal, err.Error())
 		}
 	} else {
 		appErr = errors.New(errors.CodeInternal, "Internal server error")

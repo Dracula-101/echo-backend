@@ -54,9 +54,9 @@ type MediaFile struct {
 	DominantColors  pq.StringArray `db:"dominant_colors" json:"dominant_colors,omitempty"`
 
 	// Video specific
-	VideoCodec     *string         `db:"video_codec" json:"video_codec,omitempty"`
-	AudioCodec     *string         `db:"audio_codec" json:"audio_codec,omitempty"`
-	SubtitleTracks json.RawMessage `db:"subtitle_tracks" json:"subtitle_tracks,omitempty"`
+	VideoCodec     *string          `db:"video_codec" json:"video_codec,omitempty"`
+	AudioCodec     *string          `db:"audio_codec" json:"audio_codec,omitempty"`
+	SubtitleTracks *json.RawMessage `db:"subtitle_tracks" json:"subtitle_tracks,omitempty"`
 
 	// Audio specific
 	AudioChannels *int `db:"audio_channels" json:"audio_channels,omitempty"`
@@ -85,7 +85,7 @@ type MediaFile struct {
 	// Content moderation
 	ModerationStatus  ModerationStatus `db:"moderation_status" json:"moderation_status"`
 	ModerationScore   *float64         `db:"moderation_score" json:"moderation_score,omitempty"`
-	ModerationLabels  json.RawMessage  `db:"moderation_labels" json:"moderation_labels,omitempty"`
+	ModerationLabels  *json.RawMessage `db:"moderation_labels" json:"moderation_labels,omitempty"`
 	IsNSFW            bool             `db:"is_nsfw" json:"is_nsfw"`
 	NSFWScore         *float64         `db:"nsfw_score" json:"nsfw_score,omitempty"`
 	ModeratedAt       *time.Time       `db:"moderated_at" json:"moderated_at,omitempty"`
@@ -105,18 +105,18 @@ type MediaFile struct {
 	OriginalFileSizeBytes *int64   `db:"original_file_size_bytes" json:"original_file_size_bytes,omitempty"`
 
 	// EXIF & Metadata
-	ExifData     json.RawMessage `db:"exif_data" json:"exif_data,omitempty"`
-	GPSLatitude  *float64        `db:"gps_latitude" json:"gps_latitude,omitempty"`
-	GPSLongitude *float64        `db:"gps_longitude" json:"gps_longitude,omitempty"`
-	GPSAltitude  *float64        `db:"gps_altitude" json:"gps_altitude,omitempty"`
-	CameraMake   *string         `db:"camera_make" json:"camera_make,omitempty"`
-	CameraModel  *string         `db:"camera_model" json:"camera_model,omitempty"`
-	LensModel    *string         `db:"lens_model" json:"lens_model,omitempty"`
-	FocalLength  *float64        `db:"focal_length" json:"focal_length,omitempty"`
-	Aperture     *float64        `db:"aperture" json:"aperture,omitempty"`
-	ISO          *int            `db:"iso" json:"iso,omitempty"`
-	ShutterSpeed *string         `db:"shutter_speed" json:"shutter_speed,omitempty"`
-	CaptureDate  *time.Time      `db:"capture_date" json:"capture_date,omitempty"`
+	ExifData     *json.RawMessage `db:"exif_data" json:"exif_data,omitempty"`
+	GPSLatitude  *float64         `db:"gps_latitude" json:"gps_latitude,omitempty"`
+	GPSLongitude *float64         `db:"gps_longitude" json:"gps_longitude,omitempty"`
+	GPSAltitude  *float64         `db:"gps_altitude" json:"gps_altitude,omitempty"`
+	CameraMake   *string          `db:"camera_make" json:"camera_make,omitempty"`
+	CameraModel  *string          `db:"camera_model" json:"camera_model,omitempty"`
+	LensModel    *string          `db:"lens_model" json:"lens_model,omitempty"`
+	FocalLength  *float64         `db:"focal_length" json:"focal_length,omitempty"`
+	Aperture     *float64         `db:"aperture" json:"aperture,omitempty"`
+	ISO          *int             `db:"iso" json:"iso,omitempty"`
+	ShutterSpeed *string          `db:"shutter_speed" json:"shutter_speed,omitempty"`
+	CaptureDate  *time.Time       `db:"capture_date" json:"capture_date,omitempty"`
 
 	// Usage tracking
 	LastAccessedAt *time.Time `db:"last_accessed_at" json:"last_accessed_at,omitempty"`

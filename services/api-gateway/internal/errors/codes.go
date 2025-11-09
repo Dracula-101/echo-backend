@@ -113,11 +113,3 @@ func HTTPStatus(code string) int {
 func NewGatewayError(code, message string) pkgErrors.Error {
 	return pkgErrors.New(code, message).WithService(ServiceName)
 }
-
-// WrapGatewayError wraps an error with api-gateway service context
-func WrapGatewayError(err error, code, message string) pkgErrors.Error {
-	if err == nil {
-		return nil
-	}
-	return pkgErrors.Wrap(err, code, message).WithService(ServiceName)
-}

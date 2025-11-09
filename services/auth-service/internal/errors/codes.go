@@ -107,11 +107,3 @@ func HTTPStatus(code string) int {
 func NewAuthError(code, message string) pkgErrors.Error {
 	return pkgErrors.New(code, message).WithService(ServiceName)
 }
-
-// WrapAuthError wraps an error with auth service context
-func WrapAuthError(err error, code, message string) pkgErrors.Error {
-	if err == nil {
-		return nil
-	}
-	return pkgErrors.Wrap(err, code, message).WithService(ServiceName)
-}

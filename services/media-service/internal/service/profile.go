@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -69,6 +70,10 @@ func (s *MediaService) UploadProfilePhoto(ctx context.Context, input models.Uplo
 			cdnURL := s.buildCDNURL(storageKey)
 			fileCategory := "image"
 
+			// Initialize JSON fields with empty values
+			emptyArray := json.RawMessage("[]")
+			emptyObject := json.RawMessage("{}")
+
 			id, err := s.repo.CreateFile(ctx, dbModels.MediaFile{
 				UploaderUserID:       input.UserID,
 				FileName:             input.FileName,
@@ -84,6 +89,11 @@ func (s *MediaService) UploadProfilePhoto(ctx context.Context, input models.Uplo
 				StorageURL:           storageURL,
 				CDNURL:               strPtr(cdnURL),
 				ContentHash:          strPtr(contentHash),
+				SubtitleTracks:       &emptyArray,
+				ModerationLabels:     &emptyArray,
+				ExifData:             &emptyObject,
+				ProcessingStatus:     dbModels.FileProcessingStatusPending,
+				ModerationStatus:     dbModels.ModerationStatusPending,
 				Visibility:           dbModels.MediaVisibilityPublic,
 				UploadedFromDeviceID: deviceIDPtr,
 				UploadedFromIP:       strPtr(input.IPAddress),
@@ -96,6 +106,7 @@ func (s *MediaService) UploadProfilePhoto(ctx context.Context, input models.Uplo
 	if err != nil {
 		s.log.Error("Failed to create file record", logger.Error(err))
 		_ = s.storageProvider.Delete(ctx, storageKey)
+		// Just return the error - stack trace captured automatically
 		return nil, fmt.Errorf("failed to create file record: %w", err)
 	}
 

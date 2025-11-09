@@ -59,7 +59,7 @@ func NewLocationService(cfg Config) (*LocationService, error) {
 				logger.String("error_code", locErrors.CodeDatabaseLoadFailed),
 				logger.Error(err),
 			)
-			return nil, locErrors.WrapLocationError(err, locErrors.CodeDatabaseLoadFailed, "Failed to load city database")
+			return nil, err
 		}
 		cfg.Logger.Info("City database loaded successfully",
 			logger.String("service", locErrors.ServiceName),
@@ -80,7 +80,7 @@ func NewLocationService(cfg Config) (*LocationService, error) {
 				logger.Error(err),
 			)
 			svc.Close()
-			return nil, locErrors.WrapLocationError(err, locErrors.CodeDatabaseLoadFailed, "Failed to load ASN database")
+			return nil, err
 		}
 		cfg.Logger.Info("ASN database loaded successfully",
 			logger.String("service", locErrors.ServiceName),
@@ -101,7 +101,7 @@ func NewLocationService(cfg Config) (*LocationService, error) {
 				logger.Error(err),
 			)
 			svc.Close()
-			return nil, locErrors.WrapLocationError(err, locErrors.CodeDatabaseLoadFailed, "Failed to load country database")
+			return nil, err
 		}
 		cfg.Logger.Info("Country database loaded successfully",
 			logger.String("service", locErrors.ServiceName),
@@ -237,7 +237,7 @@ func (s *LocationService) LookupCity(ipStr string) (*model.CityRecord, error) {
 			logger.String("error_code", locErrors.CodeLookupFailed),
 			logger.Error(err),
 		)
-		return nil, locErrors.WrapLocationError(err, locErrors.CodeLookupFailed, "City lookup failed")
+		return nil, err
 	}
 
 	s.log.Info("City lookup successful",
@@ -283,7 +283,7 @@ func (s *LocationService) LookupASN(ipStr string) (*model.ASNRecord, error) {
 			logger.String("error_code", locErrors.CodeLookupFailed),
 			logger.Error(err),
 		)
-		return nil, locErrors.WrapLocationError(err, locErrors.CodeLookupFailed, "ASN lookup failed")
+		return nil, err
 	}
 
 	s.log.Info("ASN lookup successful",
@@ -329,7 +329,7 @@ func (s *LocationService) LookupCountry(ipStr string) (*model.CountryRecord, err
 			logger.String("error_code", locErrors.CodeLookupFailed),
 			logger.Error(err),
 		)
-		return nil, locErrors.WrapLocationError(err, locErrors.CodeLookupFailed, "Country lookup failed")
+		return nil, err
 	}
 
 	s.log.Info("Country lookup successful",
@@ -363,7 +363,7 @@ func (s *LocationService) Close() error {
 				logger.String("service", locErrors.ServiceName),
 				logger.Error(err),
 			)
-			errs = append(errs, locErrors.WrapLocationError(err, locErrors.CodeDatabaseLoadFailed, "City DB close failed"))
+			errs = append(errs, err)
 		}
 	}
 
@@ -376,7 +376,7 @@ func (s *LocationService) Close() error {
 				logger.String("service", locErrors.ServiceName),
 				logger.Error(err),
 			)
-			errs = append(errs, locErrors.WrapLocationError(err, locErrors.CodeDatabaseLoadFailed, "ASN DB close failed"))
+			errs = append(errs, err)
 		}
 	}
 
@@ -389,7 +389,7 @@ func (s *LocationService) Close() error {
 				logger.String("service", locErrors.ServiceName),
 				logger.Error(err),
 			)
-			errs = append(errs, locErrors.WrapLocationError(err, locErrors.CodeDatabaseLoadFailed, "Country DB close failed"))
+			errs = append(errs, err)
 		}
 	}
 

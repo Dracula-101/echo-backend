@@ -3,8 +3,10 @@ package errors
 import (
 	"fmt"
 	"runtime"
+	"strings"
 )
 
+// Error is our custom error interface with rich context
 type Error interface {
 	error
 	Code() string
@@ -29,26 +31,13 @@ type appError struct {
 	correlationID string
 }
 
+// New creates a new error with automatic stack trace capture
 func New(code, message string) Error {
 	return &appError{
 		code:       code,
 		message:    message,
 		details:    make(map[string]interface{}),
-		stackTrace: captureStackTrace(),
-	}
-}
-
-func Wrap(err error, code, message string) Error {
-	if err == nil {
-		return nil
-	}
-
-	return &appError{
-		code:       code,
-		message:    message,
-		details:    make(map[string]interface{}),
-		stackTrace: captureStackTrace(),
-		wrapped:    err,
+		stackTrace: captureCleanStack(),
 	}
 }
 
@@ -118,23 +107,79 @@ func (e *appError) WithDetail(key string, value interface{}) Error {
 	return e
 }
 
-func captureStackTrace() []string {
-	const depth = 32
-	var pcs [depth]uintptr
-	n := runtime.Callers(3, pcs[:])
+func captureCleanStack() []string {
+	const maxDepth = 32
+	pcs := make([]uintptr, maxDepth)
+	n := runtime.Callers(3, pcs)
+
+	if n == 0 {
+		return nil
+	}
 
 	frames := runtime.CallersFrames(pcs[:n])
-	stackTrace := make([]string, 0, n)
+	stack := make([]string, 0, n)
 
 	for {
 		frame, more := frames.Next()
-		stackTrace = append(stackTrace, fmt.Sprintf("%s:%d %s", frame.File, frame.Line, frame.Function))
+
+		if shouldIncludeFrame(frame) {
+			stack = append(stack, formatFrame(frame))
+		}
+
 		if !more {
 			break
 		}
 	}
 
-	return stackTrace
+	return stack
+}
+
+func shouldIncludeFrame(frame runtime.Frame) bool {
+	file := frame.File
+	fn := frame.Function
+
+	if file == "" || fn == "" {
+		return false
+	}
+
+	if strings.HasPrefix(fn, "runtime.") {
+		return false
+	}
+
+	if strings.Contains(fn, "testing.") {
+		return false
+	}
+
+	if !strings.Contains(file, "/") ||
+		(!strings.Contains(file, ".") && !strings.Contains(file, "vendor")) {
+		if !strings.Contains(file, "go/src") {
+			return false
+		}
+	}
+
+	if strings.Contains(fn, "/errors.") || strings.HasSuffix(fn, "/errors.New") {
+		return false
+	}
+
+	return true
+}
+
+func formatFrame(frame runtime.Frame) string {
+	file := frame.File
+	if idx := strings.LastIndex(file, "/"); idx >= 0 {
+		if idx2 := strings.LastIndex(file[:idx], "/"); idx2 >= 0 {
+			file = file[idx2+1:]
+		} else {
+			file = file[idx+1:]
+		}
+	}
+
+	fn := frame.Function
+	if idx := strings.LastIndex(fn, "/"); idx >= 0 {
+		fn = fn[idx+1:]
+	}
+
+	return fmt.Sprintf("%s:%d %s", file, frame.Line, fn)
 }
 
 func GetCode(err error) string {

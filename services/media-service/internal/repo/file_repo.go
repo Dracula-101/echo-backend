@@ -25,6 +25,7 @@ func (r *FileRepository) CreateFile(ctx context.Context, model models.MediaFile)
 
 	if err != nil {
 		r.log.Error("Failed to create file record", logger.Error(err))
+		// Just return the error - stack trace will be captured automatically
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
 

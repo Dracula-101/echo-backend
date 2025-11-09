@@ -77,11 +77,3 @@ func HTTPStatus(code string) int {
 func NewLocationError(code, message string) pkgErrors.Error {
 	return pkgErrors.New(code, message).WithService(ServiceName)
 }
-
-// WrapLocationError wraps an error with location service context
-func WrapLocationError(err error, code, message string) pkgErrors.Error {
-	if err == nil {
-		return nil
-	}
-	return pkgErrors.Wrap(err, code, message).WithService(ServiceName)
-}

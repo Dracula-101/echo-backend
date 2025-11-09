@@ -72,7 +72,7 @@ security:
   allowed_headers: ${SECURITY_ALLOWED_HEADERS:Content-Type,Authorization,X-Request-ID}
   allow_credentials: ${SECURITY_ALLOW_CREDENTIALS:true}
   max_age: ${SECURITY_MAX_AGE:3600}
-  max_body_size: ${SECURITY_MAX_BODY_SIZE:1000000} # 100MB
+  max_body_size: ${SECURITY_MAX_BODY_SIZE:104857600}
   security_headers:
     x_frame_options: ${SECURITY_X_FRAME_OPTIONS:DENY}
     x_content_type_options: ${SECURITY_X_CONTENT_TYPE_OPTIONS:nosniff}
