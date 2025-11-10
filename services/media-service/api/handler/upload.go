@@ -82,11 +82,5 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		AccessToken:      output.AccessToken,
 		UploadedAt:       output.UploadedAt,
 	}
-
-	h.log.Info("File uploaded successfully",
-		logger.String("user_id", userID),
-		logger.String("file_id", output.FileID),
-	)
-
 	response.JSONWithContext(ctx, r, w, http.StatusCreated, responseDTO)
 }

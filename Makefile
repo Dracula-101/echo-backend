@@ -902,7 +902,7 @@ db-init:
 	@echo "$(BOLD)  Initializing Database$(NC)"
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@cd infra/scripts && chmod +x init-db.sh && ./init-db.sh
+	@cd infra/scripts && chmod +x init-db.sh && ./init-db.sh --force
 	@echo ""
 	@echo "$(GREEN)$(CHECK) Database initialized$(NC)"
 	@echo ""

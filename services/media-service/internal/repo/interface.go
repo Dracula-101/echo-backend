@@ -15,6 +15,7 @@ type FileRepositoryInterface interface {
 	GetFileByID(ctx context.Context, fileID string) (*dbModels.MediaFile, pkgErrors.AppError)
 	ListFilesByUser(ctx context.Context, userID string, limit, offset int) ([]*dbModels.MediaFile, pkgErrors.AppError)
 	UpdateFileProcessingStatus(ctx context.Context, fileID, status string, errorMsg string) pkgErrors.AppError
+	UpdateImageMetadata(ctx context.Context, fileID string, width, height int, aspectRatio string, thumbnailSmallURL, thumbnailMediumURL, thumbnailLargeURL *string) pkgErrors.AppError
 	IncrementDownloadCount(ctx context.Context, fileID string) pkgErrors.AppError
 	IncrementViewCount(ctx context.Context, fileID string) pkgErrors.AppError
 	SoftDeleteFile(ctx context.Context, fileID string) pkgErrors.AppError

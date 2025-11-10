@@ -14,7 +14,6 @@ import (
 	s3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"shared/pkg/logger"
-	"shared/pkg/media"
 	"shared/pkg/storage"
 )
 
@@ -26,7 +25,6 @@ type Provider struct {
 	cdnBaseURL string
 	useCDN     bool
 	log        logger.Logger
-	processor  *media.Processor
 }
 
 // Config contains configuration for R2 storage
@@ -70,7 +68,6 @@ func New(cfg Config, log logger.Logger) (*Provider, error) {
 		cdnBaseURL: cfg.CDNBaseURL,
 		useCDN:     cfg.UseCDN,
 		log:        log,
-		processor:  media.NewProcessor(cfg.ImageQuality),
 	}, nil
 }
 
@@ -125,55 +122,6 @@ func (r *Provider) UploadWithOptions(ctx context.Context, key string, data io.Re
 	)
 
 	return url, nil
-}
-
-// UploadWithVariants uploads a file and generates multiple size variants
-func (r *Provider) UploadWithVariants(ctx context.Context, baseKey string, data io.Reader, contentType string, sizes []media.ImageSize) (map[string]string, error) {
-	// Read original data
-	originalData, err := io.ReadAll(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file data: %w", err)
-	}
-
-	urls := make(map[string]string)
-
-	// Upload original
-	originalURL, err := r.Upload(ctx, baseKey, bytes.NewReader(originalData), contentType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to upload original: %w", err)
-	}
-	urls["original"] = originalURL
-
-	// Generate and upload variants
-	thumbnails, err := r.processor.GenerateThumbnails(bytes.NewReader(originalData), sizes, "jpeg")
-	if err != nil {
-		r.log.Error("Failed to generate thumbnails", logger.Error(err))
-		// Don't fail the entire upload if thumbnails fail
-		return urls, nil
-	}
-
-	for _, thumb := range thumbnails {
-		// Generate key for this size (e.g., "users/123/profile/small_image.jpg")
-		variantKey := generateVariantKey(baseKey, thumb.Size.Name)
-
-		variantURL, err := r.Upload(ctx, variantKey, bytes.NewReader(thumb.Data), "image/jpeg")
-		if err != nil {
-			r.log.Error("Failed to upload variant",
-				logger.String("size", thumb.Size.Name),
-				logger.Error(err),
-			)
-			continue
-		}
-
-		urls[thumb.Size.Name] = variantURL
-		r.log.Info("Variant uploaded",
-			logger.String("size", thumb.Size.Name),
-			logger.String("url", variantURL),
-			logger.Int64("file_size", thumb.FileSize),
-		)
-	}
-
-	return urls, nil
 }
 
 // Download downloads a file from R2
@@ -341,9 +289,4 @@ func (r *Provider) buildURL(key string) string {
 		return fmt.Sprintf("%s/%s", r.publicURL, key)
 	}
 	return fmt.Sprintf("https://%s.r2.cloudflarestorage.com/%s", r.bucket, key)
-}
-
-// generateVariantKey generates a storage key for a variant
-func generateVariantKey(baseKey, sizeName string) string {
-	return fmt.Sprintf("%s_%s", sizeName, baseKey)
 }

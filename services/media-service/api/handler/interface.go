@@ -23,7 +23,6 @@ type HandlerInterface interface {
 
 	// Profile operations
 	UploadProfilePhoto(w http.ResponseWriter, r *http.Request)
-
 	// Share operations
 	CreateShare(w http.ResponseWriter, r *http.Request)
 	RevokeShare(w http.ResponseWriter, r *http.Request)

@@ -20,6 +20,7 @@ import (
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
+	"shared/pkg/media"
 	"shared/pkg/storage/r2"
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
@@ -330,8 +331,10 @@ func main() {
 		WithStorageProvider(storageProvider).
 		Build()
 
+	mediaProcessor := media.NewProcessor()
+
 	// Create handlers
-	mediaHandler := handler.NewHandler(mediaService, cfg, log)
+	mediaHandler := handler.NewHandler(mediaService, mediaProcessor, cfg, log)
 
 	// Setup health checks
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)

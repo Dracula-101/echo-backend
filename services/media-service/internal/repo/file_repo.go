@@ -88,9 +88,10 @@ func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, lim
 func (r *FileRepository) UpdateFileProcessingStatus(ctx context.Context, fileID, status string, errorMsg string) pkgErrors.AppError {
 	query := `
 		UPDATE media.files
-		SET processing_status = $2,
-		    processing_error = $3,
-		    processing_completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE processing_completed_at END,
+		SET processing_status = $2::text,
+		    processing_error = $3::text,
+			processing_started_at = CASE WHEN $2::text = 'processing' THEN NOW() ELSE processing_started_at END,
+		    processing_completed_at = CASE WHEN $2::text = 'completed' THEN NOW() ELSE processing_completed_at END,
 		    updated_at = NOW()
 		WHERE id = $1
 	`
@@ -100,6 +101,32 @@ func (r *FileRepository) UpdateFileProcessingStatus(ctx context.Context, fileID,
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update processing status").
 			WithDetail("file_id", fileID).
 			WithDetail("status", status)
+	}
+
+	return nil
+}
+
+func (r *FileRepository) UpdateImageMetadata(ctx context.Context, fileID string, width, height int, aspectRatio string, thumbnailSmallURL, thumbnailMediumURL, thumbnailLargeURL *string) pkgErrors.AppError {
+	query := `
+		UPDATE media.files
+		SET width = $2,
+		    height = $3,
+		    aspect_ratio = $4::text,
+		    has_thumbnail = $5,
+		    thumbnail_small_url = $6::text,
+		    thumbnail_medium_url = $7::text,
+		    thumbnail_large_url = $8::text,
+		    thumbnail_url = $7::text,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	hasThumbnail := thumbnailSmallURL != nil || thumbnailMediumURL != nil || thumbnailLargeURL != nil
+
+	_, err := r.db.Exec(ctx, query, fileID, width, height, aspectRatio, hasThumbnail, thumbnailSmallURL, thumbnailMediumURL, thumbnailLargeURL)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update image metadata").
+			WithDetail("file_id", fileID)
 	}
 
 	return nil

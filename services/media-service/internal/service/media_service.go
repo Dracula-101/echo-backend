@@ -6,6 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"path/filepath"
 	"strings"
@@ -18,18 +21,14 @@ import (
 	"media-service/internal/service/models"
 	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
+	"shared/pkg/media"
 	"shared/pkg/utils"
 
 	"shared/pkg/cache"
 	"shared/pkg/logger"
-)
 
-type StorageProvider interface {
-	Upload(ctx context.Context, key string, data io.Reader, contentType string) (string, error)
-	Download(ctx context.Context, key string) (io.ReadCloser, error)
-	Delete(ctx context.Context, key string) error
-	GeneratePresignedURL(ctx context.Context, key string, expiresIn time.Duration) (string, error)
-}
+	"github.com/disintegration/imaging"
+)
 
 type MediaService struct {
 	repo            *repo.FileRepository
@@ -45,6 +44,13 @@ type MediaServiceBuilder struct {
 	cfg             *config.Config
 	log             logger.Logger
 	storageProvider StorageProvider
+}
+
+type StorageProvider interface {
+	Upload(ctx context.Context, key string, data io.Reader, contentType string) (string, error)
+	Download(ctx context.Context, key string) (io.ReadCloser, error)
+	Delete(ctx context.Context, key string) error
+	GeneratePresignedURL(ctx context.Context, key string, expiresIn time.Duration) (string, error)
 }
 
 func NewMediaServiceBuilder() *MediaServiceBuilder {
@@ -233,6 +239,165 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 		ProcessingStatus: "pending",
 		UploadedAt:       time.Now(),
 	}, nil
+}
+
+func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, processor *media.Processor) error {
+	s.log.Info("Processing image file", logger.String("file_id", fileID))
+
+	if err := s.repo.UpdateFileProcessingStatus(ctx, fileID, "processing", ""); err != nil {
+		s.log.Error("Failed to update processing status", logger.Error(err))
+		return err
+	}
+
+	file, err := s.repo.GetFileByID(ctx, fileID)
+	if err != nil {
+		s.log.Error("Failed to get file", logger.Error(err))
+		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "file not found")
+		return err
+	}
+
+	if file.FileCategory == nil || *file.FileCategory != "image" {
+		s.log.Debug("Skipping non-image file", logger.String("file_id", fileID))
+		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "completed", "")
+		return nil
+	}
+
+	reader, downloadErr := s.storageProvider.Download(ctx, file.StorageKey)
+	if downloadErr != nil {
+		s.log.Error("Failed to download file from storage", logger.Error(downloadErr))
+		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "failed to download from storage")
+		return downloadErr
+	}
+	defer reader.Close()
+
+	imageData, readErr := io.ReadAll(reader)
+	if readErr != nil {
+		s.log.Error("Failed to read image data", logger.Error(readErr))
+		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "failed to read image data")
+		return readErr
+	}
+
+	imgConfig, format, decodeErr := image.DecodeConfig(bytes.NewReader(imageData))
+	if decodeErr != nil {
+		s.log.Error("Failed to decode image", logger.Error(decodeErr))
+		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "invalid image format")
+		return decodeErr
+	}
+
+	aspectRatio := fmt.Sprintf("%.2f:1", float64(imgConfig.Width)/float64(imgConfig.Height))
+
+	s.log.Info("Image dimensions extracted",
+		logger.String("file_id", fileID),
+		logger.Int("width", imgConfig.Width),
+		logger.Int("height", imgConfig.Height),
+		logger.String("format", format),
+	)
+
+	var thumbnailSmall, thumbnailMedium, thumbnailLarge *string
+
+	if s.cfg.Features.Thumbnails.Enabled {
+		urls, thumbErr := s.generateAndUploadThumbnails(ctx, imageData, file, format)
+		if thumbErr != nil {
+			s.log.Error("Failed to generate thumbnails", logger.Error(thumbErr))
+		} else {
+			if url, ok := urls["small"]; ok {
+				thumbnailSmall = &url
+			}
+			if url, ok := urls["medium"]; ok {
+				thumbnailMedium = &url
+			}
+			if url, ok := urls["large"]; ok {
+				thumbnailLarge = &url
+			}
+		}
+	}
+
+	if updateErr := s.repo.UpdateImageMetadata(ctx, fileID, imgConfig.Width, imgConfig.Height, aspectRatio, thumbnailSmall, thumbnailMedium, thumbnailLarge); updateErr != nil {
+		s.log.Error("Failed to update image metadata", logger.Error(updateErr))
+		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "failed to update metadata")
+		return updateErr
+	}
+
+	if completeErr := s.repo.UpdateFileProcessingStatus(ctx, fileID, "completed", ""); completeErr != nil {
+		s.log.Error("Failed to update processing status to completed", logger.Error(completeErr))
+		return completeErr
+	}
+
+	s.log.Info("Image processing completed successfully", logger.String("file_id", fileID))
+	return nil
+}
+
+func (s *MediaService) generateAndUploadThumbnails(ctx context.Context, imageData []byte, file *dbModels.MediaFile, format string) (map[string]string, error) {
+	img, _, decodeErr := image.Decode(bytes.NewReader(imageData))
+	if decodeErr != nil {
+		return nil, fmt.Errorf("failed to decode image for thumbnails: %w", decodeErr)
+	}
+
+	// Define thumbnail sizes from config
+	thumbnailSizes := map[string]struct{ width, height int }{
+		"small":  {s.cfg.Features.Thumbnails.SmallSize.Width, s.cfg.Features.Thumbnails.SmallSize.Height},
+		"medium": {s.cfg.Features.Thumbnails.MediumSize.Width, s.cfg.Features.Thumbnails.MediumSize.Height},
+		"large":  {s.cfg.Features.Thumbnails.LargeSize.Width, s.cfg.Features.Thumbnails.LargeSize.Height},
+	}
+
+	thumbnailURLs := make(map[string]string)
+
+	for sizeName, size := range thumbnailSizes {
+		resized := imaging.Fit(img, size.width, size.height, imaging.Lanczos)
+
+		var buf bytes.Buffer
+		var encodeErr error
+
+		switch strings.ToLower(format) {
+		case "jpeg", "jpg":
+			encodeErr = jpeg.Encode(&buf, resized, &jpeg.Options{Quality: s.cfg.Features.ImageProcessing.Quality})
+		case "png":
+			encodeErr = png.Encode(&buf, resized)
+		default:
+			encodeErr = jpeg.Encode(&buf, resized, &jpeg.Options{Quality: s.cfg.Features.ImageProcessing.Quality})
+		}
+
+		if encodeErr != nil {
+			s.log.Error("Failed to encode thumbnail",
+				logger.String("size", sizeName),
+				logger.Error(encodeErr),
+			)
+			continue
+		}
+
+		// Generate storage path for thumbnail
+		thumbnailKey := GenerateThumbnailPath(
+			file.StorageKey,
+			sizeName,
+			*file.ContentHash,
+			filepath.Ext(file.FileName),
+		)
+
+		// Upload thumbnail to storage
+		thumbnailURL, uploadErr := s.storageProvider.Upload(
+			ctx,
+			thumbnailKey,
+			bytes.NewReader(buf.Bytes()),
+			file.FileType,
+		)
+
+		if uploadErr != nil {
+			s.log.Error("Failed to upload thumbnail",
+				logger.String("size", sizeName),
+				logger.Error(uploadErr),
+			)
+			continue
+		}
+
+		s.log.Debug("Thumbnail uploaded",
+			logger.String("size", sizeName),
+			logger.String("url", thumbnailURL),
+		)
+
+		thumbnailURLs[sizeName] = thumbnailURL
+	}
+
+	return thumbnailURLs, nil
 }
 
 func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (*models.GetFileOutput, error) {

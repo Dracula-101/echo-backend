@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
 	"media-service/internal/service/models"
+	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
 )
@@ -47,4 +49,10 @@ func (h *Handler) UploadProfilePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSONWithContext(ctx, r, w, http.StatusCreated, output)
+
+	defer func() {
+		h.log.Info("Starting async image processing for profile photo",
+			logger.String("file_id", output.FileID))
+		go h.mediaService.ProcessImageFile(context.Background(), output.FileID, h.mediaProcessor)
+	}()
 }

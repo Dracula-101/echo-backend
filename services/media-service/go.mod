@@ -3,6 +3,7 @@ module media-service
 go 1.25.0
 
 require (
+	github.com/disintegration/imaging v1.6.2
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/gorilla/mux v1.8.1
 	shared v0.0.0
@@ -41,6 +42,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/redis/go-redis/v9 v9.16.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
