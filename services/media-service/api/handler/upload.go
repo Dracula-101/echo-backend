@@ -40,7 +40,6 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	visibility := "private"
 	var metadata map[string]interface{}
 
-	// Get request metadata
 	deviceID := handler.GetDeviceInfo().ID
 	ipAddress := handler.GetClientIP()
 	if ipAddress == "" {

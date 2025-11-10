@@ -133,7 +133,7 @@ type MediaFile struct {
 	UploadedFromDeviceID *string `db:"uploaded_from_device_id" json:"uploaded_from_device_id,omitempty"`
 	UploadedFromIP       *string `db:"uploaded_from_ip" json:"uploaded_from_ip,omitempty"`
 
-	Metadata json.RawMessage `db:"metadata" json:"metadata,omitempty"`
+	Metadata *json.RawMessage `db:"metadata" json:"metadata,omitempty"`
 }
 
 func (m *MediaFile) TableName() string {

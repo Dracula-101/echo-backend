@@ -11,7 +11,7 @@ import (
 
 	serviceModels "auth-service/internal/service/models"
 	"encoding/base64"
-	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/common/token"
@@ -169,7 +169,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 	)
 
 	user, err := s.repo.GetUserByEmail(ctx, email)
-	if err != nil && !database.IsNoRowsError(err) {
+	if err != nil && !postgres.IsNoRowsError(err) {
 		return nil, err.WithService(authErrors.ServiceName)
 	}
 	if user == nil {

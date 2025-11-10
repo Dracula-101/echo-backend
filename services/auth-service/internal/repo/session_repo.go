@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -51,15 +52,18 @@ func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*m
 		logger.String("user_id", userID),
 	)
 	var session models.AuthSession
-	query := `SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1`
+	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1"
 	err := r.db.QueryRow(ctx, query, userID).ScanOne(&session)
 	if err != nil {
+		if postgres.IsNoRowsError(err) {
+			r.log.Debug("No active session found for user",
+				logger.String("user_id", userID),
+			)
+			return nil, nil
+		}
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by user ID").
 			WithDetail("user_id", userID)
 	}
-	r.log.Debug("Session fetched successfully",
-		logger.String("session_id", session.ID),
-	)
 	return &session, nil
 }
 

@@ -12,7 +12,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"shared/pkg/cache"
-	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -190,7 +189,7 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 	)
 
 	session, err := s.repo.GetSessionByUserId(ctx, userID)
-	if err != nil && !database.IsNoRowsError(err) {
+	if err != nil {
 		if appErr, ok := err.(pkgErrors.AppError); ok {
 			return nil, appErr.WithService(authErrors.ServiceName)
 		}

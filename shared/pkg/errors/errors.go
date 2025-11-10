@@ -18,6 +18,7 @@ type AppError interface {
 	WithService(service string) AppError
 	WithCorrelationID(correlationID string) AppError
 	WithDetail(key string, value interface{}) AppError
+	InnerError() string
 }
 
 type appError struct {
@@ -219,4 +220,11 @@ func GetDetails(err error) map[string]interface{} {
 	}
 
 	return nil
+}
+
+func (e *appError) InnerError() string {
+	if e.wrapped != nil {
+		return e.wrapped.Error()
+	}
+	return ""
 }

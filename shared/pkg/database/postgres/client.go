@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"shared/pkg/database"
-	apperrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/logger/adapter"
 
@@ -66,8 +66,7 @@ func New(config database.Config) (database.Database, error) {
 func (c *client) Create(ctx context.Context, model database.Model) (*string, error) {
 	fields, values := getFieldsAndValues(model)
 	if len(fields) == 0 {
-		return nil, apperrors.New(apperrors.CodeInvalidArgument, "no db tags found in model").
-			WithService("postgres-client").
+		return nil, database.NewDBError(database.CodeDBInternal, "no db tags found in model").
 			WithDetail("table", model.TableName())
 	}
 
@@ -87,8 +86,7 @@ func (c *client) Create(ctx context.Context, model database.Model) (*string, err
 	}
 
 	if len(filteredFields) == 0 {
-		return nil, apperrors.New(apperrors.CodeInvalidArgument, "no fields to insert").
-			WithService("postgres-client").
+		return nil, database.NewDBError(database.CodeDBInternal, "no fields to insert").
 			WithDetail("table", model.TableName())
 	}
 
@@ -118,8 +116,7 @@ func (c *client) Create(ctx context.Context, model database.Model) (*string, err
 	}
 
 	if err := setPrimaryKeyValue(model, pkField, returnedID); err != nil {
-		return nil, apperrors.FromError(err, apperrors.CodeInternal, "failed to set primary key value").
-			WithService("postgres-client").
+		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to set primary key value").
 			WithDetail("table", model.TableName()).
 			WithDetail("pk_field", pkField)
 	}
@@ -127,11 +124,10 @@ func (c *client) Create(ctx context.Context, model database.Model) (*string, err
 	return &formattedID, nil
 }
 
-func (c *client) FindByID(ctx context.Context, model database.Model, id interface{}) apperrors.AppError {
+func (c *client) FindByID(ctx context.Context, model database.Model, id interface{}) *database.DBError {
 	fields := getFields(model)
 	if len(fields) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no db tags found in model").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no db tags found in model").
 			WithDetail("table", model.TableName())
 	}
 
@@ -156,11 +152,10 @@ func (c *client) FindByID(ctx context.Context, model database.Model, id interfac
 	return nil
 }
 
-func (c *client) Update(ctx context.Context, model database.Model) apperrors.AppError {
+func (c *client) Update(ctx context.Context, model database.Model) *database.DBError {
 	fields, values := getFieldsAndValues(model)
 	if len(fields) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no db tags found in model").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no db tags found in model").
 			WithDetail("table", model.TableName())
 	}
 
@@ -177,8 +172,7 @@ func (c *client) Update(ctx context.Context, model database.Model) apperrors.App
 	}
 
 	if len(setParts) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no fields to update").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no fields to update").
 			WithDetail("table", model.TableName())
 	}
 
@@ -207,13 +201,11 @@ func (c *client) Update(ctx context.Context, model database.Model) apperrors.App
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to get rows affected").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected").
 			WithDetail("table", model.TableName())
 	}
 	if rows == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "record not found").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "record not found").
 			WithDetail("operation", "Update").
 			WithDetail("table", model.TableName()).
 			WithDetail("primary_key", model.PrimaryKey())
@@ -222,7 +214,7 @@ func (c *client) Update(ctx context.Context, model database.Model) apperrors.App
 	return nil
 }
 
-func (c *client) Delete(ctx context.Context, model database.Model) apperrors.AppError {
+func (c *client) Delete(ctx context.Context, model database.Model) *database.DBError {
 	pkField := getPrimaryKeyField(model)
 	query := fmt.Sprintf(
 		"UPDATE %s SET deleted_at = $1 WHERE %s = $2 AND deleted_at IS NULL",
@@ -243,13 +235,11 @@ func (c *client) Delete(ctx context.Context, model database.Model) apperrors.App
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to get rows affected").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected").
 			WithDetail("table", model.TableName())
 	}
 	if rows == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "record not found or already deleted").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "record not found or already deleted").
 			WithDetail("operation", "Delete").
 			WithDetail("table", model.TableName()).
 			WithDetail("primary_key", model.PrimaryKey())
@@ -258,7 +248,7 @@ func (c *client) Delete(ctx context.Context, model database.Model) apperrors.App
 	return nil
 }
 
-func (c *client) HardDelete(ctx context.Context, model database.Model) apperrors.AppError {
+func (c *client) HardDelete(ctx context.Context, model database.Model) *database.DBError {
 	pkField := getPrimaryKeyField(model)
 	query := fmt.Sprintf(
 		"DELETE FROM %s WHERE %s = $1",
@@ -279,13 +269,11 @@ func (c *client) HardDelete(ctx context.Context, model database.Model) apperrors
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to get rows affected").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected").
 			WithDetail("table", model.TableName())
 	}
 	if rows == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "record not found").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "record not found").
 			WithDetail("operation", "HardDelete").
 			WithDetail("table", model.TableName()).
 			WithDetail("primary_key", model.PrimaryKey())
@@ -294,7 +282,7 @@ func (c *client) HardDelete(ctx context.Context, model database.Model) apperrors
 	return nil
 }
 
-func (c *client) FindOne(ctx context.Context, model database.Model, query string, args ...interface{}) apperrors.AppError {
+func (c *client) FindOne(ctx context.Context, model database.Model, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("FindOne", logger.String("query", query))
 
@@ -306,7 +294,7 @@ func (c *client) FindOne(ctx context.Context, model database.Model, query string
 	return nil
 }
 
-func (c *client) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) apperrors.AppError {
+func (c *client) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("FindMany", logger.String("query", query))
 
@@ -319,8 +307,7 @@ func (c *client) FindMany(ctx context.Context, dest interface{}, query string, a
 
 	if err := scanStructs(rows, dest); err != nil {
 		c.logDatabaseError("FindMany:Scan", query, nargs, err)
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to scan results").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan results").
 			WithDetail("operation", "FindMany")
 	}
 	return nil
@@ -387,8 +374,8 @@ func (c *client) Begin(ctx context.Context) (database.Transaction, error) {
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		c.logger.Error("Failed to begin transaction", logger.Error(err))
-		return nil, apperrors.FromError(err, apperrors.CodeInternal, "failed to begin transaction").
-			WithService("postgres-client")
+		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to begin transaction")
+
 	}
 	return &transactionWrapper{tx: tx, logger: c.logger}, nil
 }
@@ -404,8 +391,8 @@ func (c *client) BeginTx(ctx context.Context, opts *database.TxOptions) (databas
 	tx, err := c.db.BeginTx(ctx, sqlOpts)
 	if err != nil {
 		c.logger.Error("Failed to begin transaction with options", logger.Error(err))
-		return nil, apperrors.FromError(err, apperrors.CodeInternal, "failed to begin transaction with options").
-			WithService("postgres-client")
+		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to begin transaction with options")
+
 	}
 	return &transactionWrapper{tx: tx, logger: c.logger}, nil
 }
@@ -427,8 +414,8 @@ func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transa
 	if err := fn(tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			c.logger.Error("Failed to rollback transaction", logger.Error(rbErr))
-			return apperrors.FromError(rbErr, apperrors.CodeInternal, "failed to rollback transaction").
-				WithService("postgres-client")
+			return database.WrapDBError(rbErr, database.CodeDBInternal, "failed to rollback transaction")
+
 		}
 		c.logger.Debug("Transaction rolled back", logger.Error(err))
 		return err
@@ -436,8 +423,7 @@ func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transa
 
 	if err := tx.Commit(); err != nil {
 		c.logger.Error("Failed to commit transaction", logger.Error(err))
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to commit transaction").
-			WithService("postgres-client")
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to commit transaction")
 	}
 
 	c.logger.Debug("Transaction committed successfully")
@@ -447,16 +433,16 @@ func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transa
 func (c *client) Close() error {
 	c.logger.Debug("Closing database")
 	if err := c.db.Close(); err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to close database").
-			WithService("postgres-client")
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to close database")
+
 	}
 	return nil
 }
 
-func (c *client) Ping(ctx context.Context) apperrors.AppError {
+func (c *client) Ping(ctx context.Context) *database.DBError {
 	if err := c.db.PingContext(ctx); err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to ping database").
-			WithService("postgres-client")
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to ping database")
+
 	}
 	return nil
 }
@@ -575,11 +561,10 @@ func (t *transactionWrapper) logDatabaseError(operation string, query string, ar
 	t.logger.Error("Transaction operation failed", fields...)
 }
 
-func (t *transactionWrapper) Create(ctx context.Context, model database.Model) apperrors.AppError {
+func (t *transactionWrapper) Create(ctx context.Context, model database.Model) *database.DBError {
 	fields, values := getFieldsAndValues(model)
 	if len(fields) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no db tags found in model").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no db tags found in model").
 			WithDetail("table", model.TableName())
 	}
 
@@ -612,8 +597,7 @@ func (t *transactionWrapper) Create(ctx context.Context, model database.Model) a
 	}
 
 	if err := setPrimaryKeyValue(model, pkField, returnedID); err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to set primary key value").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to set primary key value").
 			WithDetail("table", model.TableName()).
 			WithDetail("pk_field", pkField)
 	}
@@ -621,11 +605,10 @@ func (t *transactionWrapper) Create(ctx context.Context, model database.Model) a
 	return nil
 }
 
-func (t *transactionWrapper) FindByID(ctx context.Context, model database.Model, id interface{}) apperrors.AppError {
+func (t *transactionWrapper) FindByID(ctx context.Context, model database.Model, id interface{}) *database.DBError {
 	fields := getFields(model)
 	if len(fields) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no db tags found in model").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no db tags found in model").
 			WithDetail("table", model.TableName())
 	}
 
@@ -647,11 +630,10 @@ func (t *transactionWrapper) FindByID(ctx context.Context, model database.Model,
 	return nil
 }
 
-func (t *transactionWrapper) Update(ctx context.Context, model database.Model) apperrors.AppError {
+func (t *transactionWrapper) Update(ctx context.Context, model database.Model) *database.DBError {
 	fields, values := getFieldsAndValues(model)
 	if len(fields) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no db tags found in model").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no db tags found in model").
 			WithDetail("table", model.TableName())
 	}
 
@@ -668,8 +650,7 @@ func (t *transactionWrapper) Update(ctx context.Context, model database.Model) a
 	}
 
 	if len(setParts) == 0 {
-		return apperrors.New(apperrors.CodeInvalidArgument, "no fields to update").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "no fields to update").
 			WithDetail("table", model.TableName())
 	}
 
@@ -697,13 +678,11 @@ func (t *transactionWrapper) Update(ctx context.Context, model database.Model) a
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to get rows affected").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected").
 			WithDetail("table", model.TableName())
 	}
 	if rows == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "record not found").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "record not found").
 			WithDetail("operation", "TX:Update").
 			WithDetail("table", model.TableName()).
 			WithDetail("primary_key", model.PrimaryKey())
@@ -712,7 +691,7 @@ func (t *transactionWrapper) Update(ctx context.Context, model database.Model) a
 	return nil
 }
 
-func (t *transactionWrapper) Delete(ctx context.Context, model database.Model) apperrors.AppError {
+func (t *transactionWrapper) Delete(ctx context.Context, model database.Model) *database.DBError {
 	pkField := getPrimaryKeyField(model)
 	query := fmt.Sprintf(
 		"UPDATE %s SET deleted_at = $1 WHERE %s = $2 AND deleted_at IS NULL",
@@ -730,13 +709,11 @@ func (t *transactionWrapper) Delete(ctx context.Context, model database.Model) a
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to get rows affected").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected").
 			WithDetail("table", model.TableName())
 	}
 	if rows == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "record not found or already deleted").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "record not found or already deleted").
 			WithDetail("operation", "TX:Delete").
 			WithDetail("table", model.TableName()).
 			WithDetail("primary_key", model.PrimaryKey())
@@ -745,7 +722,7 @@ func (t *transactionWrapper) Delete(ctx context.Context, model database.Model) a
 	return nil
 }
 
-func (t *transactionWrapper) HardDelete(ctx context.Context, model database.Model) apperrors.AppError {
+func (t *transactionWrapper) HardDelete(ctx context.Context, model database.Model) *database.DBError {
 	pkField := getPrimaryKeyField(model)
 	query := fmt.Sprintf(
 		"DELETE FROM %s WHERE %s = $1",
@@ -763,13 +740,11 @@ func (t *transactionWrapper) HardDelete(ctx context.Context, model database.Mode
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to get rows affected").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected").
 			WithDetail("table", model.TableName())
 	}
 	if rows == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "record not found").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "record not found").
 			WithDetail("operation", "TX:HardDelete").
 			WithDetail("table", model.TableName()).
 			WithDetail("primary_key", model.PrimaryKey())
@@ -778,7 +753,7 @@ func (t *transactionWrapper) HardDelete(ctx context.Context, model database.Mode
 	return nil
 }
 
-func (t *transactionWrapper) FindOne(ctx context.Context, model database.Model, query string, args ...interface{}) apperrors.AppError {
+func (t *transactionWrapper) FindOne(ctx context.Context, model database.Model, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 	t.logger.Debug("TX FindOne", logger.String("query", query))
 
@@ -790,7 +765,7 @@ func (t *transactionWrapper) FindOne(ctx context.Context, model database.Model, 
 	return nil
 }
 
-func (t *transactionWrapper) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) apperrors.AppError {
+func (t *transactionWrapper) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 	t.logger.Debug("TX FindMany", logger.String("query", query))
 
@@ -803,8 +778,7 @@ func (t *transactionWrapper) FindMany(ctx context.Context, dest interface{}, que
 
 	if err := scanStructs(rows, dest); err != nil {
 		t.logDatabaseError("FindMany:Scan", query, nargs, err)
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to scan results").
-			WithService("postgres-client").
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan results").
 			WithDetail("operation", "TX:FindMany")
 	}
 	return nil
@@ -844,8 +818,8 @@ func (t *transactionWrapper) Commit() error {
 	err := t.tx.Commit()
 	if err != nil {
 		t.logger.Error("Failed to commit transaction", logger.Error(err))
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to commit transaction").
-			WithService("postgres-client")
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to commit transaction")
+
 	}
 	t.logger.Debug("Transaction committed")
 	return nil
@@ -855,8 +829,8 @@ func (t *transactionWrapper) Rollback() error {
 	err := t.tx.Rollback()
 	if err != nil {
 		t.logger.Error("Failed to rollback transaction", logger.Error(err))
-		return apperrors.FromError(err, apperrors.CodeInternal, "failed to rollback transaction").
-			WithService("postgres-client")
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to rollback transaction")
+
 	}
 	t.logger.Debug("Transaction rolled back")
 	return nil
@@ -874,18 +848,17 @@ func (r *rowsWrapper) Scan(dest ...interface{}) error {
 	return r.rows.Scan(dest...)
 }
 
-func (r *rowsWrapper) ScanOne(model database.Model) apperrors.AppError {
+func (r *rowsWrapper) ScanOne(model database.Model) *database.DBError {
 	if !r.rows.Next() {
 		if err := r.rows.Err(); err != nil {
-			return apperrors.FromError(err, apperrors.CodeDatabaseError, "failed to iterate rows").
-				WithService("postgres-client")
+			return database.WrapDBError(err, database.CodeDBInternal, "failed to iterate rows")
+
 		}
-		return apperrors.FromError(sql.ErrNoRows, apperrors.CodeNotFound, "no rows found").
-			WithService("postgres-client")
+		return database.NewDBError(database.CodeDBNoRows, "no rows found")
 	}
 	if err := scanStructRows(r.rows, model); err != nil {
-		return apperrors.FromError(err, apperrors.CodeDatabaseError, "failed to scan row").
-			WithService("postgres-client")
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan row")
+
 	}
 	return nil
 }
@@ -906,11 +879,8 @@ func (r *rowWrapper) Scan(dest ...interface{}) error {
 	return r.row.Scan(dest...)
 }
 
-func (r *rowWrapper) ScanOne(model database.Model) apperrors.AppError {
-	if err := scanStruct(r.row, model); err != nil {
-		return wrapDatabaseError(err, "ScanOne", model.TableName(), "")
-	}
-	return nil
+func (r *rowWrapper) ScanOne(model database.Model) error {
+	return scanStruct(r.row, model)
 }
 
 type resultWrapper struct {
@@ -1036,8 +1006,7 @@ func getPrimaryKeyField(model interface{}) string {
 func setPrimaryKeyValue(model interface{}, pkField string, value interface{}) error {
 	v := reflect.ValueOf(model)
 	if v.Kind() != reflect.Ptr {
-		return apperrors.New(apperrors.CodeInvalidArgument, "model must be a pointer").
-			WithService("postgres-client").
+		return database.NewDBError(database.CodeDBInternal, "model must be a pointer").
 			WithDetail("pk_field", pkField)
 	}
 	v = v.Elem()
@@ -1048,8 +1017,7 @@ func setPrimaryKeyValue(model interface{}, pkField string, value interface{}) er
 		if field.Tag.Get("db") == pkField {
 			fieldValue := v.Field(i)
 			if !fieldValue.CanSet() {
-				return apperrors.New(apperrors.CodeInternal, "cannot set primary key field").
-					WithService("postgres-client").
+				return database.NewDBError(database.CodeDBInternal, "cannot set primary key field").
 					WithDetail("pk_field", pkField).
 					WithDetail("field_name", field.Name)
 			}
@@ -1084,8 +1052,8 @@ func formatPrimaryKey(value interface{}) string {
 func scanStruct(row *sql.Row, dest interface{}) error {
 	v := reflect.ValueOf(dest)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		return apperrors.New(apperrors.CodeInvalidArgument, "dest must be a pointer to struct").
-			WithService("postgres-client")
+		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to struct")
+
 	}
 	v = v.Elem()
 	t := v.Type()
@@ -1121,8 +1089,8 @@ func scanStruct(row *sql.Row, dest interface{}) error {
 func scanStructRows(rows *sql.Rows, dest interface{}) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Ptr || destValue.Elem().Kind() != reflect.Struct {
-		return apperrors.New(apperrors.CodeInvalidArgument, "dest must be a pointer to struct").
-			WithService("postgres-client")
+		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to struct")
+
 	}
 	destValue = destValue.Elem()
 	destType := destValue.Type()
@@ -1138,6 +1106,7 @@ func scanStructRows(rows *sql.Rows, dest interface{}) error {
 				dests = append(dests, pq.Array(fieldValue.Addr().Interface()))
 			} else if field.Type.String() == "json.RawMessage" {
 				dests = append(dests, fieldValue.Addr().Interface())
+				dests = append(dests, fieldValue.Addr().Interface())
 			} else if field.Type.Kind() == reflect.Ptr {
 				dests = append(dests, fieldValue.Addr().Interface())
 			} else if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.Uint8 {
@@ -1146,8 +1115,7 @@ func scanStructRows(rows *sql.Rows, dest interface{}) error {
 				if field.Type.String() == "time.Time" {
 					dests = append(dests, fieldValue.Addr().Interface())
 				} else {
-					return apperrors.New(apperrors.CodeInvalidArgument, "unsupported struct type").
-						WithService("postgres-client").
+					return database.NewDBError(database.CodeDBInternal, "unsupported struct type").
 						WithDetail("type", field.Type.String())
 				}
 			} else {
@@ -1162,13 +1130,13 @@ func scanStructRows(rows *sql.Rows, dest interface{}) error {
 func scanStructs(rows *sql.Rows, dest interface{}) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Ptr {
-		return apperrors.New(apperrors.CodeInvalidArgument, "dest must be a pointer to slice").
-			WithService("postgres-client")
+		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to slice")
+
 	}
 	sliceValue := destValue.Elem()
 	if sliceValue.Kind() != reflect.Slice {
-		return apperrors.New(apperrors.CodeInvalidArgument, "dest must be a pointer to slice").
-			WithService("postgres-client")
+		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to slice")
+
 	}
 	elemType := sliceValue.Type().Elem()
 	isPtr := elemType.Kind() == reflect.Ptr
@@ -1176,8 +1144,8 @@ func scanStructs(rows *sql.Rows, dest interface{}) error {
 		elemType = elemType.Elem()
 	}
 	if elemType.Kind() != reflect.Struct {
-		return apperrors.New(apperrors.CodeInvalidArgument, "slice element must be a struct or pointer to struct").
-			WithService("postgres-client")
+		return database.NewDBError(database.CodeDBInternal, "slice element must be a struct or pointer to struct")
+
 	}
 
 	for rows.Next() {
@@ -1212,374 +1180,77 @@ func scanStructs(rows *sql.Rows, dest interface{}) error {
 	return rows.Err()
 }
 
-func wrapDatabaseError(err error, operation, table, query string) apperrors.AppError {
+func wrapDatabaseError(err error, operation, table, query string) *database.DBError {
 	if err == nil {
 		return nil
 	}
 
-	if appErr, ok := err.(apperrors.AppError); ok {
-		return appErr
+	var dbErr *database.DBError
+	if errors.As(err, &dbErr) {
+		return dbErr
 	}
 
 	if err == sql.ErrNoRows {
-		return apperrors.New(apperrors.CodeNotFound, "record not found").
-			WithService("postgres-client").
-			WithDetail("operation", operation).
-			WithDetail("table", table).
-			WithDetail("query", query)
+		return database.NewDBError(database.CodeDBNoRows, "No rows found").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithWrapped(err)
 	}
 
 	if err == sql.ErrTxDone {
-		return apperrors.New(apperrors.CodeDatabaseError, "transaction already committed or rolled back").
-			WithService("postgres-client").
-			WithDetail("operation", operation).
-			WithDetail("table", table).
-			WithDetail("error_type", "transaction_done")
+		return database.NewDBError(database.CodeDBTransaction, "Transaction already committed or rolled back").
+			WithOperation(operation).
+			WithTable(table).
+			WithWrapped(err)
 	}
 
 	if err == sql.ErrConnDone {
-		return apperrors.New(apperrors.CodeDatabaseError, "connection already closed").
-			WithService("postgres-client").
-			WithDetail("operation", operation).
-			WithDetail("table", table).
-			WithDetail("error_type", "connection_closed")
+		return database.NewDBError(database.CodeDBConnection, "Connection already closed").
+			WithOperation(operation).
+			WithTable(table).
+			WithWrapped(err)
 	}
 
-	if pqErr, ok := err.(*pq.Error); ok {
-		return handlePostgresError(pqErr, operation, table, query, err)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return database.NewDBError(database.CodeDBTimeout, "Operation timed out").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithWrapped(err)
 	}
 
-	if strings.Contains(err.Error(), "context deadline exceeded") {
-		return apperrors.FromError(err, apperrors.CodeTimeout, "database operation timeout").
-			WithService("postgres-client").
-			WithDetail("operation", operation).
-			WithDetail("table", table).
-			WithDetail("query", query)
-	}
-
-	if strings.Contains(err.Error(), "context canceled") {
-		return apperrors.FromError(err, apperrors.CodeCancelled, "database operation canceled").
-			WithService("postgres-client").
-			WithDetail("operation", operation).
-			WithDetail("table", table).
-			WithDetail("query", query)
+	if errors.Is(err, context.Canceled) {
+		return database.NewDBError(database.CodeDBTimeout, "Operation canceled").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithWrapped(err)
 	}
 
 	if strings.Contains(err.Error(), "connection refused") ||
 		strings.Contains(err.Error(), "no such host") ||
 		strings.Contains(err.Error(), "network is unreachable") {
-		return apperrors.FromError(err, apperrors.CodeUnavailable, "database connection failed").
-			WithService("postgres-client").
-			WithDetail("operation", operation).
-			WithDetail("table", table).
-			WithDetail("error_type", "connection_failed")
+		return database.NewDBError(database.CodeDBConnection, "Connection failed").
+			WithOperation(operation).
+			WithTable(table).
+			WithWrapped(err)
 	}
 
-	return apperrors.FromError(err, apperrors.CodeDatabaseError, "database operation failed").
-		WithService("postgres-client").
-		WithDetail("operation", operation).
-		WithDetail("table", table).
-		WithDetail("query", query).
-		WithDetail("error_type", "unknown")
-}
-
-func handlePostgresError(pqErr *pq.Error, operation, table, query string, originalErr error) apperrors.AppError {
-	class := pqErr.Code.Class()
-	code := string(pqErr.Code)
-
-	var errCode, errMsg string
-	var addDetails func(apperrors.AppError) apperrors.AppError
-
-	switch class {
-	case "23":
-		errCode, errMsg, addDetails = getIntegrityConstraintViolation(pqErr, code)
-	case "22":
-		errCode, errMsg, addDetails = getDataException(pqErr, code)
-	case "42":
-		errCode, errMsg, addDetails = getSyntaxErrorOrAccessRuleViolation(pqErr, code)
-	case "08":
-		errCode, errMsg, addDetails = getConnectionException(pqErr, code)
-	case "40":
-		errCode, errMsg, addDetails = getTransactionRollback(pqErr, code)
-	case "53":
-		errCode, errMsg, addDetails = getInsufficientResources(pqErr, code)
-	case "54":
-		errCode, errMsg, addDetails = getProgramLimitExceeded(pqErr, code)
-	case "57":
-		errCode, errMsg, addDetails = getOperatorIntervention(pqErr, code)
-	case "58":
-		errCode, errMsg, addDetails = getSystemError(pqErr, code)
-	default:
-		errCode = apperrors.CodeDatabaseError
-		errMsg = "database operation failed"
-		addDetails = func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("pg_error_class", class)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		converted := ConvertPQError(err, operation, query)
+		if dbErr, ok := converted.(*database.DBError); ok {
+			if table != "" && dbErr.Table() == "" {
+				dbErr.WithTable(table)
+			}
+			return dbErr
 		}
 	}
 
-	baseErr := apperrors.New(errCode, errMsg).
-		WithService("postgres-client").
-		WithDetail("operation", operation).
-		WithDetail("table", table).
-		WithDetail("query", query).
-		WithDetail("pg_error_code", code).
-		WithDetail("pg_error_name", pqErr.Code.Name()).
-		WithDetail("pg_severity", pqErr.Severity).
-		WithDetail("pg_message", pqErr.Message).
-		WithDetail("wrapped_error", originalErr.Error())
-
-	if pqErr.Detail != "" {
-		baseErr = baseErr.WithDetail("pg_detail", pqErr.Detail)
-	}
-	if pqErr.Hint != "" {
-		baseErr = baseErr.WithDetail("pg_hint", pqErr.Hint)
-	}
-	if pqErr.Constraint != "" {
-		baseErr = baseErr.WithDetail("pg_constraint", pqErr.Constraint)
-	}
-	if pqErr.Table != "" {
-		baseErr = baseErr.WithDetail("pg_table", pqErr.Table)
-	}
-	if pqErr.Column != "" {
-		baseErr = baseErr.WithDetail("pg_column", pqErr.Column)
-	}
-	if pqErr.Schema != "" {
-		baseErr = baseErr.WithDetail("pg_schema", pqErr.Schema)
-	}
-	if pqErr.DataTypeName != "" {
-		baseErr = baseErr.WithDetail("pg_datatype", pqErr.DataTypeName)
-	}
-	if pqErr.Where != "" {
-		baseErr = baseErr.WithDetail("pg_where", pqErr.Where)
-	}
-
-	if strings.Contains(pqErr.Where, "PL/pgSQL function") ||
-		strings.Contains(pqErr.Routine, "trigger") ||
-		strings.Contains(pqErr.Message, "trigger") {
-		baseErr = baseErr.WithDetail("error_source", "trigger")
-	}
-
-	if addDetails != nil {
-		baseErr = addDetails(baseErr)
-	}
-
-	return baseErr
-}
-
-func getIntegrityConstraintViolation(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	switch code {
-	case "23505":
-		return apperrors.CodeAlreadyExists, "record already exists", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("constraint", pqErr.Constraint)
-		}
-	case "23503":
-		return apperrors.CodeInvalidArgument, "foreign key constraint violation", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("constraint", pqErr.Constraint)
-		}
-	case "23502":
-		return apperrors.CodeInvalidArgument, "not null constraint violation", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("column", pqErr.Column)
-		}
-	case "23514":
-		return apperrors.CodeInvalidArgument, "check constraint violation", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("constraint", pqErr.Constraint)
-		}
-	case "23001":
-		return apperrors.CodeInvalidArgument, "restrict violation", nil
-	default:
-		return apperrors.CodeDatabaseError, "integrity constraint violation", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("constraint_type", "integrity_violation")
-		}
-	}
-}
-
-func getDataException(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	var errorType string
-	switch code {
-	case "22001":
-		errorType = "string_data_right_truncation"
-	case "22003":
-		errorType = "numeric_value_out_of_range"
-	case "22007":
-		errorType = "invalid_datetime_format"
-	case "22008":
-		errorType = "datetime_field_overflow"
-	case "22012":
-		errorType = "division_by_zero"
-	case "22P02":
-		errorType = "invalid_text_representation"
-	case "22P03":
-		errorType = "invalid_binary_representation"
-	case "22P04":
-		errorType = "bad_copy_file_format"
-	default:
-		errorType = "data_exception"
-	}
-
-	return apperrors.CodeInvalidArgument, "invalid data", func(e apperrors.AppError) apperrors.AppError {
-		e = e.WithDetail("error_type", errorType)
-		if pqErr.Column != "" {
-			e = e.WithDetail("column", pqErr.Column)
-		}
-		return e
-	}
-}
-
-func getSyntaxErrorOrAccessRuleViolation(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	switch code {
-	case "42501":
-		return apperrors.CodePermissionDenied, "insufficient privilege", nil
-	case "42601":
-		return apperrors.CodeInternal, "syntax error", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("error_type", "syntax_error")
-		}
-	case "42703":
-		return apperrors.CodeInvalidArgument, "undefined column", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("column", pqErr.Column)
-		}
-	case "42P01":
-		return apperrors.CodeNotFound, "undefined table", nil
-	case "42P02":
-		return apperrors.CodeInternal, "undefined parameter", nil
-	case "42883":
-		return apperrors.CodeInternal, "undefined function", nil
-	default:
-		return apperrors.CodeInternal, "syntax error or access rule violation", nil
-	}
-}
-
-func getConnectionException(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	var errorType string
-	switch code {
-	case "08000":
-		errorType = "connection_exception"
-	case "08003":
-		errorType = "connection_does_not_exist"
-	case "08006":
-		errorType = "connection_failure"
-	case "08001":
-		errorType = "sqlclient_unable_to_establish_connection"
-	case "08004":
-		errorType = "sqlserver_rejected_connection"
-	case "08007":
-		errorType = "transaction_resolution_unknown"
-	case "08P01":
-		errorType = "protocol_violation"
-	default:
-		errorType = "connection_exception"
-	}
-
-	return apperrors.CodeUnavailable, "connection exception", func(e apperrors.AppError) apperrors.AppError {
-		return e.WithDetail("error_type", errorType)
-	}
-}
-
-func getTransactionRollback(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	switch code {
-	case "40P01":
-		return apperrors.CodeDeadlock, "deadlock detected", nil
-	case "40001":
-		return apperrors.CodeAborted, "transaction rollback", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("error_type", "serialization_failure")
-		}
-	case "40002":
-		return apperrors.CodeAborted, "transaction rollback", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("error_type", "transaction_integrity_constraint_violation")
-		}
-	case "40003":
-		return apperrors.CodeAborted, "transaction rollback", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("error_type", "statement_completion_unknown")
-		}
-	default:
-		return apperrors.CodeAborted, "transaction rollback", nil
-	}
-}
-
-func getInsufficientResources(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	var errorType string
-	switch code {
-	case "53000":
-		errorType = "insufficient_resources"
-	case "53100":
-		errorType = "disk_full"
-	case "53200":
-		errorType = "out_of_memory"
-	case "53300":
-		errorType = "too_many_connections"
-	case "53400":
-		errorType = "configuration_limit_exceeded"
-	default:
-		errorType = "insufficient_resources"
-	}
-
-	return apperrors.CodeResourceExhausted, "insufficient resources", func(e apperrors.AppError) apperrors.AppError {
-		return e.WithDetail("error_type", errorType)
-	}
-}
-
-func getProgramLimitExceeded(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	var errorType string
-	switch code {
-	case "54000":
-		errorType = "program_limit_exceeded"
-	case "54001":
-		errorType = "statement_too_complex"
-	case "54011":
-		errorType = "too_many_columns"
-	case "54023":
-		errorType = "too_many_arguments"
-	default:
-		errorType = "program_limit_exceeded"
-	}
-
-	return apperrors.CodeResourceExhausted, "program limit exceeded", func(e apperrors.AppError) apperrors.AppError {
-		return e.WithDetail("error_type", errorType)
-	}
-}
-
-func getOperatorIntervention(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	switch code {
-	case "57014":
-		return apperrors.CodeCancelled, "query canceled", nil
-	case "57000", "57P01", "57P02", "57P03", "57P04":
-		var errorType string
-		switch code {
-		case "57000":
-			errorType = "operator_intervention"
-		case "57P01":
-			errorType = "admin_shutdown"
-		case "57P02":
-			errorType = "crash_shutdown"
-		case "57P03":
-			errorType = "cannot_connect_now"
-		case "57P04":
-			errorType = "database_dropped"
-		}
-		return apperrors.CodeUnavailable, "operator intervention", func(e apperrors.AppError) apperrors.AppError {
-			return e.WithDetail("error_type", errorType)
-		}
-	default:
-		return apperrors.CodeUnavailable, "operator intervention", nil
-	}
-}
-
-func getSystemError(pqErr *pq.Error, code string) (string, string, func(apperrors.AppError) apperrors.AppError) {
-	var errorType string
-	switch code {
-	case "58000":
-		errorType = "system_error"
-	case "58030":
-		errorType = "io_error"
-	case "58P01":
-		errorType = "undefined_file"
-	case "58P02":
-		errorType = "duplicate_file"
-	default:
-		errorType = "system_error"
-	}
-
-	return apperrors.CodeInternal, "system error", func(e apperrors.AppError) apperrors.AppError {
-		return e.WithDetail("error_type", errorType).
-			WithDetail("pg_errno", pqErr.Code)
-	}
+	return database.NewDBError(database.CodeDBInternal, "Database operation failed").
+		WithOperation(operation).
+		WithTable(table).
+		WithQuery(query).
+		WithWrapped(err)
 }

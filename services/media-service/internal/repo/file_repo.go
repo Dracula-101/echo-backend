@@ -5,6 +5,7 @@ import (
 	"media-service/internal/model"
 
 	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -34,7 +35,7 @@ func (r *FileRepository) GetFileByID(ctx context.Context, fileID string) (*model
 	var model models.MediaFile
 	err := r.db.FindByID(ctx, &model, fileID)
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if postgres.IsNoRowsError(err) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "file not found").
 				WithDetail("file_id", fileID)
 		}
@@ -182,7 +183,7 @@ func (r *FileRepository) GetFileByContentHash(ctx context.Context, contentHash s
 	)
 
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if postgres.IsNoRowsError(err) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "file not found by content hash").
 				WithDetail("content_hash", contentHash)
 		}
@@ -256,7 +257,7 @@ func (r *FileRepository) GetAlbumByID(ctx context.Context, albumID string) (*mod
 	var album models.Album
 	err := r.db.FindByID(ctx, &album, albumID)
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if postgres.IsNoRowsError(err) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "album not found").
 				WithDetail("album_id", albumID)
 		}
@@ -396,7 +397,7 @@ func (r *FileRepository) GetShareByID(ctx context.Context, shareID string) (*mod
 	var share models.Share
 	err := r.db.FindByID(ctx, &share, shareID)
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if postgres.IsNoRowsError(err) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "share not found").
 				WithDetail("share_id", shareID)
 		}
@@ -425,7 +426,7 @@ func (r *FileRepository) GetShareByToken(ctx context.Context, token string) (*mo
 	)
 
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if postgres.IsNoRowsError(err) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "share not found by token").
 				WithDetail("share_token", token)
 		}
@@ -491,7 +492,7 @@ func (r *FileRepository) GetStorageStats(ctx context.Context, userID string) (*m
 	)
 
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if postgres.IsNoRowsError(err) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "storage stats not found").
 				WithDetail("user_id", userID)
 		}

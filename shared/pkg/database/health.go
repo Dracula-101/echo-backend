@@ -25,5 +25,5 @@ func (h *healthChecker) Check(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
-	return h.db.Ping(ctx)
+	return h.db.Ping(ctx).Unwrap()
 }
