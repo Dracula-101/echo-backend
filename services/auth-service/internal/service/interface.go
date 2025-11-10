@@ -1,7 +1,7 @@
 package service
 
 import (
-	"auth-service/api/dto"
+	"auth-service/api/v1/dto"
 	"auth-service/internal/model"
 	serviceModels "auth-service/internal/service/models"
 	"context"

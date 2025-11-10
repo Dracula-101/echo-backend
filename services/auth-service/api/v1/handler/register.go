@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"auth-service/api/dto"
+	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/errors"
 	serviceModels "auth-service/internal/service/models"
 	"net/http"

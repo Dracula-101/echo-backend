@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 	"shared/server/request"
-	"user-service/api/dto"
+	"user-service/api/v1/dto"
 )
 
 func (h *UserHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {

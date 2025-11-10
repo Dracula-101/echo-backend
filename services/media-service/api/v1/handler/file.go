@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"media-service/api/dto"
+	"media-service/api/v1/dto"
 	mediaErrors "media-service/internal/errors"
 	"media-service/internal/service/models"
 

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"media-service/api/handler"
-	"media-service/api/middleware"
+	"media-service/api/v1/handler"
+	"media-service/api/v1/middleware"
 	"media-service/internal/config"
 	"media-service/internal/health"
 	"media-service/internal/health/checkers"

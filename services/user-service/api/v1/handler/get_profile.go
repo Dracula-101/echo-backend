@@ -7,7 +7,7 @@ import (
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
-	"user-service/api/dto"
+	"user-service/api/v1/dto"
 )
 
 func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {

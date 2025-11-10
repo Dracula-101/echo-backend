@@ -1,7 +1,7 @@
 package main
 
 import (
-	"auth-service/api/handler"
+	"auth-service/api/v1/handler"
 	"auth-service/internal/config"
 	"auth-service/internal/health"
 	"auth-service/internal/health/checkers"

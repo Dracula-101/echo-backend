@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"media-service/api/dto"
+	"media-service/api/v1/dto"
 	"media-service/internal/service/models"
 
 	"shared/pkg/logger"

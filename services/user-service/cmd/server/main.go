@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"user-service/api/handler"
+	"user-service/api/v1/handler"
 	"user-service/internal/config"
 	"user-service/internal/health"
 	"user-service/internal/health/checkers"
