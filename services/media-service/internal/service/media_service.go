@@ -425,7 +425,7 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 		Visibility:       model.VisibilityType(fileParam.Visibility),
 		DownloadCount:    fileParam.DownloadCount,
 		ViewCount:        fileParam.ViewCount,
-		CreatedAt:        fileParam.CreatedAt,
+		CreatedAt:        *fileParam.CreatedAt,
 	}
 
 	if file.Visibility == model.VisibilityPrivate && file.UploaderUserID != input.UserID {

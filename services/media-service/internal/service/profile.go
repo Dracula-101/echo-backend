@@ -83,6 +83,7 @@ func (s *MediaService) UploadProfilePhoto(ctx context.Context, input models.Uplo
 		Visibility:           dbModels.MediaVisibilityPublic,
 		UploadedFromDeviceID: utils.PtrString(input.DeviceID),
 		UploadedFromIP:       utils.PtrString(input.IPAddress),
+		UploadedAt:           utils.Ptr(time.Now()),
 	})
 
 	if dbErr != nil {

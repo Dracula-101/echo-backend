@@ -339,6 +339,21 @@ CREATE TRIGGER trigger_messages_member_count
 -- MEDIA SCHEMA TRIGGERS
 -- =====================================================
 
+-- Update timestamp trigger for media.files
+CREATE OR REPLACE FUNCTION media.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_media_files_updated_at ON media.files;
+CREATE TRIGGER trigger_media_files_updated_at
+    BEFORE UPDATE ON media.files
+    FOR EACH ROW
+    EXECUTE FUNCTION media.update_updated_at_column();
+
 -- Update storage stats on file upload
 CREATE OR REPLACE FUNCTION media.update_storage_stats()
 RETURNS TRIGGER AS $$

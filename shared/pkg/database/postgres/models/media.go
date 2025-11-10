@@ -123,9 +123,9 @@ type MediaFile struct {
 	AccessCount    int64      `db:"access_count" json:"access_count"`
 
 	// Lifecycle
-	UploadedAt          time.Time  `db:"uploaded_at" json:"uploaded_at"`
-	CreatedAt           time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time  `db:"updated_at" json:"updated_at"`
+	UploadedAt          *time.Time `db:"uploaded_at" json:"uploaded_at,omitempty"`
+	CreatedAt           *time.Time `db:"created_at" json:"created_at,omitempty"`
+	UpdatedAt           *time.Time `db:"updated_at" json:"updated_at,omitempty"`
 	DeletedAt           *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
 	PermanentlyDeleteAt *time.Time `db:"permanently_delete_at" json:"permanently_delete_at,omitempty"`
 
