@@ -123,7 +123,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		UserAgent:          &input.UserAgent,
 		IPAddress:          input.IP.IP,
 		IPCountry:          &input.IP.Country,
-		IPRegion:           &input.IP.Region,
+		IPRegion:           &input.IP.State,
 		IPCity:             &input.IP.City,
 		IPTimezone:         &input.IP.Timezone,
 		IPISP:              &input.IP.ISP,

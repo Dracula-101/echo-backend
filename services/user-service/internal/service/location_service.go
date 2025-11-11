@@ -71,26 +71,34 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
 	}
 
 	return &request.IpAddressInfo{
-		IP:        ip,
-		City:      locationData.City,
-		Country:   locationData.Country,
-		Latitude:  locationData.Latitude,
-		Longitude: locationData.Longitude,
-		Region:    locationData.Continent,
-		Timezone:  locationData.Timezone,
-		ISP:       locationData.ISP,
+		Latitude:      locationData.Latitude,
+		Longitude:     locationData.Longitude,
+		City:          locationData.City,
+		Continent:     locationData.Continent,
+		ContinentCode: locationData.ContinentCode,
+		State:         locationData.State,
+		StateCode:     locationData.StateCode,
+		PostalCode:    locationData.PostalCode,
+		Country:       locationData.Country,
+		CountryCode:   locationData.CountryCode,
+		Timezone:      locationData.Timezone,
+		ISP:           locationData.ISP,
+		IP:            locationData.IP,
 	}, nil
 }
 
 type LocationData struct {
-	Latitude   float64 `json:"latitude,omitempty"`
-	Longitude  float64 `json:"longitude,omitempty"`
-	City       string  `json:"city,omitempty"`
-	Continent  string  `json:"continent,omitempty"`
-	State      string  `json:"state,omitempty"`
-	PostalCode string  `json:"postal_code,omitempty"`
-	Country    string  `json:"country,omitempty"`
-	Timezone   string  `json:"timezone,omitempty"`
-	ISP        string  `json:"isp,omitempty"`
-	IP         string  `json:"ip,omitempty"`
+	Latitude      float64 `json:"latitude"`
+	Longitude     float64 `json:"longitude"`
+	City          string  `json:"city"`
+	Continent     string  `json:"continent"`
+	ContinentCode string  `json:"continent_code"`
+	State         string  `json:"state"`
+	StateCode     string  `json:"state_code"`
+	PostalCode    string  `json:"postal_code"`
+	Country       string  `json:"country"`
+	CountryCode   string  `json:"country_code"`
+	Timezone      string  `json:"timezone"`
+	ISP           string  `json:"isp"`
+	IP            string  `json:"ip"`
 }

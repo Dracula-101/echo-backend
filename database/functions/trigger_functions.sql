@@ -81,6 +81,27 @@ CREATE TRIGGER trigger_auth_session_expiry
 -- USERS SCHEMA TRIGGERS
 -- =====================================================
 
+-- Update timestamp trigger for users.profiles
+CREATE OR REPLACE FUNCTION users.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_users_profiles_updated_at ON users.profiles;
+CREATE TRIGGER trigger_users_profiles_updated_at
+    BEFORE UPDATE ON users.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION users.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trigger_users_contacts_updated_at ON users.contacts;
+CREATE TRIGGER trigger_users_contacts_updated_at
+    BEFORE UPDATE ON users.contacts
+    FOR EACH ROW
+    EXECUTE FUNCTION users.update_updated_at_column();
+
 -- Sync profile updates to activity log
 CREATE OR REPLACE FUNCTION users.log_profile_changes()
 RETURNS TRIGGER AS $$

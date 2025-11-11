@@ -68,6 +68,8 @@ const (
 	ansiWhite      = "\x1b[37m"
 	ansiBlue       = "\x1b[34m"
 	ansiBrightCyan = "\x1b[96m"
+	ansiBold       = "\x1b[1m"
+	ansiItalic     = "\x1b[3m"
 
 	bytesPerKilobyte = 1024
 
@@ -261,10 +263,16 @@ func wrapText(text string, width int) []string {
 		return []string{text}
 	}
 
+	// Normalize spaces - replace multiple spaces with single space
+	// but preserve intentional line breaks
 	lines := strings.Split(text, "\n")
 	var result []string
 
 	for _, line := range lines {
+		// Normalize spaces in the line
+		line = strings.TrimSpace(line)
+		line = regexp.MustCompile(`\s+`).ReplaceAllString(line, " ")
+
 		if visibleLen(line) <= width {
 			result = append(result, line)
 			continue
@@ -685,11 +693,13 @@ func (l *zapLogger) makeZapFields(extra []logger.Field) []zap.Field {
 	return zfs
 }
 
-func formatFieldsInline(fields []logger.Field) string {
+func formatFields(fields []logger.Field, maxWidth int) []string {
 	if len(fields) == 0 {
-		return ""
+		return []string{}
 	}
-	parts := make([]string, 0, len(fields))
+
+	// Build formatted field strings with ANSI formatting
+	fieldStrs := make([]string, 0, len(fields))
 	for _, f := range fields {
 		if f == nil {
 			continue
@@ -707,12 +717,118 @@ func formatFieldsInline(fields []logger.Field) string {
 		}
 
 		if k == "error" {
-			parts = append(parts, fmt.Sprintf("%s", v))
+			// For error fields, make the entire error message italic
+			fieldStrs = append(fieldStrs, fmt.Sprintf("* %s%s%s", ansiItalic, v, ansiReset))
 		} else {
-			parts = append(parts, fmt.Sprintf(fieldKeyValueFormat, k, v))
+			// Bold key, italic value
+			fieldStrs = append(fieldStrs, fmt.Sprintf("* %s%s%s: %s%v%s", ansiBold, k, ansiReset, ansiItalic, v, ansiReset))
 		}
 	}
-	return strings.Join(parts, " ")
+
+	if len(fieldStrs) == 0 {
+		return []string{}
+	}
+
+	// Intelligently group fields into lines based on their visible lengths (without ANSI codes)
+	var lines []string
+	var currentLine []string
+	currentLineLen := 0
+
+	for _, field := range fieldStrs {
+		// Get visible length (without ANSI codes)
+		fieldLen := visibleLen(field)
+
+		// Check if adding this field would exceed the width
+		// Account for spacing between fields (3 spaces minimum)
+		neededSpace := fieldLen
+		if len(currentLine) > 0 {
+			neededSpace += 3 // minimum spacing between fields
+		}
+
+		// If this field alone is longer than maxWidth, put it on its own line
+		if fieldLen > maxWidth {
+			// Flush current line if it has content
+			if len(currentLine) > 0 {
+				lines = append(lines, formatFieldLine(currentLine, maxWidth))
+				currentLine = []string{}
+				currentLineLen = 0
+			}
+			// Add the long field on its own line
+			lines = append(lines, field)
+			continue
+		}
+
+		// If adding this field would exceed width, start a new line
+		if currentLineLen+neededSpace > maxWidth {
+			// Flush current line
+			if len(currentLine) > 0 {
+				lines = append(lines, formatFieldLine(currentLine, maxWidth))
+			}
+			// Start new line with this field
+			currentLine = []string{field}
+			currentLineLen = fieldLen
+		} else {
+			// Add field to current line
+			currentLine = append(currentLine, field)
+			currentLineLen += neededSpace
+		}
+
+		// Maximum 3 fields per line for readability
+		if len(currentLine) >= 3 {
+			lines = append(lines, formatFieldLine(currentLine, maxWidth))
+			currentLine = []string{}
+			currentLineLen = 0
+		}
+	}
+
+	// Add any remaining fields
+	if len(currentLine) > 0 {
+		lines = append(lines, formatFieldLine(currentLine, maxWidth))
+	}
+
+	return lines
+}
+
+// formatFieldLine formats a line of fields with equal spacing
+func formatFieldLine(fields []string, maxWidth int) string {
+	if len(fields) == 0 {
+		return ""
+	}
+
+	if len(fields) == 1 {
+		return fields[0]
+	}
+
+	// Calculate total visible length of all fields (excluding ANSI codes)
+	totalFieldLen := 0
+	for _, f := range fields {
+		totalFieldLen += visibleLen(f)
+	}
+
+	// Calculate available space for padding between fields
+	availableSpace := maxWidth - totalFieldLen
+	numGaps := len(fields) - 1
+
+	if numGaps == 0 {
+		return fields[0]
+	}
+
+	// Distribute space equally between fields
+	spacePerGap := availableSpace / numGaps
+	if spacePerGap < 1 {
+		spacePerGap = 1 // minimum 1 space between fields
+	}
+
+	// Build the line with distributed spacing
+	var result strings.Builder
+	for i, field := range fields {
+		result.WriteString(field)
+		if i < len(fields)-1 {
+			result.WriteString(strings.Repeat(" ", spacePerGap))
+		}
+	}
+
+	return result.String()
 }
 
 func (l *zapLogger) formatLog(level string, msg string, fields []logger.Field) string {
@@ -741,9 +857,13 @@ func (l *zapLogger) formatLog(level string, msg string, fields []logger.Field) s
 
 	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05.000")
 
+	dims := calculateStandardBoxDimensions(l.termWidth)
+
+	// Combine message with formatted fields
 	message := msg
-	if len(fields) > 0 {
-		message += fieldSeparator + formatFieldsInline(fields)
+	fieldLines := formatFields(fields, dims.Message.Width)
+	if len(fieldLines) > 0 {
+		message = msg + "\n" + strings.Join(fieldLines, "\n")
 	}
 
 	return l.drawBoxedLog(timestamp, level, fileLoc, service, message)
@@ -775,12 +895,9 @@ func (l *zapLogger) Warn(msg string, fields ...logger.Field) {
 
 func (l *zapLogger) Error(msg string, fields ...logger.Field) {
 	if l.consoleMode && l.logger.Core().Enabled(zapcore.ErrorLevel) {
-		content := msg
-		if len(fields) > 0 {
-			content += fieldSeparator + formatFieldsInline(fields)
-		}
-		content += "\n" + customStackTrace(callerSkipError, 0)
-		fmt.Print(l.formatLog("ERROR", content, nil))
+		// Don't pass fields to formatLog since they're already handled there
+		content := msg + "\n" + customStackTrace(callerSkipError, 0)
+		fmt.Print(l.formatLog("ERROR", content, fields))
 		return
 	}
 	zfs := l.makeZapFields(fields)
@@ -790,13 +907,9 @@ func (l *zapLogger) Error(msg string, fields ...logger.Field) {
 
 func (l *zapLogger) Fatal(msg string, fields ...logger.Field) {
 	if l.consoleMode {
-		content := msg
-		if len(fields) > 0 {
-			content += fieldSeparator + formatFieldsInline(fields)
-		}
-		content += "\n" + customStackTrace(callerSkipError, 0)
-
-		fmt.Print(l.formatLog("FATAL", content, nil))
+		// Don't pass fields to formatLog since they're already handled there
+		content := msg + "\n" + customStackTrace(callerSkipError, 0)
+		fmt.Print(l.formatLog("FATAL", content, fields))
 		os.Exit(1)
 		return
 	}
@@ -824,6 +937,8 @@ func (l *zapLogger) Request(ctx context.Context, method string, routePath string
 
 		timestamp := time.Now().UTC().Format("2006-01-02 15:04:05.000")
 
+		dims := calculateRequestBoxDimensions(l.termWidth)
+
 		message := msg
 		if len(fields) > 0 {
 			extraFields := []logger.Field{}
@@ -833,7 +948,10 @@ func (l *zapLogger) Request(ctx context.Context, method string, routePath string
 				}
 			}
 			if len(extraFields) > 0 {
-				message += fieldSeparator + formatFieldsInline(extraFields)
+				fieldLines := formatFields(extraFields, dims.Message.Width)
+				if len(fieldLines) > 0 {
+					message = msg + "\n" + strings.Join(fieldLines, "\n")
+				}
 			}
 		}
 

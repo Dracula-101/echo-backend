@@ -214,22 +214,7 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile models.Profi
 		logger.String("user_id", profile.UserID),
 	)
 
-	id, err := r.db.Create(ctx, &models.Profile{
-		UserID:        profile.UserID,
-		Username:      profile.Username,
-		DisplayName:   profile.DisplayName,
-		FirstName:     profile.FirstName,
-		LastName:      profile.LastName,
-		Bio:           profile.Bio,
-		AvatarURL:     profile.AvatarURL,
-		LanguageCode:  profile.LanguageCode,
-		Timezone:      profile.Timezone,
-		CountryCode:   profile.CountryCode,
-		IsVerified:    profile.IsVerified,
-		CreatedAt:     profile.CreatedAt,
-		UpdatedAt:     profile.UpdatedAt,
-		DeactivatedAt: profile.DeactivatedAt,
-	})
+	id, err := r.db.Create(ctx, &profile)
 	if err != nil {
 		r.log.Error("Failed to create profile",
 			logger.String("service", userErrors.ServiceName),

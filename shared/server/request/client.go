@@ -39,14 +39,19 @@ type BrowserInfo struct {
 
 // IpAddressInfo contains IP address geolocation information
 type IpAddressInfo struct {
-	Country   string
-	Region    string
-	City      string
-	Timezone  string
-	ISP       string
-	IP        string
-	Latitude  float64
-	Longitude float64
+	Latitude      float64 `json:"latitude"`
+	Longitude     float64 `json:"longitude"`
+	City          string  `json:"city"`
+	Continent     string  `json:"continent"`
+	ContinentCode string  `json:"continent_code"`
+	State         string  `json:"state"`
+	StateCode     string  `json:"state_code"`
+	PostalCode    string  `json:"postal_code"`
+	Country       string  `json:"country"`
+	CountryCode   string  `json:"country_code"`
+	Timezone      string  `json:"timezone"`
+	ISP           string  `json:"isp"`
+	IP            string  `json:"ip"`
 }
 
 // GetClientIP extracts the client IP address from the request

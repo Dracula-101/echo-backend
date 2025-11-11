@@ -16,7 +16,7 @@ type Profile struct {
 	LastName           *string           `db:"last_name" json:"last_name,omitempty"`
 	MiddleName         *string           `db:"middle_name" json:"middle_name,omitempty"`
 	Bio                *string           `db:"bio" json:"bio,omitempty"`
-	BioLinks           json.RawMessage   `db:"bio_links" json:"bio_links,omitempty"`
+	BioLinks           *json.RawMessage  `db:"bio_links" json:"bio_links,omitempty"`
 	AvatarURL          *string           `db:"avatar_url" json:"avatar_url,omitempty"`
 	AvatarThumbnailURL *string           `db:"avatar_thumbnail_url" json:"avatar_thumbnail_url,omitempty"`
 	CoverImageURL      *string           `db:"cover_image_url" json:"cover_image_url,omitempty"`
@@ -35,12 +35,12 @@ type Profile struct {
 	SearchVisibility   bool              `db:"search_visibility" json:"search_visibility"`
 	IsVerified         bool              `db:"is_verified" json:"is_verified"`
 	WebsiteURL         *string           `db:"website_url" json:"website_url,omitempty"`
-	SocialLinks        json.RawMessage   `db:"social_links" json:"social_links,omitempty"`
+	SocialLinks        *json.RawMessage  `db:"social_links" json:"social_links,omitempty"`
 	Interests          pq.StringArray    `db:"interests" json:"interests,omitempty"`
-	CreatedAt          time.Time         `db:"created_at" json:"created_at"`
-	UpdatedAt          time.Time         `db:"updated_at" json:"updated_at"`
+	CreatedAt          *time.Time        `db:"created_at" json:"created_at,omitempty"`
+	UpdatedAt          *time.Time        `db:"updated_at" json:"updated_at,omitempty"`
 	DeactivatedAt      *time.Time        `db:"deactivated_at" json:"deactivated_at,omitempty"`
-	Metadata           json.RawMessage   `db:"metadata" json:"metadata,omitempty"`
+	Metadata           *json.RawMessage  `db:"metadata" json:"metadata,omitempty"`
 }
 
 func (p *Profile) TableName() string {
@@ -64,13 +64,13 @@ type Contact struct {
 	IsArchived          bool             `db:"is_archived" json:"is_archived"`
 	IsMuted             bool             `db:"is_muted" json:"is_muted"`
 	MutedUntil          *time.Time       `db:"muted_until" json:"muted_until,omitempty"`
-	CustomNotifications json.RawMessage  `db:"custom_notifications" json:"custom_notifications,omitempty"`
+	CustomNotifications *json.RawMessage `db:"custom_notifications" json:"custom_notifications,omitempty"`
 	ContactSource       *string          `db:"contact_source" json:"contact_source,omitempty"`
 	ContactGroups       pq.StringArray   `db:"contact_groups" json:"contact_groups,omitempty"`
 	LastInteractionAt   *time.Time       `db:"last_interaction_at" json:"last_interaction_at,omitempty"`
 	InteractionCount    int              `db:"interaction_count" json:"interaction_count"`
-	CreatedAt           time.Time        `db:"created_at" json:"created_at"`
-	UpdatedAt           time.Time        `db:"updated_at" json:"updated_at"`
+	CreatedAt           *time.Time       `db:"created_at" json:"created_at,omitempty"`
+	UpdatedAt           *time.Time       `db:"updated_at" json:"updated_at,omitempty"`
 	AcceptedAt          *time.Time       `db:"accepted_at" json:"accepted_at,omitempty"`
 	BlockedAt           *time.Time       `db:"blocked_at" json:"blocked_at,omitempty"`
 	BlockReason         *string          `db:"block_reason" json:"block_reason,omitempty"`

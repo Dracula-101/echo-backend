@@ -81,6 +81,14 @@ func (e *DBError) Error() string {
 		parts = append(parts, fmt.Sprintf("cause=%s", e.wrapped.Error()))
 	}
 
+	if len(e.details) > 0 {
+		detailParts := []string{}
+		for k, v := range e.details {
+			detailParts = append(detailParts, fmt.Sprintf("%s=%v", k, v))
+		}
+		parts = append(parts, "details={"+strings.Join(detailParts, ", ")+"}")
+	}
+
 	return strings.Join(parts, ", ")
 }
 

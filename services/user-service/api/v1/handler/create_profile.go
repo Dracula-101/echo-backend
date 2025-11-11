@@ -17,6 +17,7 @@ func (h *UserHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userId, _ := request.GetUserIDFromContext(r.Context())
+	h.log.Debug("creating profile", logger.String("user_id", userId))
 	location, err := h.locationService.Lookup(handler.GetClientIP())
 	if err != nil {
 		h.log.Error("failed to lookup location", logger.Error(err))
@@ -25,12 +26,23 @@ func (h *UserHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userName, err := h.service.GenerateUsername(r.Context(), createProfileRequest.DisplayName)
+	h.log.Debug("generated username for user",
+		logger.String("username", userName),
+		logger.String("user_id", userId),
+	)
 	if err != nil {
 		h.log.Error("failed to generate username", logger.Error(err))
 		response.InternalServerError(r.Context(), r, w, "Failed to generate username", err)
 		return
 	}
-
+	h.log.Info("creating profile",
+		logger.String("user_id", userId),
+		logger.String("username", userName),
+		logger.String("display_name", createProfileRequest.DisplayName),
+		logger.String("timezone", location.Timezone),
+		logger.String("country", location.Country),
+		logger.String("ip", handler.GetClientIP()),
+	)
 	profile, err := h.service.CreateProfile(r.Context(), &models.Profile{
 		UserID:       userId,
 		Username:     userName,
@@ -41,7 +53,7 @@ func (h *UserHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 		LanguageCode: &createProfileRequest.LanguageCode,
 		LastName:     &createProfileRequest.LastName,
 		Timezone:     &location.Timezone,
-		CountryCode:  &location.Country,
+		CountryCode:  &location.CountryCode,
 		IsVerified:   false,
 	})
 	if err != nil {

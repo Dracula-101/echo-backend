@@ -13,6 +13,7 @@ import (
 	"shared/pkg/cache"
 	dbmodels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 type UserService struct {
@@ -180,17 +181,23 @@ func toRepoProfile(profile *models.Profile) dbmodels.Profile {
 	}
 
 	return dbmodels.Profile{
-		UserID:       profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  &profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: *profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
+		UserID:            profile.UserID,
+		Username:          profile.Username,
+		DisplayName:       &profile.DisplayName,
+		FirstName:         profile.FirstName,
+		LastName:          profile.LastName,
+		Bio:               profile.Bio,
+		AvatarURL:         profile.AvatarURL,
+		LanguageCode:      *profile.LanguageCode,
+		Timezone:          profile.Timezone,
+		CountryCode:       profile.CountryCode,
+		PhoneVisible:      false,
+		EmailVisible:      false,
+		OnlineStatus:      dbmodels.OnlineStatusOffline,
+		LastSeenAt:        utils.Ptr(time.Now()),
+		ProfileVisibility: dbmodels.ProfileVisibilityPrivate,
+		SearchVisibility:  false,
+		IsVerified:        profile.IsVerified,
 	}
 }
 
