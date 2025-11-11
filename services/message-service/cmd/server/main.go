@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"echo-backend/services/message-service/api/handler"
+	"echo-backend/services/message-service/api/v1/handler"
 	"echo-backend/services/message-service/internal/config"
 	"echo-backend/services/message-service/internal/health"
 	healthCheckers "echo-backend/services/message-service/internal/health/checkers"
@@ -131,9 +131,7 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 func setupAPIRoutes(builder *router.Builder, h *handler.MessageHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering message API routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			response.JSON(w, http.StatusOK, map[string]string{"message": "Message Service is running"})
-		})
+		r.Get("/", h.GetMessages)
 	})
 	log.Debug("Message API routes registered successfully")
 	return builder

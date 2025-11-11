@@ -5,6 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand"
+	"regexp"
+	"strings"
+	"time"
 
 	userErrors "user-service/internal/errors"
 
@@ -43,6 +47,91 @@ func NewUserRepository(db database.Database, log logger.Logger) *UserRepository 
 // ============================================================================
 // Profile Operations
 // ============================================================================
+
+// Generate Unique Username
+func (r *UserRepository) GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, error) {
+	r.log.Debug("Generating unique username",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("base_username", baseUsername),
+	)
+
+	// Basic normalization: trim, lowercase, allow a-z0-9 and . _ -
+	base := strings.ToLower(strings.TrimSpace(baseUsername))
+	re := regexp.MustCompile(`[^a-z0-9._-]+`)
+	base = re.ReplaceAllString(base, "")
+
+	// Fallback if nothing remains after sanitization
+	if base == "" {
+		base = fmt.Sprintf("user%d", time.Now().Unix()%10000)
+	}
+
+	const maxLen = 30
+	if len(base) > maxLen {
+		base = base[:maxLen]
+	}
+
+	username := base
+	query := `SELECT EXISTS(SELECT 1 FROM users.profiles WHERE username = $1 AND deactivated_at IS NULL)`
+	rand.Seed(time.Now().UnixNano())
+	maxAttempts := 1000
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		var exists bool
+		err := r.db.QueryRow(ctx, query, username).Scan(&exists)
+		if err != nil {
+			r.log.Error("Failed to check username existence",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("username", username),
+				logger.Error(err),
+			)
+			return nil, err
+		}
+
+		if !exists {
+			r.log.Debug("Unique username generated",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("unique_username", username),
+			)
+			return &username, nil
+		}
+
+		if attempt < 50 {
+			suffix := attempt + 1
+			baseLimit := base
+			maxBaseLen := maxLen - len(fmt.Sprintf("%d", suffix))
+			if len(baseLimit) > maxBaseLen {
+				baseLimit = baseLimit[:maxBaseLen]
+			}
+			username = fmt.Sprintf("%s%d", baseLimit, suffix)
+		} else {
+			suffixLen := 4
+			suffix := randAlphaNum(suffixLen)
+			maxBaseLen := maxLen - suffixLen
+			baseLimit := base
+			if len(baseLimit) > maxBaseLen {
+				baseLimit = baseLimit[:maxBaseLen]
+			}
+			username = fmt.Sprintf("%s%s", baseLimit, suffix)
+		}
+	}
+
+	r.log.Error("Unable to generate unique username after attempts",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("base_username", baseUsername),
+		logger.Int("attempts", maxAttempts),
+	)
+
+	return nil, fmt.Errorf("unable to generate unique username after %d attempts", maxAttempts)
+}
+
+// small helper for random alphanumeric suffixes
+func randAlphaNum(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
 
 // GetProfileByUserID retrieves a user profile by user ID
 func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {

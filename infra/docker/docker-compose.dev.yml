@@ -370,6 +370,8 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       DB_NAME: ${POSTGRES_DB:-echo_db}
       DB_SSLMODE: disable
+      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+
     volumes:
       # Source code (hot reload)
       - ${PWD}/services/user-service:/app/services/user-service

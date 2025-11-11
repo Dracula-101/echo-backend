@@ -179,11 +179,11 @@ func (e *EmailStatus) Scan(value interface{}) error {
 type SMSStatus string
 
 const (
-	SMSStatusPending      SMSStatus = "pending"
-	SMSStatusSent         SMSStatus = "sent"
-	SMSStatusDelivered    SMSStatus = "delivered"
-	SMSStatusFailed       SMSStatus = "failed"
-	SMSStatusUndelivered  SMSStatus = "undelivered"
+	SMSStatusPending     SMSStatus = "pending"
+	SMSStatusSent        SMSStatus = "sent"
+	SMSStatusDelivered   SMSStatus = "delivered"
+	SMSStatusFailed      SMSStatus = "failed"
+	SMSStatusUndelivered SMSStatus = "undelivered"
 )
 
 func (s SMSStatus) IsValid() bool {

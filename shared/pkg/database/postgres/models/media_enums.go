@@ -345,13 +345,13 @@ func (s *ShareAccessType) Scan(value interface{}) error {
 type FileContext string
 
 const (
-	FileContextProfilePhoto  FileContext = "profile_photo"
-	FileContextMessageMedia  FileContext = "message_media"
-	FileContextAlbum         FileContext = "album"
-	FileContextSticker       FileContext = "sticker"
-	FileContextDocument      FileContext = "document"
-	FileContextVoiceNote     FileContext = "voice_note"
-	FileContextGeneral       FileContext = "general"
+	FileContextProfilePhoto FileContext = "profile_photo"
+	FileContextMessageMedia FileContext = "message_media"
+	FileContextAlbum        FileContext = "album"
+	FileContextSticker      FileContext = "sticker"
+	FileContextDocument     FileContext = "document"
+	FileContextVoiceNote    FileContext = "voice_note"
+	FileContextGeneral      FileContext = "general"
 )
 
 func (f FileContext) IsValid() bool {

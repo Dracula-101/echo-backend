@@ -1,14 +1,14 @@
 package websocket
 
 import (
+	"echo-backend/services/message-service/internal/models"
 	"encoding/json"
 	"sync"
 	"time"
 
-	"echo-backend/services/message-service/internal/model"
+	"shared/pkg/logger"
 
 	"github.com/google/uuid"
-	"shared/pkg/logger"
 )
 
 // Hub maintains active WebSocket connections and handles message broadcasting
@@ -127,7 +127,7 @@ func (h *Hub) registerClient(client *Client) {
 	)
 
 	// Send welcome message
-	welcomeMsg := model.WebSocketMessage{
+	welcomeMsg := models.WebSocketMessage{
 		Type: "connection_ack",
 		Payload: map[string]interface{}{
 			"status":    "connected",

@@ -41,12 +41,12 @@ type Provider interface {
 
 // UploadOptions contains options for uploading files
 type UploadOptions struct {
-	ContentType        string
-	ContentDisposition string
-	CacheControl       string
-	ACL                string
-	Metadata           map[string]string
-	Tags               map[string]string
+	ContentType          string
+	ContentDisposition   string
+	CacheControl         string
+	ACL                  string
+	Metadata             map[string]string
+	Tags                 map[string]string
 	ServerSideEncryption string
 }
 

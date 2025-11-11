@@ -2,8 +2,7 @@ package service
 
 import (
 	"context"
-
-	"echo-backend/services/message-service/internal/model"
+	"echo-backend/services/message-service/internal/models"
 
 	"github.com/google/uuid"
 )
@@ -11,9 +10,9 @@ import (
 // MessageServiceInterface defines the contract for message service operations
 type MessageServiceInterface interface {
 	// Core message operations
-	SendMessage(ctx context.Context, req *model.SendMessageRequest) (*model.Message, error)
-	GetMessage(ctx context.Context, messageID uuid.UUID) (*model.Message, error)
-	GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) (*model.MessagesResponse, error)
+	SendMessage(ctx context.Context, req *models.SendMessageRequest) (*models.Message, error)
+	GetMessage(ctx context.Context, messageID uuid.UUID) (*models.Message, error)
+	GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) (*models.MessagesResponse, error)
 	EditMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, newContent string) error
 	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
 

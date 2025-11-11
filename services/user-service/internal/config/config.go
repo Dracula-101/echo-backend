@@ -25,14 +25,15 @@ type ServiceConfig struct {
 
 // ServerConfig contains HTTP server configuration
 type ServerConfig struct {
-	Port              int           `yaml:"port" mapstructure:"port"`
-	Host              string        `yaml:"host" mapstructure:"host"`
-	ReadTimeout       time.Duration `yaml:"read_timeout" mapstructure:"read_timeout"`
-	WriteTimeout      time.Duration `yaml:"write_timeout" mapstructure:"write_timeout"`
-	IdleTimeout       time.Duration `yaml:"idle_timeout" mapstructure:"idle_timeout"`
-	ShutdownTimeout   time.Duration `yaml:"shutdown_timeout" mapstructure:"shutdown_timeout"`
-	MaxHeaderBytes    int           `yaml:"max_header_bytes" mapstructure:"max_header_bytes"`
-	EnableCompression bool          `yaml:"enable_compression" mapstructure:"enable_compression"`
+	Port                    int           `yaml:"port" mapstructure:"port"`
+	Host                    string        `yaml:"host" mapstructure:"host"`
+	ReadTimeout             time.Duration `yaml:"read_timeout" mapstructure:"read_timeout"`
+	WriteTimeout            time.Duration `yaml:"write_timeout" mapstructure:"write_timeout"`
+	IdleTimeout             time.Duration `yaml:"idle_timeout" mapstructure:"idle_timeout"`
+	ShutdownTimeout         time.Duration `yaml:"shutdown_timeout" mapstructure:"shutdown_timeout"`
+	MaxHeaderBytes          int           `yaml:"max_header_bytes" mapstructure:"max_header_bytes"`
+	EnableCompression       bool          `yaml:"enable_compression" mapstructure:"enable_compression"`
+	LocationServiceEndpoint string        `yaml:"location_service_endpoint" mapstructure:"location_service_endpoint"`
 }
 
 // DatabaseConfig contains database configuration

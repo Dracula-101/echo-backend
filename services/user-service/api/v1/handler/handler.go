@@ -8,15 +8,17 @@ import (
 )
 
 type UserHandler struct {
-	service      *service.UserService
-	tokenService *token.JWTTokenService
-	log          logger.Logger
+	service         *service.UserService
+	locationService *service.LocationService
+	tokenService    *token.JWTTokenService
+	log             logger.Logger
 }
 
-func NewUserHandler(service *service.UserService, tokenService *token.JWTTokenService, log logger.Logger) *UserHandler {
+func NewUserHandler(service *service.UserService, locationService *service.LocationService, tokenService *token.JWTTokenService, log logger.Logger) *UserHandler {
 	return &UserHandler{
-		service:      service,
-		tokenService: tokenService,
-		log:          log,
+		service:         service,
+		locationService: locationService,
+		tokenService:    tokenService,
+		log:             log,
 	}
 }

@@ -8,9 +8,9 @@ import (
 )
 
 type IPAddress struct {
-	ID        string  `db:"id" json:"id" pk:"true"`
-	IPAddress string  `db:"ip_address" json:"ip_address"`
-	IPVersion *int    `db:"ip_version" json:"ip_version,omitempty"`
+	ID        string `db:"id" json:"id" pk:"true"`
+	IPAddress string `db:"ip_address" json:"ip_address"`
+	IPVersion *int   `db:"ip_version" json:"ip_version,omitempty"`
 
 	// Geolocation
 	CountryCode *string  `db:"country_code" json:"country_code,omitempty"`
@@ -45,10 +45,10 @@ type IPAddress struct {
 	IsBogon     bool         `db:"is_bogon" json:"is_bogon"`
 
 	// Usage tracking
-	FirstSeenAt  time.Time `db:"first_seen_at" json:"first_seen_at"`
-	LastSeenAt   time.Time `db:"last_seen_at" json:"last_seen_at"`
-	LookupCount  int       `db:"lookup_count" json:"lookup_count"`
-	UserCount    int       `db:"user_count" json:"user_count"`
+	FirstSeenAt time.Time `db:"first_seen_at" json:"first_seen_at"`
+	LastSeenAt  time.Time `db:"last_seen_at" json:"last_seen_at"`
+	LookupCount int       `db:"lookup_count" json:"lookup_count"`
+	UserCount   int       `db:"user_count" json:"user_count"`
 
 	// Data source
 	LookupProvider *string   `db:"lookup_provider" json:"lookup_provider,omitempty"`
@@ -67,10 +67,10 @@ func (i *IPAddress) PrimaryKey() interface{} {
 }
 
 type UserLocation struct {
-	ID            string  `db:"id" json:"id" pk:"true"`
-	UserID        string  `db:"user_id" json:"user_id"`
-	SessionID     *string `db:"session_id" json:"session_id,omitempty"`
-	IPAddressID   *string `db:"ip_address_id" json:"ip_address_id,omitempty"`
+	ID          string  `db:"id" json:"id" pk:"true"`
+	UserID      string  `db:"user_id" json:"user_id"`
+	SessionID   *string `db:"session_id" json:"session_id,omitempty"`
+	IPAddressID *string `db:"ip_address_id" json:"ip_address_id,omitempty"`
 
 	// Location data
 	IPAddress      string   `db:"ip_address" json:"ip_address"`
@@ -119,9 +119,9 @@ func (u *UserLocation) PrimaryKey() interface{} {
 }
 
 type LocationShare struct {
-	ID                      string  `db:"id" json:"id" pk:"true"`
-	UserID                  string  `db:"user_id" json:"user_id"`
-	SharedWithUserID        *string `db:"shared_with_user_id" json:"shared_with_user_id,omitempty"`
+	ID                       string  `db:"id" json:"id" pk:"true"`
+	UserID                   string  `db:"user_id" json:"user_id"`
+	SharedWithUserID         *string `db:"shared_with_user_id" json:"shared_with_user_id,omitempty"`
 	SharedWithConversationID *string `db:"shared_with_conversation_id" json:"shared_with_conversation_id,omitempty"`
 
 	// Current location
@@ -138,8 +138,8 @@ type LocationShare struct {
 	ExpiresAt       *time.Time        `db:"expires_at" json:"expires_at,omitempty"`
 
 	// Status
-	IsActive             bool `db:"is_active" json:"is_active"`
-	IsLive               bool `db:"is_live" json:"is_live"`
+	IsActive              bool `db:"is_active" json:"is_active"`
+	IsLive                bool `db:"is_live" json:"is_live"`
 	UpdateIntervalSeconds int  `db:"update_interval_seconds" json:"update_interval_seconds"`
 
 	// Privacy
@@ -285,9 +285,9 @@ type Geofence struct {
 	PolygonCoordinates json.RawMessage `db:"polygon_coordinates" json:"polygon_coordinates,omitempty"`
 
 	// Trigger
-	TriggerOnEnter bool `db:"trigger_on_enter" json:"trigger_on_enter"`
-	TriggerOnExit  bool `db:"trigger_on_exit" json:"trigger_on_exit"`
-	TriggerOnDwell bool `db:"trigger_on_dwell" json:"trigger_on_dwell"`
+	TriggerOnEnter   bool `db:"trigger_on_enter" json:"trigger_on_enter"`
+	TriggerOnExit    bool `db:"trigger_on_exit" json:"trigger_on_exit"`
+	TriggerOnDwell   bool `db:"trigger_on_dwell" json:"trigger_on_dwell"`
 	DwellTimeSeconds *int `db:"dwell_time_seconds" json:"dwell_time_seconds,omitempty"`
 
 	// Actions
@@ -379,11 +379,11 @@ type LocationRecommendation struct {
 	DistanceMeters *int     `db:"distance_meters" json:"distance_meters,omitempty"`
 
 	// Status
-	IsShown       bool       `db:"is_shown" json:"is_shown"`
-	ShownAt       *time.Time `db:"shown_at" json:"shown_at,omitempty"`
-	IsActedUpon   bool       `db:"is_acted_upon" json:"is_acted_upon"`
-	ActionType    *string    `db:"action_type" json:"action_type,omitempty"`
-	ActedAt       *time.Time `db:"acted_at" json:"acted_at,omitempty"`
+	IsShown     bool       `db:"is_shown" json:"is_shown"`
+	ShownAt     *time.Time `db:"shown_at" json:"shown_at,omitempty"`
+	IsActedUpon bool       `db:"is_acted_upon" json:"is_acted_upon"`
+	ActionType  *string    `db:"action_type" json:"action_type,omitempty"`
+	ActedAt     *time.Time `db:"acted_at" json:"acted_at,omitempty"`
 
 	CreatedAt time.Time  `db:"created_at" json:"created_at"`
 	ExpiresAt *time.Time `db:"expires_at" json:"expires_at,omitempty"`
@@ -398,10 +398,10 @@ func (l *LocationRecommendation) PrimaryKey() interface{} {
 }
 
 type RegionStat struct {
-	ID         string `db:"id" json:"id" pk:"true"`
-	RegionType string `db:"region_type" json:"region_type"`
+	ID         string  `db:"id" json:"id" pk:"true"`
+	RegionType string  `db:"region_type" json:"region_type"`
 	RegionCode *string `db:"region_code" json:"region_code,omitempty"`
-	RegionName string `db:"region_name" json:"region_name"`
+	RegionName string  `db:"region_name" json:"region_name"`
 
 	// User counts
 	TotalUsers         int `db:"total_users" json:"total_users"`
@@ -429,14 +429,14 @@ func (r *RegionStat) PrimaryKey() interface{} {
 }
 
 type IPBlacklist struct {
-	ID       string  `db:"id" json:"id" pk:"true"`
+	ID        string  `db:"id" json:"id" pk:"true"`
 	IPAddress string  `db:"ip_address" json:"ip_address"`
-	IPRange  *string `db:"ip_range" json:"ip_range,omitempty"`
+	IPRange   *string `db:"ip_range" json:"ip_range,omitempty"`
 
 	// Reason
-	BlacklistReason string                `db:"blacklist_reason" json:"blacklist_reason"`
-	BlacklistType   *string               `db:"blacklist_type" json:"blacklist_type,omitempty"`
-	Severity        IPBlacklistSeverity   `db:"severity" json:"severity"`
+	BlacklistReason string              `db:"blacklist_reason" json:"blacklist_reason"`
+	BlacklistType   *string             `db:"blacklist_type" json:"blacklist_type,omitempty"`
+	Severity        IPBlacklistSeverity `db:"severity" json:"severity"`
 
 	// Evidence
 	IncidentCount int            `db:"incident_count" json:"incident_count"`
@@ -473,10 +473,10 @@ type VPNDetectionLog struct {
 	IPAddress string `db:"ip_address" json:"ip_address"`
 
 	// Detection results
-	IsVPN     bool    `db:"is_vpn" json:"is_vpn"`
-	IsProxy   bool    `db:"is_proxy" json:"is_proxy"`
-	IsTor     bool    `db:"is_tor" json:"is_tor"`
-	IsHosting bool    `db:"is_hosting" json:"is_hosting"`
+	IsVPN     bool `db:"is_vpn" json:"is_vpn"`
+	IsProxy   bool `db:"is_proxy" json:"is_proxy"`
+	IsTor     bool `db:"is_tor" json:"is_tor"`
+	IsHosting bool `db:"is_hosting" json:"is_hosting"`
 
 	VPNProvider *string `db:"vpn_provider" json:"vpn_provider,omitempty"`
 	ProxyType   *string `db:"proxy_type" json:"proxy_type,omitempty"`

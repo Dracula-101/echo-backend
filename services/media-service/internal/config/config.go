@@ -196,26 +196,26 @@ type ShutdownConfig struct {
 
 // FeaturesConfig contains feature flags
 type FeaturesConfig struct {
-	ImageProcessing      ImageProcessingConfig      `yaml:"image_processing" mapstructure:"image_processing"`
-	VideoProcessing      VideoProcessingConfig      `yaml:"video_processing" mapstructure:"video_processing"`
-	Thumbnails           ThumbnailsConfig           `yaml:"thumbnails" mapstructure:"thumbnails"`
-	VirusScanning        VirusScanningConfig        `yaml:"virus_scanning" mapstructure:"virus_scanning"`
-	ContentModeration    ContentModerationConfig    `yaml:"content_moderation" mapstructure:"content_moderation"`
-	Encryption           EncryptionConfig           `yaml:"encryption" mapstructure:"encryption"`
-	Deduplication        DeduplicationConfig        `yaml:"deduplication" mapstructure:"deduplication"`
-	Albums               AlbumsConfig               `yaml:"albums" mapstructure:"albums"`
-	StickerPacks         StickerPacksConfig         `yaml:"sticker_packs" mapstructure:"sticker_packs"`
+	ImageProcessing   ImageProcessingConfig   `yaml:"image_processing" mapstructure:"image_processing"`
+	VideoProcessing   VideoProcessingConfig   `yaml:"video_processing" mapstructure:"video_processing"`
+	Thumbnails        ThumbnailsConfig        `yaml:"thumbnails" mapstructure:"thumbnails"`
+	VirusScanning     VirusScanningConfig     `yaml:"virus_scanning" mapstructure:"virus_scanning"`
+	ContentModeration ContentModerationConfig `yaml:"content_moderation" mapstructure:"content_moderation"`
+	Encryption        EncryptionConfig        `yaml:"encryption" mapstructure:"encryption"`
+	Deduplication     DeduplicationConfig     `yaml:"deduplication" mapstructure:"deduplication"`
+	Albums            AlbumsConfig            `yaml:"albums" mapstructure:"albums"`
+	StickerPacks      StickerPacksConfig      `yaml:"sticker_packs" mapstructure:"sticker_packs"`
 }
 
 // ImageProcessingConfig contains image processing configuration
 type ImageProcessingConfig struct {
-	Enabled            bool     `yaml:"enabled" mapstructure:"enabled"`
-	MaxWidth           int      `yaml:"max_width" mapstructure:"max_width"`
-	MaxHeight          int      `yaml:"max_height" mapstructure:"max_height"`
-	Quality            int      `yaml:"quality" mapstructure:"quality"`
-	AllowedFormats     []string `yaml:"allowed_formats" mapstructure:"allowed_formats"`
-	AutoOrient         bool     `yaml:"auto_orient" mapstructure:"auto_orient"`
-	StripMetadata      bool     `yaml:"strip_metadata" mapstructure:"strip_metadata"`
+	Enabled        bool     `yaml:"enabled" mapstructure:"enabled"`
+	MaxWidth       int      `yaml:"max_width" mapstructure:"max_width"`
+	MaxHeight      int      `yaml:"max_height" mapstructure:"max_height"`
+	Quality        int      `yaml:"quality" mapstructure:"quality"`
+	AllowedFormats []string `yaml:"allowed_formats" mapstructure:"allowed_formats"`
+	AutoOrient     bool     `yaml:"auto_orient" mapstructure:"auto_orient"`
+	StripMetadata  bool     `yaml:"strip_metadata" mapstructure:"strip_metadata"`
 }
 
 // VideoProcessingConfig contains video processing configuration
@@ -228,12 +228,12 @@ type VideoProcessingConfig struct {
 
 // ThumbnailsConfig contains thumbnail generation configuration
 type ThumbnailsConfig struct {
-	Enabled      bool          `yaml:"enabled" mapstructure:"enabled"`
-	SmallSize    ThumbnailSize `yaml:"small_size" mapstructure:"small_size"`
-	MediumSize   ThumbnailSize `yaml:"medium_size" mapstructure:"medium_size"`
-	LargeSize    ThumbnailSize `yaml:"large_size" mapstructure:"large_size"`
-	Format       string        `yaml:"format" mapstructure:"format"`
-	Quality      int           `yaml:"quality" mapstructure:"quality"`
+	Enabled    bool          `yaml:"enabled" mapstructure:"enabled"`
+	SmallSize  ThumbnailSize `yaml:"small_size" mapstructure:"small_size"`
+	MediumSize ThumbnailSize `yaml:"medium_size" mapstructure:"medium_size"`
+	LargeSize  ThumbnailSize `yaml:"large_size" mapstructure:"large_size"`
+	Format     string        `yaml:"format" mapstructure:"format"`
+	Quality    int           `yaml:"quality" mapstructure:"quality"`
 }
 
 // ThumbnailSize represents thumbnail dimensions
@@ -274,15 +274,15 @@ type DeduplicationConfig struct {
 
 // AlbumsConfig contains albums feature configuration
 type AlbumsConfig struct {
-	Enabled         bool `yaml:"enabled" mapstructure:"enabled"`
-	MaxAlbumsPerUser int `yaml:"max_albums_per_user" mapstructure:"max_albums_per_user"`
+	Enabled          bool `yaml:"enabled" mapstructure:"enabled"`
+	MaxAlbumsPerUser int  `yaml:"max_albums_per_user" mapstructure:"max_albums_per_user"`
 }
 
 // StickerPacksConfig contains sticker packs configuration
 type StickerPacksConfig struct {
-	Enabled              bool `yaml:"enabled" mapstructure:"enabled"`
-	MaxStickersPerPack   int  `yaml:"max_stickers_per_pack" mapstructure:"max_stickers_per_pack"`
-	MaxInstalledPerUser  int  `yaml:"max_installed_per_user" mapstructure:"max_installed_per_user"`
+	Enabled             bool `yaml:"enabled" mapstructure:"enabled"`
+	MaxStickersPerPack  int  `yaml:"max_stickers_per_pack" mapstructure:"max_stickers_per_pack"`
+	MaxInstalledPerUser int  `yaml:"max_installed_per_user" mapstructure:"max_installed_per_user"`
 }
 
 // ProcessingConfig contains media processing configuration

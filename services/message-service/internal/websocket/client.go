@@ -1,7 +1,7 @@
 package websocket
 
 import (
-	"echo-backend/services/message-service/internal/model"
+	"echo-backend/services/message-service/internal/models"
 	"encoding/json"
 	"time"
 
@@ -196,7 +196,7 @@ func CreateMessageHandler(
 }
 
 func handleReadReceipt(client *Client, payload json.RawMessage, log logger.Logger, callback func(uuid.UUID, uuid.UUID)) {
-	var receipt model.ReadReceipt
+	var receipt models.ReadReceipt
 	if err := json.Unmarshal(payload, &receipt); err != nil {
 		log.Error("Failed to unmarshal read receipt",
 			logger.String("client_id", client.ID),
@@ -217,7 +217,7 @@ func handleReadReceipt(client *Client, payload json.RawMessage, log logger.Logge
 
 // handleTypingIndicator processes typing indicator messages
 func handleTypingIndicator(client *Client, payload json.RawMessage, log logger.Logger, callback func(uuid.UUID, uuid.UUID, bool)) {
-	var typing model.TypingIndicator
+	var typing models.TypingIndicator
 	if err := json.Unmarshal(payload, &typing); err != nil {
 		log.Error("Failed to unmarshal typing indicator",
 			logger.String("client_id", client.ID),
@@ -239,7 +239,7 @@ func handleTypingIndicator(client *Client, payload json.RawMessage, log logger.L
 
 // handlePing responds to ping messages
 func handlePing(client *Client, log logger.Logger) {
-	pong := model.WebSocketMessage{
+	pong := models.WebSocketMessage{
 		Type: "pong",
 		Payload: map[string]interface{}{
 			"timestamp": time.Now(),

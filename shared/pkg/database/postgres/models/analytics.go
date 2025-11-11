@@ -8,9 +8,9 @@ import (
 )
 
 type Event struct {
-	ID         string `db:"id" json:"id" pk:"true"`
-	UserID     *string `db:"user_id" json:"user_id,omitempty"`
-	SessionID  *string `db:"session_id" json:"session_id,omitempty"`
+	ID        string  `db:"id" json:"id" pk:"true"`
+	UserID    *string `db:"user_id" json:"user_id,omitempty"`
+	SessionID *string `db:"session_id" json:"session_id,omitempty"`
 
 	// Event details
 	EventName     string   `db:"event_name" json:"event_name"`
@@ -74,14 +74,14 @@ func (e *Event) PrimaryKey() interface{} {
 }
 
 type UserSession struct {
-	ID        string  `db:"id" json:"id" pk:"true"`
-	UserID    string  `db:"user_id" json:"user_id"`
-	SessionID string  `db:"session_id" json:"session_id"`
+	ID        string `db:"id" json:"id" pk:"true"`
+	UserID    string `db:"user_id" json:"user_id"`
+	SessionID string `db:"session_id" json:"session_id"`
 
 	// Session details
-	SessionStart          time.Time  `db:"session_start" json:"session_start"`
-	SessionEnd            *time.Time `db:"session_end" json:"session_end,omitempty"`
-	SessionDurationSeconds *int      `db:"session_duration_seconds" json:"session_duration_seconds,omitempty"`
+	SessionStart           time.Time  `db:"session_start" json:"session_start"`
+	SessionEnd             *time.Time `db:"session_end" json:"session_end,omitempty"`
+	SessionDurationSeconds *int       `db:"session_duration_seconds" json:"session_duration_seconds,omitempty"`
 
 	// Activity
 	PageViews        int `db:"page_views" json:"page_views"`
@@ -126,11 +126,11 @@ type DailyActiveUser struct {
 	UserID string    `db:"user_id" json:"user_id"`
 
 	// Activity metrics
-	SessionsCount     int            `db:"sessions_count" json:"sessions_count"`
-	MessagesSent      int            `db:"messages_sent" json:"messages_sent"`
-	MessagesReceived  int            `db:"messages_received" json:"messages_received"`
-	TimeSpentSeconds  int            `db:"time_spent_seconds" json:"time_spent_seconds"`
-	FeaturesUsed      pq.StringArray `db:"features_used" json:"features_used,omitempty"`
+	SessionsCount    int            `db:"sessions_count" json:"sessions_count"`
+	MessagesSent     int            `db:"messages_sent" json:"messages_sent"`
+	MessagesReceived int            `db:"messages_received" json:"messages_received"`
+	TimeSpentSeconds int            `db:"time_spent_seconds" json:"time_spent_seconds"`
+	FeaturesUsed     pq.StringArray `db:"features_used" json:"features_used,omitempty"`
 
 	// Platform
 	PlatformsUsed pq.StringArray `db:"platforms_used" json:"platforms_used,omitempty"`
@@ -188,14 +188,14 @@ type Funnel struct {
 	StepOrder  int    `db:"step_order" json:"step_order"`
 
 	// Timing
-	EnteredAt       time.Time  `db:"entered_at" json:"entered_at"`
-	CompletedAt     *time.Time `db:"completed_at" json:"completed_at,omitempty"`
-	TimeInStepSeconds *int     `db:"time_in_step_seconds" json:"time_in_step_seconds,omitempty"`
+	EnteredAt         time.Time  `db:"entered_at" json:"entered_at"`
+	CompletedAt       *time.Time `db:"completed_at" json:"completed_at,omitempty"`
+	TimeInStepSeconds *int       `db:"time_in_step_seconds" json:"time_in_step_seconds,omitempty"`
 
 	// Status
-	IsCompleted    bool    `db:"is_completed" json:"is_completed"`
-	DroppedOff     bool    `db:"dropped_off" json:"dropped_off"`
-	DropOffReason  *string `db:"drop_off_reason" json:"drop_off_reason,omitempty"`
+	IsCompleted   bool    `db:"is_completed" json:"is_completed"`
+	DroppedOff    bool    `db:"dropped_off" json:"dropped_off"`
+	DropOffReason *string `db:"drop_off_reason" json:"drop_off_reason,omitempty"`
 
 	// Context
 	Properties json.RawMessage `db:"properties" json:"properties,omitempty"`
@@ -247,10 +247,10 @@ type ABTest struct {
 	Variants json.RawMessage `db:"variants" json:"variants"`
 
 	// Targeting
-	TargetPercentage    int            `db:"target_percentage" json:"target_percentage"`
-	TargetPlatforms     pq.StringArray `db:"target_platforms" json:"target_platforms,omitempty"`
-	TargetCountries     pq.StringArray `db:"target_countries" json:"target_countries,omitempty"`
-	TargetUserSegments  pq.StringArray `db:"target_user_segments" json:"target_user_segments,omitempty"`
+	TargetPercentage   int            `db:"target_percentage" json:"target_percentage"`
+	TargetPlatforms    pq.StringArray `db:"target_platforms" json:"target_platforms,omitempty"`
+	TargetCountries    pq.StringArray `db:"target_countries" json:"target_countries,omitempty"`
+	TargetUserSegments pq.StringArray `db:"target_user_segments" json:"target_user_segments,omitempty"`
 
 	// Status
 	Status ABTestStatus `db:"status" json:"status"`
@@ -260,9 +260,9 @@ type ABTest struct {
 	EndsAt   *time.Time `db:"ends_at" json:"ends_at,omitempty"`
 
 	// Results
-	SampleSize       int      `db:"sample_size" json:"sample_size"`
-	ConfidenceLevel  *float64 `db:"confidence_level" json:"confidence_level,omitempty"`
-	WinningVariant   *string  `db:"winning_variant" json:"winning_variant,omitempty"`
+	SampleSize      int      `db:"sample_size" json:"sample_size"`
+	ConfidenceLevel *float64 `db:"confidence_level" json:"confidence_level,omitempty"`
+	WinningVariant  *string  `db:"winning_variant" json:"winning_variant,omitempty"`
 
 	CreatedAt       time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt       time.Time `db:"updated_at" json:"updated_at"`
@@ -379,15 +379,15 @@ type ErrorLog struct {
 	Platform    *string `db:"platform" json:"platform,omitempty"`
 
 	// Frequency
-	Occurrences      int       `db:"occurrences" json:"occurrences"`
-	FirstOccurredAt  time.Time `db:"first_occurred_at" json:"first_occurred_at"`
-	LastOccurredAt   time.Time `db:"last_occurred_at" json:"last_occurred_at"`
+	Occurrences     int       `db:"occurrences" json:"occurrences"`
+	FirstOccurredAt time.Time `db:"first_occurred_at" json:"first_occurred_at"`
+	LastOccurredAt  time.Time `db:"last_occurred_at" json:"last_occurred_at"`
 
 	// Resolution
-	IsResolved        bool       `db:"is_resolved" json:"is_resolved"`
-	ResolvedAt        *time.Time `db:"resolved_at" json:"resolved_at,omitempty"`
-	ResolvedByUserID  *string    `db:"resolved_by_user_id" json:"resolved_by_user_id,omitempty"`
-	ResolutionNotes   *string    `db:"resolution_notes" json:"resolution_notes,omitempty"`
+	IsResolved       bool       `db:"is_resolved" json:"is_resolved"`
+	ResolvedAt       *time.Time `db:"resolved_at" json:"resolved_at,omitempty"`
+	ResolvedByUserID *string    `db:"resolved_by_user_id" json:"resolved_by_user_id,omitempty"`
+	ResolutionNotes  *string    `db:"resolution_notes" json:"resolution_notes,omitempty"`
 
 	CreatedAt time.Time       `db:"created_at" json:"created_at"`
 	Metadata  json.RawMessage `db:"metadata" json:"metadata,omitempty"`
@@ -406,10 +406,10 @@ type RevenueEvent struct {
 	UserID string `db:"user_id" json:"user_id"`
 
 	// Transaction details
-	TransactionType  string  `db:"transaction_type" json:"transaction_type"`
-	ProductID        *string `db:"product_id" json:"product_id,omitempty"`
-	ProductName      *string `db:"product_name" json:"product_name,omitempty"`
-	ProductCategory  *string `db:"product_category" json:"product_category,omitempty"`
+	TransactionType string  `db:"transaction_type" json:"transaction_type"`
+	ProductID       *string `db:"product_id" json:"product_id,omitempty"`
+	ProductName     *string `db:"product_name" json:"product_name,omitempty"`
+	ProductCategory *string `db:"product_category" json:"product_category,omitempty"`
 
 	// Amount
 	Amount    float64  `db:"amount" json:"amount"`
@@ -422,10 +422,10 @@ type RevenueEvent struct {
 	TransactionID   *string `db:"transaction_id" json:"transaction_id,omitempty"`
 
 	// Status
-	Status        RevenueEventStatus `db:"status" json:"status"`
-	RefundedAt    *time.Time         `db:"refunded_at" json:"refunded_at,omitempty"`
-	RefundAmount  *float64           `db:"refund_amount" json:"refund_amount,omitempty"`
-	RefundReason  *string            `db:"refund_reason" json:"refund_reason,omitempty"`
+	Status       RevenueEventStatus `db:"status" json:"status"`
+	RefundedAt   *time.Time         `db:"refunded_at" json:"refunded_at,omitempty"`
+	RefundAmount *float64           `db:"refund_amount" json:"refund_amount,omitempty"`
+	RefundReason *string            `db:"refund_reason" json:"refund_reason,omitempty"`
 
 	// Attribution
 	CampaignSource *string `db:"campaign_source" json:"campaign_source,omitempty"`
@@ -494,15 +494,15 @@ type DailyMetric struct {
 	ChurnedUsers int `db:"churned_users" json:"churned_users"`
 
 	// Engagement
-	TotalMessagesSent        int64   `db:"total_messages_sent" json:"total_messages_sent"`
-	TotalSessions            int64   `db:"total_sessions" json:"total_sessions"`
+	TotalMessagesSent         int64   `db:"total_messages_sent" json:"total_messages_sent"`
+	TotalSessions             int64   `db:"total_sessions" json:"total_sessions"`
 	AvgSessionDurationSeconds int     `db:"avg_session_duration_seconds" json:"avg_session_duration_seconds"`
-	AvgMessagesPerUser       float64 `db:"avg_messages_per_user" json:"avg_messages_per_user"`
+	AvgMessagesPerUser        float64 `db:"avg_messages_per_user" json:"avg_messages_per_user"`
 
 	// Content
-	ImagesUploaded     int `db:"images_uploaded" json:"images_uploaded"`
-	VideosUploaded     int `db:"videos_uploaded" json:"videos_uploaded"`
-	VoiceMessagesSent  int `db:"voice_messages_sent" json:"voice_messages_sent"`
+	ImagesUploaded    int `db:"images_uploaded" json:"images_uploaded"`
+	VideosUploaded    int `db:"videos_uploaded" json:"videos_uploaded"`
+	VoiceMessagesSent int `db:"voice_messages_sent" json:"voice_messages_sent"`
 
 	// Social
 	NewConversations int `db:"new_conversations" json:"new_conversations"`
@@ -510,19 +510,19 @@ type DailyMetric struct {
 	NewFriendships   int `db:"new_friendships" json:"new_friendships"`
 
 	// Calls
-	VoiceCallsTotal        int   `db:"voice_calls_total" json:"voice_calls_total"`
-	VideoCallsTotal        int   `db:"video_calls_total" json:"video_calls_total"`
+	VoiceCallsTotal          int   `db:"voice_calls_total" json:"voice_calls_total"`
+	VideoCallsTotal          int   `db:"video_calls_total" json:"video_calls_total"`
 	TotalCallDurationMinutes int64 `db:"total_call_duration_minutes" json:"total_call_duration_minutes"`
 
 	// Revenue
-	RevenueTotal          float64 `db:"revenue_total" json:"revenue_total"`
-	NewSubscriptions      int     `db:"new_subscriptions" json:"new_subscriptions"`
+	RevenueTotal           float64 `db:"revenue_total" json:"revenue_total"`
+	NewSubscriptions       int     `db:"new_subscriptions" json:"new_subscriptions"`
 	CancelledSubscriptions int     `db:"cancelled_subscriptions" json:"cancelled_subscriptions"`
 
 	// Performance
-	AvgAPILatencyMS   *int     `db:"avg_api_latency_ms" json:"avg_api_latency_ms,omitempty"`
-	ErrorCount        int      `db:"error_count" json:"error_count"`
-	UptimePercentage  float64  `db:"uptime_percentage" json:"uptime_percentage"`
+	AvgAPILatencyMS  *int    `db:"avg_api_latency_ms" json:"avg_api_latency_ms,omitempty"`
+	ErrorCount       int     `db:"error_count" json:"error_count"`
+	UptimePercentage float64 `db:"uptime_percentage" json:"uptime_percentage"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
@@ -575,7 +575,7 @@ type PageView struct {
 	ReferrerSource *string `db:"referrer_source" json:"referrer_source,omitempty"`
 
 	// Timing
-	ViewDurationSeconds  *int `db:"view_duration_seconds" json:"view_duration_seconds,omitempty"`
+	ViewDurationSeconds *int `db:"view_duration_seconds" json:"view_duration_seconds,omitempty"`
 	TimeToInteractiveMS *int `db:"time_to_interactive_ms" json:"time_to_interactive_ms,omitempty"`
 
 	// Engagement
@@ -608,8 +608,8 @@ type SearchQuery struct {
 	SearchCategory *string `db:"search_category" json:"search_category,omitempty"`
 
 	// Results
-	ResultsCount   int  `db:"results_count" json:"results_count"`
-	ResultsClicked int  `db:"results_clicked" json:"results_clicked"`
+	ResultsCount    int  `db:"results_count" json:"results_count"`
+	ResultsClicked  int  `db:"results_clicked" json:"results_clicked"`
 	ClickedPosition *int `db:"clicked_position" json:"clicked_position,omitempty"`
 
 	// Timing
@@ -750,15 +750,15 @@ func (a *APIUsage) PrimaryKey() interface{} {
 }
 
 type WebhookDelivery struct {
-	ID         string `db:"id" json:"id" pk:"true"`
+	ID string `db:"id" json:"id" pk:"true"`
 
 	WebhookURL string `db:"webhook_url" json:"webhook_url"`
 	EventType  string `db:"event_type" json:"event_type"`
 
 	// Delivery
-	Status           WebhookDeliveryStatus `db:"status" json:"status"`
-	HTTPStatusCode   *int                  `db:"http_status_code" json:"http_status_code,omitempty"`
-	ResponseTimeMS   *int                  `db:"response_time_ms" json:"response_time_ms,omitempty"`
+	Status         WebhookDeliveryStatus `db:"status" json:"status"`
+	HTTPStatusCode *int                  `db:"http_status_code" json:"http_status_code,omitempty"`
+	ResponseTimeMS *int                  `db:"response_time_ms" json:"response_time_ms,omitempty"`
 
 	// Retry logic
 	AttemptNumber int        `db:"attempt_number" json:"attempt_number"`
@@ -810,9 +810,9 @@ type UserFeedback struct {
 	Priority UserFeedbackPriority `db:"priority" json:"priority"`
 
 	// Response
-	ResponseText       *string    `db:"response_text" json:"response_text,omitempty"`
-	RespondedAt        *time.Time `db:"responded_at" json:"responded_at,omitempty"`
-	RespondedByUserID  *string    `db:"responded_by_user_id" json:"responded_by_user_id,omitempty"`
+	ResponseText      *string    `db:"response_text" json:"response_text,omitempty"`
+	RespondedAt       *time.Time `db:"responded_at" json:"responded_at,omitempty"`
+	RespondedByUserID *string    `db:"responded_by_user_id" json:"responded_by_user_id,omitempty"`
 
 	// Sentiment
 	SentimentScore *float64 `db:"sentiment_score" json:"sentiment_score,omitempty"`
@@ -874,7 +874,7 @@ type ChurnPrediction struct {
 	UserID string `db:"user_id" json:"user_id"`
 
 	// Prediction
-	ChurnProbability float64        `db:"churn_probability" json:"churn_probability"`
+	ChurnProbability float64         `db:"churn_probability" json:"churn_probability"`
 	ChurnRiskLevel   *ChurnRiskLevel `db:"churn_risk_level" json:"churn_risk_level,omitempty"`
 
 	// Factors
@@ -914,9 +914,9 @@ type Attribution struct {
 	UserID string `db:"user_id" json:"user_id"`
 
 	// Conversion
-	ConversionType  string     `db:"conversion_type" json:"conversion_type"`
-	ConversionValue *float64   `db:"conversion_value" json:"conversion_value,omitempty"`
-	ConvertedAt     time.Time  `db:"converted_at" json:"converted_at"`
+	ConversionType  string    `db:"conversion_type" json:"conversion_type"`
+	ConversionValue *float64  `db:"conversion_value" json:"conversion_value,omitempty"`
+	ConvertedAt     time.Time `db:"converted_at" json:"converted_at"`
 
 	// Attribution
 	AttributionModel string `db:"attribution_model" json:"attribution_model"`
@@ -933,9 +933,9 @@ type Attribution struct {
 	LastTouchAt       *time.Time `db:"last_touch_at" json:"last_touch_at,omitempty"`
 
 	// Journey
-	TouchpointCount       int             `db:"touchpoint_count" json:"touchpoint_count"`
-	JourneyDurationHours  *int            `db:"journey_duration_hours" json:"journey_duration_hours,omitempty"`
-	Touchpoints           json.RawMessage `db:"touchpoints" json:"touchpoints,omitempty"`
+	TouchpointCount      int             `db:"touchpoint_count" json:"touchpoint_count"`
+	JourneyDurationHours *int            `db:"journey_duration_hours" json:"journey_duration_hours,omitempty"`
+	Touchpoints          json.RawMessage `db:"touchpoints" json:"touchpoints,omitempty"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }

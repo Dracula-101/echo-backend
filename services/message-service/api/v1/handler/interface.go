@@ -1,11 +1,12 @@
 package handler
 
+import "net/http"
+
 // MessageHandlerInterface defines the contract for message HTTP handlers
 // Note: Message-service primarily uses WebSocket for real-time communication
 // HTTP handlers may be added in the future for REST API endpoints
 type MessageHandlerInterface interface {
-	// Future HTTP handler methods will be defined here
-	// Current implementation uses WebSocket hub instead
+	GetMessages(w http.ResponseWriter, r *http.Request)
 }
 
 // Ensure MessageHandler implements MessageHandlerInterface

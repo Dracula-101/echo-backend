@@ -65,6 +65,23 @@ func (b *UserServiceBuilder) Build() *UserService {
 	}
 }
 
+func (s *UserService) GenerateUsername(ctx context.Context, displayName string) (string, error) {
+	s.log.Info("Generating username",
+		logger.String("display_name", displayName),
+	)
+
+	username, err := s.repo.GenerateUniqueUsername(ctx, displayName)
+	if err != nil {
+		s.log.Error("Failed to generate username",
+			logger.String("display_name", displayName),
+			logger.Error(err),
+		)
+		return "", err
+	}
+
+	return *username, nil
+}
+
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
 	s.log.Info("Getting user profile",
 		logger.String("user_id", userID),

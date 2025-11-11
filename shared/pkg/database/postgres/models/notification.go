@@ -12,11 +12,11 @@ type Notification struct {
 	UserID string `db:"user_id" json:"user_id"`
 
 	// Notification details
-	NotificationType string  `db:"notification_type" json:"notification_type"`
+	NotificationType     string  `db:"notification_type" json:"notification_type"`
 	NotificationCategory *string `db:"notification_category" json:"notification_category,omitempty"`
-	Title            string  `db:"title" json:"title"`
-	Body             string  `db:"body" json:"body"`
-	Summary          *string `db:"summary" json:"summary,omitempty"`
+	Title                string  `db:"title" json:"title"`
+	Body                 string  `db:"body" json:"body"`
+	Summary              *string `db:"summary" json:"summary,omitempty"`
 
 	// Content
 	IconURL    *string `db:"icon_url" json:"icon_url,omitempty"`
@@ -54,18 +54,18 @@ type Notification struct {
 	ExpiresAt    *time.Time           `db:"expires_at" json:"expires_at,omitempty"`
 
 	// Grouping
-	GroupKey      *string `db:"group_key" json:"group_key,omitempty"`
-	GroupCount    int     `db:"group_count" json:"group_count"`
-	IsGroupSummary bool   `db:"is_group_summary" json:"is_group_summary"`
+	GroupKey       *string `db:"group_key" json:"group_key,omitempty"`
+	GroupCount     int     `db:"group_count" json:"group_count"`
+	IsGroupSummary bool    `db:"is_group_summary" json:"is_group_summary"`
 
 	// Device targeting
 	DeviceID *string `db:"device_id" json:"device_id,omitempty"`
 	Platform *string `db:"platform" json:"platform,omitempty"`
 
-	CreatedAt time.Time        `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time        `db:"updated_at" json:"updated_at"`
-	DeletedAt *time.Time       `db:"deleted_at" json:"deleted_at,omitempty"`
-	Metadata  json.RawMessage  `db:"metadata" json:"metadata,omitempty"`
+	CreatedAt time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time       `db:"updated_at" json:"updated_at"`
+	DeletedAt *time.Time      `db:"deleted_at" json:"deleted_at,omitempty"`
+	Metadata  json.RawMessage `db:"metadata" json:"metadata,omitempty"`
 }
 
 func (n *Notification) TableName() string {
@@ -142,9 +142,9 @@ type EmailNotification struct {
 	BounceReason *string     `db:"bounce_reason" json:"bounce_reason,omitempty"`
 
 	// Provider details
-	Provider         string          `db:"provider" json:"provider"`
-	ProviderMessageID *string        `db:"provider_message_id" json:"provider_message_id,omitempty"`
-	ProviderResponse json.RawMessage `db:"provider_response" json:"provider_response,omitempty"`
+	Provider          string          `db:"provider" json:"provider"`
+	ProviderMessageID *string         `db:"provider_message_id" json:"provider_message_id,omitempty"`
+	ProviderResponse  json.RawMessage `db:"provider_response" json:"provider_response,omitempty"`
 
 	// Tracking
 	OpenCount  int `db:"open_count" json:"open_count"`
@@ -206,10 +206,10 @@ type UserPreference struct {
 	UserID string `db:"user_id" json:"user_id"`
 
 	// Global settings
-	PushEnabled   bool `db:"push_enabled" json:"push_enabled"`
-	EmailEnabled  bool `db:"email_enabled" json:"email_enabled"`
-	SMSEnabled    bool `db:"sms_enabled" json:"sms_enabled"`
-	InAppEnabled  bool `db:"in_app_enabled" json:"in_app_enabled"`
+	PushEnabled  bool `db:"push_enabled" json:"push_enabled"`
+	EmailEnabled bool `db:"email_enabled" json:"email_enabled"`
+	SMSEnabled   bool `db:"sms_enabled" json:"sms_enabled"`
+	InAppEnabled bool `db:"in_app_enabled" json:"in_app_enabled"`
 
 	// Message notifications
 	MessagePush  bool `db:"message_push" json:"message_push"`
@@ -227,10 +227,10 @@ type UserPreference struct {
 	ReactionSMS   bool `db:"reaction_sms" json:"reaction_sms"`
 
 	// Call notifications
-	CallPush        bool `db:"call_push" json:"call_push"`
-	CallEmail       bool `db:"call_email" json:"call_email"`
-	CallSMS         bool `db:"call_sms" json:"call_sms"`
-	MissedCallPush  bool `db:"missed_call_push" json:"missed_call_push"`
+	CallPush       bool `db:"call_push" json:"call_push"`
+	CallEmail      bool `db:"call_email" json:"call_email"`
+	CallSMS        bool `db:"call_sms" json:"call_sms"`
+	MissedCallPush bool `db:"missed_call_push" json:"missed_call_push"`
 
 	// Social notifications
 	FriendRequestPush  bool `db:"friend_request_push" json:"friend_request_push"`
@@ -238,10 +238,10 @@ type UserPreference struct {
 	FriendAcceptPush   bool `db:"friend_accept_push" json:"friend_accept_push"`
 
 	// Group notifications
-	GroupInvitePush   bool `db:"group_invite_push" json:"group_invite_push"`
-	GroupInviteEmail  bool `db:"group_invite_email" json:"group_invite_email"`
-	GroupMessagePush  bool `db:"group_message_push" json:"group_message_push"`
-	GroupMentionPush  bool `db:"group_mention_push" json:"group_mention_push"`
+	GroupInvitePush  bool `db:"group_invite_push" json:"group_invite_push"`
+	GroupInviteEmail bool `db:"group_invite_email" json:"group_invite_email"`
+	GroupMessagePush bool `db:"group_message_push" json:"group_message_push"`
+	GroupMentionPush bool `db:"group_mention_push" json:"group_mention_push"`
 
 	// System notifications
 	SecurityAlertsPush  bool `db:"security_alerts_push" json:"security_alerts_push"`
@@ -250,20 +250,20 @@ type UserPreference struct {
 	AccountUpdatesEmail bool `db:"account_updates_email" json:"account_updates_email"`
 
 	// Marketing
-	MarketingPush      bool `db:"marketing_push" json:"marketing_push"`
-	MarketingEmail     bool `db:"marketing_email" json:"marketing_email"`
-	PromotionalEmail   bool `db:"promotional_email" json:"promotional_email"`
+	MarketingPush    bool `db:"marketing_push" json:"marketing_push"`
+	MarketingEmail   bool `db:"marketing_email" json:"marketing_email"`
+	PromotionalEmail bool `db:"promotional_email" json:"promotional_email"`
 
 	// Quiet hours
-	QuietHoursEnabled  bool           `db:"quiet_hours_enabled" json:"quiet_hours_enabled"`
-	QuietHoursStart    *time.Time     `db:"quiet_hours_start" json:"quiet_hours_start,omitempty"`
-	QuietHoursEnd      *time.Time     `db:"quiet_hours_end" json:"quiet_hours_end,omitempty"`
-	QuietHoursTimezone *string        `db:"quiet_hours_timezone" json:"quiet_hours_timezone,omitempty"`
-	QuietHoursDays     pq.Int64Array  `db:"quiet_hours_days" json:"quiet_hours_days,omitempty"`
+	QuietHoursEnabled  bool          `db:"quiet_hours_enabled" json:"quiet_hours_enabled"`
+	QuietHoursStart    *time.Time    `db:"quiet_hours_start" json:"quiet_hours_start,omitempty"`
+	QuietHoursEnd      *time.Time    `db:"quiet_hours_end" json:"quiet_hours_end,omitempty"`
+	QuietHoursTimezone *string       `db:"quiet_hours_timezone" json:"quiet_hours_timezone,omitempty"`
+	QuietHoursDays     pq.Int64Array `db:"quiet_hours_days" json:"quiet_hours_days,omitempty"`
 
 	// Notification bundling
-	BundleNotifications  bool `db:"bundle_notifications" json:"bundle_notifications"`
-	BundleIntervalMinutes int `db:"bundle_interval_minutes" json:"bundle_interval_minutes"`
+	BundleNotifications   bool `db:"bundle_notifications" json:"bundle_notifications"`
+	BundleIntervalMinutes int  `db:"bundle_interval_minutes" json:"bundle_interval_minutes"`
 
 	// Sound & Vibration
 	NotificationSound string `db:"notification_sound" json:"notification_sound"`
@@ -288,19 +288,19 @@ type ConversationChannel struct {
 	ConversationID string `db:"conversation_id" json:"conversation_id"`
 
 	// Override settings
-	NotificationsEnabled *bool   `db:"notifications_enabled" json:"notifications_enabled,omitempty"`
-	PushEnabled          *bool   `db:"push_enabled" json:"push_enabled,omitempty"`
-	EmailEnabled         *bool   `db:"email_enabled" json:"email_enabled,omitempty"`
-	SoundEnabled         *bool   `db:"sound_enabled" json:"sound_enabled,omitempty"`
-	VibrationEnabled     *bool   `db:"vibration_enabled" json:"vibration_enabled,omitempty"`
+	NotificationsEnabled *bool `db:"notifications_enabled" json:"notifications_enabled,omitempty"`
+	PushEnabled          *bool `db:"push_enabled" json:"push_enabled,omitempty"`
+	EmailEnabled         *bool `db:"email_enabled" json:"email_enabled,omitempty"`
+	SoundEnabled         *bool `db:"sound_enabled" json:"sound_enabled,omitempty"`
+	VibrationEnabled     *bool `db:"vibration_enabled" json:"vibration_enabled,omitempty"`
 
 	// Custom sound
 	CustomSound *string `db:"custom_sound" json:"custom_sound,omitempty"`
 
 	// Mute settings
-	IsMuted     bool       `db:"is_muted" json:"is_muted"`
-	MutedUntil  *time.Time `db:"muted_until" json:"muted_until,omitempty"`
-	MuteReason  *string    `db:"mute_reason" json:"mute_reason,omitempty"`
+	IsMuted    bool       `db:"is_muted" json:"is_muted"`
+	MutedUntil *time.Time `db:"muted_until" json:"muted_until,omitempty"`
+	MuteReason *string    `db:"mute_reason" json:"mute_reason,omitempty"`
 
 	// Priority
 	PriorityLevel string `db:"priority_level" json:"priority_level"`
@@ -318,9 +318,9 @@ func (c *ConversationChannel) PrimaryKey() interface{} {
 }
 
 type Template struct {
-	ID              string `db:"id" json:"id" pk:"true"`
-	TemplateName    string `db:"template_name" json:"template_name"`
-	TemplateType    string `db:"template_type" json:"template_type"`
+	ID           string `db:"id" json:"id" pk:"true"`
+	TemplateName string `db:"template_name" json:"template_name"`
+	TemplateType string `db:"template_type" json:"template_type"`
 
 	// Content
 	TitleTemplate *string `db:"title_template" json:"title_template,omitempty"`
@@ -391,9 +391,9 @@ func (a *ActionResponse) PrimaryKey() interface{} {
 }
 
 type Batch struct {
-	ID         string `db:"id" json:"id" pk:"true"`
-	BatchName  *string `db:"batch_name" json:"batch_name,omitempty"`
-	BatchType  NotificationBatchType `db:"batch_type" json:"batch_type"`
+	ID        string                `db:"id" json:"id" pk:"true"`
+	BatchName *string               `db:"batch_name" json:"batch_name,omitempty"`
+	BatchType NotificationBatchType `db:"batch_type" json:"batch_type"`
 
 	// Target
 	TargetUserIDs pq.StringArray `db:"target_user_ids" json:"target_user_ids,omitempty"`
@@ -435,13 +435,13 @@ func (b *Batch) PrimaryKey() interface{} {
 }
 
 type Announcement struct {
-	ID              string `db:"id" json:"id" pk:"true"`
+	ID string `db:"id" json:"id" pk:"true"`
 
 	// Content
-	Title            string                `db:"title" json:"title"`
-	Message          string                `db:"message" json:"message"`
-	AnnouncementType *string               `db:"announcement_type" json:"announcement_type,omitempty"`
-	Severity         AnnouncementSeverity  `db:"severity" json:"severity"`
+	Title            string               `db:"title" json:"title"`
+	Message          string               `db:"message" json:"message"`
+	AnnouncementType *string              `db:"announcement_type" json:"announcement_type,omitempty"`
+	Severity         AnnouncementSeverity `db:"severity" json:"severity"`
 
 	// Display
 	IconURL         *string `db:"icon_url" json:"icon_url,omitempty"`
@@ -454,16 +454,16 @@ type Announcement struct {
 	ActionType  *string `db:"action_type" json:"action_type,omitempty"`
 
 	// Targeting
-	TargetAudience   string         `db:"target_audience" json:"target_audience"`
-	TargetUserIDs    pq.StringArray `db:"target_user_ids" json:"target_user_ids,omitempty"`
-	MinAppVersion    *string        `db:"min_app_version" json:"min_app_version,omitempty"`
-	MaxAppVersion    *string        `db:"max_app_version" json:"max_app_version,omitempty"`
-	TargetCountries  pq.StringArray `db:"target_countries" json:"target_countries,omitempty"`
+	TargetAudience  string         `db:"target_audience" json:"target_audience"`
+	TargetUserIDs   pq.StringArray `db:"target_user_ids" json:"target_user_ids,omitempty"`
+	MinAppVersion   *string        `db:"min_app_version" json:"min_app_version,omitempty"`
+	MaxAppVersion   *string        `db:"max_app_version" json:"max_app_version,omitempty"`
+	TargetCountries pq.StringArray `db:"target_countries" json:"target_countries,omitempty"`
 
 	// Display rules
-	DisplayFrequency   AnnouncementDisplayFrequency `db:"display_frequency" json:"display_frequency"`
-	MaxDisplayCount    int                          `db:"max_display_count" json:"max_display_count"`
-	DisplayPriority    int                          `db:"display_priority" json:"display_priority"`
+	DisplayFrequency AnnouncementDisplayFrequency `db:"display_frequency" json:"display_frequency"`
+	MaxDisplayCount  int                          `db:"max_display_count" json:"max_display_count"`
+	DisplayPriority  int                          `db:"display_priority" json:"display_priority"`
 
 	// Status
 	IsActive      bool `db:"is_active" json:"is_active"`
@@ -549,11 +549,11 @@ func (u *UserStat) PrimaryKey() interface{} {
 }
 
 type Subscription struct {
-	ID            string     `db:"id" json:"id" pk:"true"`
-	UserID        string     `db:"user_id" json:"user_id"`
-	TopicName     string     `db:"topic_name" json:"topic_name"`
-	IsSubscribed  bool       `db:"is_subscribed" json:"is_subscribed"`
-	SubscribedAt  time.Time  `db:"subscribed_at" json:"subscribed_at"`
+	ID             string     `db:"id" json:"id" pk:"true"`
+	UserID         string     `db:"user_id" json:"user_id"`
+	TopicName      string     `db:"topic_name" json:"topic_name"`
+	IsSubscribed   bool       `db:"is_subscribed" json:"is_subscribed"`
+	SubscribedAt   time.Time  `db:"subscribed_at" json:"subscribed_at"`
 	UnsubscribedAt *time.Time `db:"unsubscribed_at" json:"unsubscribed_at,omitempty"`
 }
 

@@ -47,10 +47,10 @@ func (c *DatabaseChecker) Check(ctx context.Context) health.CheckResult {
 		Status:    health.StatusHealthy,
 		Timestamp: time.Now(),
 		Details: map[string]interface{}{
-			"response_time_ms":    time.Since(start).Milliseconds(),
-			"open_connections":    stats.OpenConnections,
-			"in_use":              stats.InUse,
-			"idle":                stats.Idle,
+			"response_time_ms":     time.Since(start).Milliseconds(),
+			"open_connections":     stats.OpenConnections,
+			"in_use":               stats.InUse,
+			"idle":                 stats.Idle,
 			"max_open_connections": stats.MaxOpenConnections,
 		},
 	}

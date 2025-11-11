@@ -6,9 +6,9 @@ import (
 	repositoryModels "auth-service/internal/repo/models"
 	serviceModels "auth-service/internal/service/models"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
-	"shared/pkg/database/postgres/models"
 	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -39,7 +39,8 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 		IsNewLocation:     utils.PtrBool(false),
 	})
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(err, &appErr) {
 			h.log.Error("Failed to create login history record",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -53,11 +54,11 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 		}
 	}
 
-	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
+	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &dbModels.SecurityEvent{
 		UserID:          &userID,
-		EventType:       models.SecurityEventLoginFailed,
+		EventType:       dbModels.SecurityEventLoginFailed,
 		EventCategory:   utils.PtrString("authentication"),
-		Severity:        models.SecuritySeverityMedium,
+		Severity:        dbModels.SecuritySeverityMedium,
 		Status:          utils.PtrString("failed"),
 		Description:     utils.PtrString(fmt.Sprintf("User login attempt failed: %s", failureReason)),
 		IPAddress:       &locationInfo.IP,
@@ -69,7 +70,8 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 		Metadata:        nil,
 	})
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(err, &appErr) {
 			h.log.Error("Failed to log security event",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -106,7 +108,8 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 		IsNewLocation:     utils.PtrBool(false),
 	})
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(err, &appErr) {
 			h.log.Error("Failed to create login history record",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -120,12 +123,12 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 		}
 	}
 
-	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &models.SecurityEvent{
+	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &dbModels.SecurityEvent{
 		UserID:          &userID,
 		SessionID:       &session.SessionId,
-		EventType:       models.SecurityEventLogin,
+		EventType:       dbModels.SecurityEventLogin,
 		EventCategory:   utils.PtrString("authentication"),
-		Severity:        models.SecuritySeverityMedium,
+		Severity:        dbModels.SecuritySeverityMedium,
 		Status:          utils.PtrString("initiated"),
 		Description:     utils.PtrString("User login attempt initiated"),
 		IPAddress:       &locationInfo.IP,
@@ -137,7 +140,8 @@ func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceMo
 		Metadata:        nil,
 	})
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(err, &appErr) {
 			h.log.Error("Failed to log security event",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -196,7 +200,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, authErr := h.service.GetUserByEmail(r.Context(), loginRequest.Email)
 	if authErr != nil {
-		if appErr, ok := authErr.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(authErr, &appErr) {
 			h.log.Error("Failed to fetch user during login",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -223,7 +228,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	userResult, authErr := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
 	if authErr != nil {
-		if appErr, ok := authErr.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(authErr, &appErr) {
 			h.log.Error("Login failed",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -252,7 +258,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	session := &serviceModels.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(r.Context(), user.ID)
 	if sessErr != nil {
-		if appErr, ok := sessErr.(pkgErrors.AppError); ok {
+		var appErr pkgErrors.AppError
+		if errors.As(sessErr, &appErr) {
 			h.log.Error("Failed to fetch active session during login",
 				logger.String("error_code", appErr.Code()),
 				logger.String("service", appErr.Service()),
@@ -295,7 +302,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		if err != nil {
-			if appErr, ok := err.(pkgErrors.AppError); ok {
+			var appErr pkgErrors.AppError
+			if errors.As(err, &appErr) {
 				h.log.Error("Failed to create session after login",
 					logger.String("error_code", appErr.Code()),
 					logger.String("service", appErr.Service()),

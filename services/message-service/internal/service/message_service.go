@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"echo-backend/services/message-service/internal/model"
+	"echo-backend/services/message-service/internal/models"
 	"echo-backend/services/message-service/internal/repo"
 	"echo-backend/services/message-service/internal/websocket"
 
@@ -18,9 +18,9 @@ import (
 )
 
 type MessageService interface {
-	SendMessage(ctx context.Context, req *model.SendMessageRequest) (*model.Message, error)
-	GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) (*model.MessagesResponse, error)
-	GetMessage(ctx context.Context, messageID uuid.UUID) (*model.Message, error)
+	SendMessage(ctx context.Context, req *models.SendMessageRequest) (*models.Message, error)
+	GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) (*models.MessagesResponse, error)
+	GetMessage(ctx context.Context, messageID uuid.UUID) (*models.Message, error)
 	EditMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, newContent string) error
 	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
 	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error
@@ -52,8 +52,7 @@ func NewMessageService(
 }
 
 // SendMessage handles the complete flow of sending a message
-// This is the core function - production-ready with all checks and broadcasts
-func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessageRequest) (*model.Message, error) {
+func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessageRequest) (*models.Message, error) {
 	var canSend bool
 	var err error
 	canSend, err = s.repo.ValidateParticipant(ctx, req.ConversationID, req.SenderUserID)
@@ -80,7 +79,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 	}
 
 	now := time.Now()
-	message := &model.Message{
+	message := &models.Message{
 		ID:              uuid.New(),
 		ConversationID:  req.ConversationID,
 		SenderUserID:    req.SenderUserID,
@@ -104,7 +103,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 		message.Mentions = mentionsJSON
 	}
 
-	if req.Metadata != (model.Metadata{}) {
+	if req.Metadata != (models.Metadata{}) {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
 			return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal metadata").
@@ -181,9 +180,8 @@ func (s *messageService) SendMessage(ctx context.Context, req *model.SendMessage
 }
 
 // broadcastMessage handles the intelligent broadcasting of messages
-// Similar to WhatsApp: online users get WebSocket, offline get push notification
-func (s *messageService) broadcastMessage(message *model.Message, participantIDs []uuid.UUID, senderID uuid.UUID) {
-	event := model.MessageEvent{
+func (s *messageService) broadcastMessage(message *models.Message, participantIDs []uuid.UUID, senderID uuid.UUID) {
+	event := models.MessageEvent{
 		Type:      "new_message",
 		Message:   message,
 		Timestamp: time.Now(),
@@ -238,7 +236,7 @@ func (s *messageService) broadcastMessage(message *model.Message, participantIDs
 }
 
 // sendPushNotification sends a push notification for offline users via Kafka
-func (s *messageService) sendPushNotification(message *model.Message, recipientID uuid.UUID) {
+func (s *messageService) sendPushNotification(message *models.Message, recipientID uuid.UUID) {
 	notification := map[string]interface{}{
 		"type":            "new_message",
 		"user_id":         recipientID.String(),
@@ -281,7 +279,7 @@ func (s *messageService) sendPushNotification(message *model.Message, recipientI
 }
 
 // GetMessages retrieves messages for a conversation
-func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UUID, params *model.PaginationParams) (*model.MessagesResponse, error) {
+func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) (*models.MessagesResponse, error) {
 	messages, err := s.repo.GetMessages(ctx, conversationID, params)
 	if err != nil {
 		if appErr, ok := err.(pkgErrors.AppError); ok {
@@ -294,14 +292,14 @@ func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UU
 
 	hasMore := len(messages) == params.Limit
 
-	return &model.MessagesResponse{
+	return &models.MessagesResponse{
 		Messages: messages,
 		HasMore:  hasMore,
 	}, nil
 }
 
 // GetMessage retrieves a single message
-func (s *messageService) GetMessage(ctx context.Context, messageID uuid.UUID) (*model.Message, error) {
+func (s *messageService) GetMessage(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
 	message, err := s.repo.GetMessageByID(ctx, messageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get message: %w", err)
@@ -339,10 +337,10 @@ func (s *messageService) EditMessage(ctx context.Context, messageID uuid.UUID, u
 			return
 		}
 
-		editEvent := model.MessageEvent{
+		editEvent := models.MessageEvent{
 			Type:      "message_edited",
 			MessageID: messageID,
-			Message: &model.Message{
+			Message: &models.Message{
 				ID:      messageID,
 				Content: newContent,
 			},
@@ -378,7 +376,7 @@ func (s *messageService) DeleteMessage(ctx context.Context, messageID uuid.UUID,
 			return
 		}
 
-		deleteEvent := model.MessageEvent{
+		deleteEvent := models.MessageEvent{
 			Type:      "message_deleted",
 			MessageID: messageID,
 			UserID:    userID,
@@ -462,7 +460,7 @@ func (s *messageService) notifyDeliveryStatus(messageID, readerID uuid.UUID, sta
 	}
 
 	// Send notification to sender
-	event := model.MessageEvent{
+	event := models.MessageEvent{
 		Type:      fmt.Sprintf("message_%s", status),
 		MessageID: messageID,
 		UserID:    readerID,
@@ -493,7 +491,7 @@ func (s *messageService) SetTypingIndicator(ctx context.Context, conversationID,
 			return
 		}
 
-		typingEvent := model.MessageEvent{
+		typingEvent := models.MessageEvent{
 			Type:      "typing",
 			UserID:    userID,
 			Timestamp: time.Now(),

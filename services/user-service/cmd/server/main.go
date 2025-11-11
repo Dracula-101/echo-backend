@@ -175,6 +175,7 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
+			router.Middleware(coreMiddleware.InterceptUserId()),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
@@ -286,8 +287,8 @@ func main() {
 		WithCache(cacheClient).
 		WithLogger(log).
 		Build()
-
-	userHandler := handler.NewUserHandler(userService, tokenService, log)
+	locationService := service.NewLocationService(cfg.Server.LocationServiceEndpoint, log)
+	userHandler := handler.NewUserHandler(userService, locationService, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
