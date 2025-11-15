@@ -467,19 +467,3 @@ CREATE TABLE notifications.subscriptions (
     unsubscribed_at TIMESTAMPTZ,
     UNIQUE(user_id, topic_name)
 );
-
--- Indexes
-CREATE INDEX idx_notifications_user ON notifications.notifications(user_id);
-CREATE INDEX idx_notifications_type ON notifications.notifications(notification_type);
-CREATE INDEX idx_notifications_created ON notifications.notifications(created_at);
-CREATE INDEX idx_notifications_read ON notifications.notifications(is_read);
-CREATE INDEX idx_notifications_group ON notifications.notifications(group_key);
-CREATE INDEX idx_push_delivery_notification ON notifications.push_delivery_log(notification_id);
-CREATE INDEX idx_push_delivery_user ON notifications.push_delivery_log(user_id);
-CREATE INDEX idx_email_notifications_user ON notifications.email_notifications(user_id);
-CREATE INDEX idx_email_notifications_status ON notifications.email_notifications(status);
-CREATE INDEX idx_sms_notifications_user ON notifications.sms_notifications(user_id);
-CREATE INDEX idx_conversation_channels_user ON notifications.conversation_channels(user_id);
-CREATE INDEX idx_conversation_channels_conversation ON notifications.conversation_channels(conversation_id);
-CREATE INDEX idx_batches_status ON notifications.batches(status);
-CREATE INDEX idx_announcements_active ON notifications.announcements(is_active, starts_at, ends_at);

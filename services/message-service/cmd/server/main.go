@@ -128,17 +128,40 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 	return producer, nil
 }
 
-func setupAPIRoutes(builder *router.Builder, h *handler.MessageHandler, log logger.Logger) *router.Builder {
-	log.Debug("Registering message API routes")
+func setupAPIRoutes(
+	builder *router.Builder,
+	messageHandler *handler.MessageHandler,
+	conversationHandler *handler.ConversationHandler,
+	wsHandler *websocket.Handler,
+	log logger.Logger,
+) *router.Builder {
+	log.Debug("Registering API routes")
+
+	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get("/", h.GetMessages)
+		r.Get("/ws", wsHandler.HandleConnection)             // WebSocket connection
+		r.Post("/", messageHandler.SendMessage)              // Send a new message
+		r.Get("/", messageHandler.GetMessages)               // Get messages (with query params)
+		r.Put("/{id}", messageHandler.EditMessage)           // Edit a message
+		r.Delete("/{id}", messageHandler.DeleteMessage)      // Delete a message
+		r.Post("/read", messageHandler.MarkAsRead)           // Mark message as read
+		r.Post("/typing", messageHandler.SetTypingIndicator) // Set typing indicator
 	})
-	log.Debug("Message API routes registered successfully")
+
+	// Conversation endpoints
+	builder = builder.WithRoutesGroup("/conversations", func(rg *router.RouteGroup) {
+		rg.Post("", conversationHandler.CreateConversation) // Create new conversation
+		rg.Get("", conversationHandler.GetConversations)    // Get user's conversations
+	})
+
+	log.Debug("API routes registered successfully")
 	return builder
 }
 
 func createRouter(
-	httpHandler *handler.MessageHandler,
+	messageHandler *handler.MessageHandler,
+	conversationHandler *handler.ConversationHandler,
+	wsHandler *websocket.Handler,
 	healthHandler *health.Handler,
 	cfg *config.Config,
 	log logger.Logger,
@@ -160,13 +183,16 @@ func createRouter(
 				RequestsPerWindow: 100,
 				Window:            time.Minute,
 			})),
+			router.Middleware(middleware.InterceptUserId()),
+			router.Middleware(middleware.InterceptSessionId()),
+			router.Middleware(middleware.InterceptSessionToken()),
 		).
 		WithLateMiddleware(
 			router.Middleware(middleware.Recovery(log)),
 			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
-	builder = setupAPIRoutes(builder, httpHandler, log)
+	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, wsHandler, log)
 
 	r := builder.Build()
 	return r, nil
@@ -297,12 +323,21 @@ func main() {
 	}
 	log.Info("Health checks registered")
 
+	// Initialize repositories
 	messageRepo := repo.NewMessageRepository(dbClient)
+	conversationRepo := repo.NewConversationRepository(dbClient)
+
+	// Initialize services
 	messageService := service.NewMessageService(messageRepo, hub, kafkaProducer, log)
-	httpHandler := handler.NewMessageHandler(messageService, log)
+	conversationService := service.NewConversationService(conversationRepo, log)
+
+	// Initialize handlers
+	messageHandler := handler.NewMessageHandler(messageService, log)
+	conversationHandler := handler.NewConversationHandler(conversationService, log)
+	wsHandler := websocket.NewHandler(hub, log)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(httpHandler, healthHandler, cfg, log)
+	routerInstance, err := createRouter(messageHandler, conversationHandler, wsHandler, healthHandler, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

@@ -89,10 +89,10 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 		Status:          "sent",
 		IsEdited:        false,
 		IsDeleted:       false,
-		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
+	// Always set valid JSON for mentions (empty array if no mentions)
 	if len(req.Mentions) > 0 {
 		mentionsJSON, err := json.Marshal(req.Mentions)
 		if err != nil {
@@ -101,8 +101,11 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 				WithDetail("message_id", message.ID.String())
 		}
 		message.Mentions = mentionsJSON
+	} else {
+		message.Mentions = json.RawMessage("[]") // Empty array
 	}
 
+	// Always set valid JSON for metadata (empty object if no metadata)
 	if req.Metadata != (models.Metadata{}) {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
@@ -111,6 +114,8 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 				WithDetail("message_id", message.ID.String())
 		}
 		message.Metadata = metadataJSON
+	} else {
+		message.Metadata = json.RawMessage("{}") // Empty object
 	}
 
 	err = s.repo.CreateMessage(ctx, message)

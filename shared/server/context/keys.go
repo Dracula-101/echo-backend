@@ -7,6 +7,7 @@ const (
 	UserIDKey        ContextKey = "user_id"
 	ClientIPKey      ContextKey = "client_ip"
 	SessionIDKey     ContextKey = "session_id"
+	SessionTokenKey  ContextKey = "session_token"
 	TraceIDKey       ContextKey = "trace_id"
 	SpanIDKey        ContextKey = "span_id"
 	CorrelationIDKey ContextKey = "correlation_id"

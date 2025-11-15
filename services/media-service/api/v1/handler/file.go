@@ -55,7 +55,6 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 		Visibility:       output.Visibility,
 		DownloadCount:    output.DownloadCount,
 		ViewCount:        output.ViewCount,
-		CreatedAt:        output.CreatedAt,
 	}
 
 	response.JSONWithContext(ctx, r, w, http.StatusOK, responseDTO)

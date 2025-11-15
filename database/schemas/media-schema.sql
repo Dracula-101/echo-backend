@@ -360,17 +360,3 @@ CREATE TABLE media.storage_stats (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Indexes
-CREATE INDEX idx_files_uploader ON media.files(uploader_user_id);
-CREATE INDEX idx_files_type ON media.files(file_category);
-CREATE INDEX idx_files_created ON media.files(created_at);
-CREATE INDEX idx_files_hash ON media.files(content_hash);
-CREATE INDEX idx_files_status ON media.files(processing_status);
-CREATE INDEX idx_processing_queue_status ON media.processing_queue(status, priority);
-CREATE INDEX idx_albums_user ON media.albums(user_id);
-CREATE INDEX idx_album_files_album ON media.album_files(album_id);
-CREATE INDEX idx_file_tags_file ON media.file_tags(file_id);
-CREATE INDEX idx_shares_file ON media.shares(file_id);
-CREATE INDEX idx_access_log_file ON media.access_log(file_id);
-CREATE INDEX idx_access_log_created ON media.access_log(created_at);

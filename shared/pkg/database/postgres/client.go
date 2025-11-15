@@ -969,8 +969,12 @@ func getFieldsAndValues(src interface{}) ([]string, []interface{}) {
 		}
 
 		if fieldValue.Kind() == reflect.Struct && fieldValue.Type().String() == "time.Time" {
+			timeVal := fieldValue.Interface().(time.Time)
+			if timeVal.IsZero() {
+				continue
+			}
 			fields = append(fields, tag)
-			values = append(values, fieldValue.Interface())
+			values = append(values, timeVal)
 			continue
 		}
 

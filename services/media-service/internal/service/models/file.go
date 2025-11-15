@@ -25,7 +25,6 @@ type GetFileOutput struct {
 	Visibility       string
 	DownloadCount    int
 	ViewCount        int
-	CreatedAt        time.Time
 }
 
 // ListFilesInput represents input for listing files
@@ -76,7 +75,6 @@ type CreateAlbumOutput struct {
 	AlbumID   string
 	Title     string
 	AlbumType string
-	CreatedAt time.Time
 }
 
 // AddFileToAlbumInput represents input for adding a file to an album
@@ -139,7 +137,6 @@ type CreateShareOutput struct {
 	ShareToken string
 	ShareURL   string
 	ExpiresAt  *time.Time
-	CreatedAt  time.Time
 }
 
 // GetSharedFileInput represents input for getting a shared file

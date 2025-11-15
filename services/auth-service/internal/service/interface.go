@@ -37,7 +37,6 @@ type SessionServiceInterface interface {
 	CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, error)
 	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, error)
 	DeleteSessionByID(ctx context.Context, sessionID string) error
-	GenerateDeviceFingerprint(deviceID string, deviceOS string, deviceName string) string
 }
 
 // LocationServiceInterface defines the contract for location service operations

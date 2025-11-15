@@ -1,354 +1,354 @@
--- =====================================================
--- ANALYTICS VIEWS - Business Intelligence & Reporting
--- =====================================================
+-- -- =====================================================
+-- -- ANALYTICS VIEWS - Business Intelligence & Reporting
+-- -- =====================================================
 
-CREATE SCHEMA IF NOT EXISTS views;
+-- CREATE SCHEMA IF NOT EXISTS views;
 
--- =====================================================
--- USER ANALYTICS VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- USER ANALYTICS VIEWS
+-- -- =====================================================
 
--- User growth metrics
-CREATE OR REPLACE VIEW views.user_growth AS
-SELECT 
-    DATE_TRUNC('day', created_at) as date,
-    COUNT(*) as new_users,
-    SUM(COUNT(*)) OVER (ORDER BY DATE_TRUNC('day', created_at)) as total_users,
-    COUNT(*) FILTER (WHERE email_verified = TRUE) as verified_users,
-    COUNT(*) FILTER (WHERE two_factor_enabled = TRUE) as mfa_users
-FROM auth.users
-WHERE deleted_at IS NULL
-GROUP BY DATE_TRUNC('day', created_at)
-ORDER BY date DESC;
+-- -- User growth metrics
+-- CREATE OR REPLACE VIEW views.user_growth AS
+-- SELECT 
+--     DATE_TRUNC('day', created_at) as date,
+--     COUNT(*) as new_users,
+--     SUM(COUNT(*)) OVER (ORDER BY DATE_TRUNC('day', created_at)) as total_users,
+--     COUNT(*) FILTER (WHERE email_verified = TRUE) as verified_users,
+--     COUNT(*) FILTER (WHERE two_factor_enabled = TRUE) as mfa_users
+-- FROM auth.users
+-- WHERE deleted_at IS NULL
+-- GROUP BY DATE_TRUNC('day', created_at)
+-- ORDER BY date DESC;
 
--- Daily/Weekly/Monthly active users
-CREATE OR REPLACE VIEW views.active_users_summary AS
-SELECT 
-    CURRENT_DATE as report_date,
-    COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE THEN user_id END) as dau,
-    COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END) as wau,
-    COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '30 days' THEN user_id END) as mau,
-    ROUND(
-        COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE THEN user_id END)::NUMERIC / 
-        NULLIF(COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END), 0) * 100, 
-        2
-    ) as dau_wau_ratio,
-    ROUND(
-        COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END)::NUMERIC / 
-        NULLIF(COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '30 days' THEN user_id END), 0) * 100, 
-        2
-    ) as wau_mau_ratio
-FROM (
-    SELECT DISTINCT user_id, MAX(captured_at)::DATE as last_active
-    FROM location.user_locations
-    GROUP BY user_id
-) active_users;
+-- -- Daily/Weekly/Monthly active users
+-- CREATE OR REPLACE VIEW views.active_users_summary AS
+-- SELECT 
+--     CURRENT_DATE as report_date,
+--     COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE THEN user_id END) as dau,
+--     COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END) as wau,
+--     COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '30 days' THEN user_id END) as mau,
+--     ROUND(
+--         COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE THEN user_id END)::NUMERIC / 
+--         NULLIF(COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END), 0) * 100, 
+--         2
+--     ) as dau_wau_ratio,
+--     ROUND(
+--         COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END)::NUMERIC / 
+--         NULLIF(COUNT(DISTINCT CASE WHEN last_active >= CURRENT_DATE - INTERVAL '30 days' THEN user_id END), 0) * 100, 
+--         2
+--     ) as wau_mau_ratio
+-- FROM (
+--     SELECT DISTINCT user_id, MAX(captured_at)::DATE as last_active
+--     FROM location.user_locations
+--     GROUP BY user_id
+-- ) active_users;
 
--- User engagement levels
-CREATE OR REPLACE VIEW views.user_engagement AS
-SELECT 
-    u.id as user_id,
-    up.username,
-    up.display_name,
-    u.created_at as registration_date,
-    COALESCE(msg_stats.messages_sent, 0) as total_messages_sent,
-    COALESCE(msg_stats.conversations_count, 0) as active_conversations,
-    COALESCE(call_stats.calls_made, 0) as total_calls_made,
-    COALESCE(media_stats.files_uploaded, 0) as files_uploaded,
-    CASE 
-        WHEN COALESCE(msg_stats.messages_sent, 0) >= 100 THEN 'power_user'
-        WHEN COALESCE(msg_stats.messages_sent, 0) >= 20 THEN 'active_user'
-        WHEN COALESCE(msg_stats.messages_sent, 0) >= 5 THEN 'casual_user'
-        ELSE 'inactive_user'
-    END as engagement_level,
-    uls.last_active
-FROM auth.users u
-LEFT JOIN users.profiles up ON up.user_id = u.id
-LEFT JOIN (
-    SELECT sender_user_id, COUNT(*) as messages_sent, COUNT(DISTINCT conversation_id) as conversations_count
-    FROM messages.messages
-    WHERE created_at >= NOW() - INTERVAL '30 days'
-    GROUP BY sender_user_id
-) msg_stats ON msg_stats.sender_user_id = u.id
-LEFT JOIN (
-    SELECT initiator_user_id, COUNT(*) as calls_made
-    FROM messages.calls
-    WHERE created_at >= NOW() - INTERVAL '30 days'
-    GROUP BY initiator_user_id
-) call_stats ON call_stats.initiator_user_id = u.id
-LEFT JOIN (
-    SELECT uploader_user_id, COUNT(*) as files_uploaded
-    FROM media.files
-    WHERE created_at >= NOW() - INTERVAL '30 days'
-    GROUP BY uploader_user_id
-) media_stats ON media_stats.uploader_user_id = u.id
-LEFT JOIN (
-    SELECT user_id, MAX(captured_at) as last_active
-    FROM location.user_locations
-    GROUP BY user_id
-) uls ON uls.user_id = u.id
-WHERE u.deleted_at IS NULL;
+-- -- User engagement levels
+-- CREATE OR REPLACE VIEW views.user_engagement AS
+-- SELECT 
+--     u.id as user_id,
+--     up.username,
+--     up.display_name,
+--     u.created_at as registration_date,
+--     COALESCE(msg_stats.messages_sent, 0) as total_messages_sent,
+--     COALESCE(msg_stats.conversations_count, 0) as active_conversations,
+--     COALESCE(call_stats.calls_made, 0) as total_calls_made,
+--     COALESCE(media_stats.files_uploaded, 0) as files_uploaded,
+--     CASE 
+--         WHEN COALESCE(msg_stats.messages_sent, 0) >= 100 THEN 'power_user'
+--         WHEN COALESCE(msg_stats.messages_sent, 0) >= 20 THEN 'active_user'
+--         WHEN COALESCE(msg_stats.messages_sent, 0) >= 5 THEN 'casual_user'
+--         ELSE 'inactive_user'
+--     END as engagement_level,
+--     uls.last_active
+-- FROM auth.users u
+-- LEFT JOIN users.profiles up ON up.user_id = u.id
+-- LEFT JOIN (
+--     SELECT sender_user_id, COUNT(*) as messages_sent, COUNT(DISTINCT conversation_id) as conversations_count
+--     FROM messages.messages
+--     WHERE created_at >= NOW() - INTERVAL '30 days'
+--     GROUP BY sender_user_id
+-- ) msg_stats ON msg_stats.sender_user_id = u.id
+-- LEFT JOIN (
+--     SELECT initiator_user_id, COUNT(*) as calls_made
+--     FROM messages.calls
+--     WHERE created_at >= NOW() - INTERVAL '30 days'
+--     GROUP BY initiator_user_id
+-- ) call_stats ON call_stats.initiator_user_id = u.id
+-- LEFT JOIN (
+--     SELECT uploader_user_id, COUNT(*) as files_uploaded
+--     FROM media.files
+--     WHERE created_at >= NOW() - INTERVAL '30 days'
+--     GROUP BY uploader_user_id
+-- ) media_stats ON media_stats.uploader_user_id = u.id
+-- LEFT JOIN (
+--     SELECT user_id, MAX(captured_at) as last_active
+--     FROM location.user_locations
+--     GROUP BY user_id
+-- ) uls ON uls.user_id = u.id
+-- WHERE u.deleted_at IS NULL;
 
--- =====================================================
--- MESSAGE ANALYTICS VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- MESSAGE ANALYTICS VIEWS
+-- -- =====================================================
 
--- Messaging activity overview
-CREATE OR REPLACE VIEW views.messaging_stats AS
-SELECT 
-    DATE_TRUNC('day', created_at) as date,
-    COUNT(*) as total_messages,
-    COUNT(DISTINCT sender_user_id) as active_senders,
-    COUNT(DISTINCT conversation_id) as active_conversations,
-    COUNT(*) FILTER (WHERE message_type = 'text') as text_messages,
-    COUNT(*) FILTER (WHERE message_type = 'image') as image_messages,
-    COUNT(*) FILTER (WHERE message_type = 'video') as video_messages,
-    COUNT(*) FILTER (WHERE message_type = 'audio') as audio_messages,
-    AVG(LENGTH(content)) FILTER (WHERE message_type = 'text') as avg_message_length,
-    COUNT(*) FILTER (WHERE is_edited = TRUE) as edited_messages,
-    COUNT(*) FILTER (WHERE is_deleted = TRUE) as deleted_messages
-FROM messages.messages
-WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-GROUP BY DATE_TRUNC('day', created_at)
-ORDER BY date DESC;
+-- -- Messaging activity overview
+-- CREATE OR REPLACE VIEW views.messaging_stats AS
+-- SELECT 
+--     DATE_TRUNC('day', created_at) as date,
+--     COUNT(*) as total_messages,
+--     COUNT(DISTINCT sender_user_id) as active_senders,
+--     COUNT(DISTINCT conversation_id) as active_conversations,
+--     COUNT(*) FILTER (WHERE message_type = 'text') as text_messages,
+--     COUNT(*) FILTER (WHERE message_type = 'image') as image_messages,
+--     COUNT(*) FILTER (WHERE message_type = 'video') as video_messages,
+--     COUNT(*) FILTER (WHERE message_type = 'audio') as audio_messages,
+--     AVG(LENGTH(content)) FILTER (WHERE message_type = 'text') as avg_message_length,
+--     COUNT(*) FILTER (WHERE is_edited = TRUE) as edited_messages,
+--     COUNT(*) FILTER (WHERE is_deleted = TRUE) as deleted_messages
+-- FROM messages.messages
+-- WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+-- GROUP BY DATE_TRUNC('day', created_at)
+-- ORDER BY date DESC;
 
--- Popular conversation types
-CREATE OR REPLACE VIEW views.conversation_stats AS
-SELECT 
-    conversation_type,
-    COUNT(*) as total_conversations,
-    AVG(member_count) as avg_members,
-    AVG(message_count) as avg_messages,
-    SUM(message_count) as total_messages,
-    COUNT(*) FILTER (WHERE is_active = TRUE) as active_conversations,
-    COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as new_this_week
-FROM messages.conversations
-GROUP BY conversation_type;
+-- -- Popular conversation types
+-- CREATE OR REPLACE VIEW views.conversation_stats AS
+-- SELECT 
+--     conversation_type,
+--     COUNT(*) as total_conversations,
+--     AVG(member_count) as avg_members,
+--     AVG(message_count) as avg_messages,
+--     SUM(message_count) as total_messages,
+--     COUNT(*) FILTER (WHERE is_active = TRUE) as active_conversations,
+--     COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as new_this_week
+-- FROM messages.conversations
+-- GROUP BY conversation_type;
 
--- Top active users (messaging)
-CREATE OR REPLACE VIEW views.top_messengers AS
-SELECT 
-    u.id as user_id,
-    up.username,
-    up.display_name,
-    COUNT(m.id) as messages_sent,
-    COUNT(DISTINCT m.conversation_id) as conversations,
-    COUNT(DISTINCT DATE_TRUNC('day', m.created_at)) as active_days,
-    MIN(m.created_at) as first_message,
-    MAX(m.created_at) as last_message
-FROM auth.users u
-JOIN users.profiles up ON up.user_id = u.id
-JOIN messages.messages m ON m.sender_user_id = u.id
-WHERE m.created_at >= NOW() - INTERVAL '30 days'
-AND m.is_deleted = FALSE
-GROUP BY u.id, up.username, up.display_name
-ORDER BY messages_sent DESC
-LIMIT 100;
+-- -- Top active users (messaging)
+-- CREATE OR REPLACE VIEW views.top_messengers AS
+-- SELECT 
+--     u.id as user_id,
+--     up.username,
+--     up.display_name,
+--     COUNT(m.id) as messages_sent,
+--     COUNT(DISTINCT m.conversation_id) as conversations,
+--     COUNT(DISTINCT DATE_TRUNC('day', m.created_at)) as active_days,
+--     MIN(m.created_at) as first_message,
+--     MAX(m.created_at) as last_message
+-- FROM auth.users u
+-- JOIN users.profiles up ON up.user_id = u.id
+-- JOIN messages.messages m ON m.sender_user_id = u.id
+-- WHERE m.created_at >= NOW() - INTERVAL '30 days'
+-- AND m.is_deleted = FALSE
+-- GROUP BY u.id, up.username, up.display_name
+-- ORDER BY messages_sent DESC
+-- LIMIT 100;
 
--- =====================================================
--- MEDIA ANALYTICS VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- MEDIA ANALYTICS VIEWS
+-- -- =====================================================
 
--- Media usage statistics
-CREATE OR REPLACE VIEW views.media_stats AS
-SELECT 
-    DATE_TRUNC('day', created_at) as date,
-    COUNT(*) as files_uploaded,
-    COUNT(DISTINCT uploader_user_id) as unique_uploaders,
-    SUM(file_size_bytes) as total_bytes,
-    pg_size_pretty(SUM(file_size_bytes)) as total_size,
-    AVG(file_size_bytes) as avg_file_size,
-    COUNT(*) FILTER (WHERE file_category = 'image') as images,
-    COUNT(*) FILTER (WHERE file_category = 'video') as videos,
-    COUNT(*) FILTER (WHERE file_category = 'audio') as audio,
-    COUNT(*) FILTER (WHERE file_category = 'document') as documents
-FROM media.files
-WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-AND deleted_at IS NULL
-GROUP BY DATE_TRUNC('day', created_at)
-ORDER BY date DESC;
+-- -- Media usage statistics
+-- CREATE OR REPLACE VIEW views.media_stats AS
+-- SELECT 
+--     DATE_TRUNC('day', created_at) as date,
+--     COUNT(*) as files_uploaded,
+--     COUNT(DISTINCT uploader_user_id) as unique_uploaders,
+--     SUM(file_size_bytes) as total_bytes,
+--     pg_size_pretty(SUM(file_size_bytes)) as total_size,
+--     AVG(file_size_bytes) as avg_file_size,
+--     COUNT(*) FILTER (WHERE file_category = 'image') as images,
+--     COUNT(*) FILTER (WHERE file_category = 'video') as videos,
+--     COUNT(*) FILTER (WHERE file_category = 'audio') as audio,
+--     COUNT(*) FILTER (WHERE file_category = 'document') as documents
+-- FROM media.files
+-- WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+-- AND deleted_at IS NULL
+-- GROUP BY DATE_TRUNC('day', created_at)
+-- ORDER BY date DESC;
 
--- Storage usage by user
-CREATE OR REPLACE VIEW views.storage_usage_top_users AS
-SELECT 
-    u.id as user_id,
-    up.username,
-    ss.total_files,
-    pg_size_pretty(ss.total_size_bytes) as total_size,
-    ss.storage_used_percentage,
-    pg_size_pretty(ss.storage_quota_bytes) as quota,
-    ss.images_count,
-    ss.videos_count,
-    ss.documents_count
-FROM media.storage_stats ss
-JOIN auth.users u ON u.id = ss.user_id
-JOIN users.profiles up ON up.user_id = u.id
-ORDER BY ss.total_size_bytes DESC
-LIMIT 100;
+-- -- Storage usage by user
+-- CREATE OR REPLACE VIEW views.storage_usage_top_users AS
+-- SELECT 
+--     u.id as user_id,
+--     up.username,
+--     ss.total_files,
+--     pg_size_pretty(ss.total_size_bytes) as total_size,
+--     ss.storage_used_percentage,
+--     pg_size_pretty(ss.storage_quota_bytes) as quota,
+--     ss.images_count,
+--     ss.videos_count,
+--     ss.documents_count
+-- FROM media.storage_stats ss
+-- JOIN auth.users u ON u.id = ss.user_id
+-- JOIN users.profiles up ON up.user_id = u.id
+-- ORDER BY ss.total_size_bytes DESC
+-- LIMIT 100;
 
--- =====================================================
--- REVENUE ANALYTICS VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- REVENUE ANALYTICS VIEWS
+-- -- =====================================================
 
--- Revenue overview
-CREATE OR REPLACE VIEW views.revenue_overview AS
-SELECT 
-    DATE_TRUNC('day', transaction_date) as date,
-    COUNT(*) as total_transactions,
-    COUNT(DISTINCT user_id) as unique_customers,
-    SUM(amount_usd) as total_revenue,
-    AVG(amount_usd) as avg_transaction_value,
-    COUNT(*) FILTER (WHERE transaction_type = 'subscription') as subscriptions,
-    COUNT(*) FILTER (WHERE transaction_type = 'in_app_purchase') as one_time_purchases,
-    SUM(amount_usd) FILTER (WHERE is_refunded = TRUE) as refund_amount
-FROM analytics.revenue_events
-WHERE status = 'completed'
-AND transaction_date >= CURRENT_DATE - INTERVAL '90 days'
-GROUP BY DATE_TRUNC('day', transaction_date)
-ORDER BY date DESC;
+-- -- Revenue overview
+-- CREATE OR REPLACE VIEW views.revenue_overview AS
+-- SELECT 
+--     DATE_TRUNC('day', transaction_date) as date,
+--     COUNT(*) as total_transactions,
+--     COUNT(DISTINCT user_id) as unique_customers,
+--     SUM(amount_usd) as total_revenue,
+--     AVG(amount_usd) as avg_transaction_value,
+--     COUNT(*) FILTER (WHERE transaction_type = 'subscription') as subscriptions,
+--     COUNT(*) FILTER (WHERE transaction_type = 'in_app_purchase') as one_time_purchases,
+--     SUM(amount_usd) FILTER (WHERE is_refunded = TRUE) as refund_amount
+-- FROM analytics.revenue_events
+-- WHERE status = 'completed'
+-- AND transaction_date >= CURRENT_DATE - INTERVAL '90 days'
+-- GROUP BY DATE_TRUNC('day', transaction_date)
+-- ORDER BY date DESC;
 
--- Top paying users
-CREATE OR REPLACE VIEW views.top_customers AS
-SELECT 
-    ltv.user_id,
-    up.username,
-    up.display_name,
-    ltv.total_revenue,
-    ltv.total_transactions,
-    ltv.average_transaction_value,
-    ltv.user_segment,
-    EXTRACT(DAY FROM NOW() - u.created_at) as customer_lifetime_days
-FROM analytics.user_ltv ltv
-JOIN auth.users u ON u.id = ltv.user_id
-JOIN users.profiles up ON up.user_id = u.id
-ORDER BY ltv.total_revenue DESC
-LIMIT 100;
+-- -- Top paying users
+-- CREATE OR REPLACE VIEW views.top_customers AS
+-- SELECT 
+--     ltv.user_id,
+--     up.username,
+--     up.display_name,
+--     ltv.total_revenue,
+--     ltv.total_transactions,
+--     ltv.average_transaction_value,
+--     ltv.user_segment,
+--     EXTRACT(DAY FROM NOW() - u.created_at) as customer_lifetime_days
+-- FROM analytics.user_ltv ltv
+-- JOIN auth.users u ON u.id = ltv.user_id
+-- JOIN users.profiles up ON up.user_id = u.id
+-- ORDER BY ltv.total_revenue DESC
+-- LIMIT 100;
 
--- =====================================================
--- SYSTEM HEALTH VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- SYSTEM HEALTH VIEWS
+-- -- =====================================================
 
--- Error summary
-CREATE OR REPLACE VIEW views.error_summary AS
-SELECT 
-    DATE_TRUNC('hour', created_at) as hour,
-    severity,
-    error_type,
-    COUNT(*) as error_count,
-    COUNT(DISTINCT user_id) as affected_users,
-    array_agg(DISTINCT service_name) as affected_services
-FROM analytics.error_logs
-WHERE created_at >= NOW() - INTERVAL '24 hours'
-AND is_resolved = FALSE
-GROUP BY DATE_TRUNC('hour', created_at), severity, error_type
-ORDER BY hour DESC, error_count DESC;
+-- -- Error summary
+-- CREATE OR REPLACE VIEW views.error_summary AS
+-- SELECT 
+--     DATE_TRUNC('hour', created_at) as hour,
+--     severity,
+--     error_type,
+--     COUNT(*) as error_count,
+--     COUNT(DISTINCT user_id) as affected_users,
+--     array_agg(DISTINCT service_name) as affected_services
+-- FROM analytics.error_logs
+-- WHERE created_at >= NOW() - INTERVAL '24 hours'
+-- AND is_resolved = FALSE
+-- GROUP BY DATE_TRUNC('hour', created_at), severity, error_type
+-- ORDER BY hour DESC, error_count DESC;
 
--- API performance
-CREATE OR REPLACE VIEW views.api_performance AS
-SELECT 
-    endpoint,
-    COUNT(*) as total_calls,
-    AVG(response_time_ms) as avg_response_time,
-    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms) as p95_response_time,
-    PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY response_time_ms) as p99_response_time,
-    COUNT(*) FILTER (WHERE is_error = TRUE) as error_count,
-    ROUND(COUNT(*) FILTER (WHERE is_error = TRUE)::NUMERIC / COUNT(*) * 100, 2) as error_rate
-FROM analytics.api_usage
-WHERE timestamp >= NOW() - INTERVAL '1 hour'
-GROUP BY endpoint
-ORDER BY total_calls DESC;
+-- -- API performance
+-- CREATE OR REPLACE VIEW views.api_performance AS
+-- SELECT 
+--     endpoint,
+--     COUNT(*) as total_calls,
+--     AVG(response_time_ms) as avg_response_time,
+--     PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms) as p95_response_time,
+--     PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY response_time_ms) as p99_response_time,
+--     COUNT(*) FILTER (WHERE is_error = TRUE) as error_count,
+--     ROUND(COUNT(*) FILTER (WHERE is_error = TRUE)::NUMERIC / COUNT(*) * 100, 2) as error_rate
+-- FROM analytics.api_usage
+-- WHERE timestamp >= NOW() - INTERVAL '1 hour'
+-- GROUP BY endpoint
+-- ORDER BY total_calls DESC;
 
--- =====================================================
--- RETENTION & COHORT VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- RETENTION & COHORT VIEWS
+-- -- =====================================================
 
--- User retention by registration week
-CREATE OR REPLACE VIEW views.user_retention AS
-SELECT 
-    DATE_TRUNC('week', u.created_at) as cohort_week,
-    COUNT(DISTINCT u.id) as cohort_size,
-    COUNT(DISTINCT CASE WHEN dau.date >= CURRENT_DATE - INTERVAL '7 days' THEN dau.user_id END) as active_users,
-    ROUND(
-        COUNT(DISTINCT CASE WHEN dau.date >= CURRENT_DATE - INTERVAL '7 days' THEN dau.user_id END)::NUMERIC / 
-        COUNT(DISTINCT u.id) * 100, 
-        2
-    ) as retention_rate
-FROM auth.users u
-LEFT JOIN analytics.daily_active_users dau ON dau.user_id = u.id
-WHERE u.created_at >= CURRENT_DATE - INTERVAL '12 weeks'
-AND u.deleted_at IS NULL
-GROUP BY DATE_TRUNC('week', u.created_at)
-ORDER BY cohort_week DESC;
+-- -- User retention by registration week
+-- CREATE OR REPLACE VIEW views.user_retention AS
+-- SELECT 
+--     DATE_TRUNC('week', u.created_at) as cohort_week,
+--     COUNT(DISTINCT u.id) as cohort_size,
+--     COUNT(DISTINCT CASE WHEN dau.date >= CURRENT_DATE - INTERVAL '7 days' THEN dau.user_id END) as active_users,
+--     ROUND(
+--         COUNT(DISTINCT CASE WHEN dau.date >= CURRENT_DATE - INTERVAL '7 days' THEN dau.user_id END)::NUMERIC / 
+--         COUNT(DISTINCT u.id) * 100, 
+--         2
+--     ) as retention_rate
+-- FROM auth.users u
+-- LEFT JOIN analytics.daily_active_users dau ON dau.user_id = u.id
+-- WHERE u.created_at >= CURRENT_DATE - INTERVAL '12 weeks'
+-- AND u.deleted_at IS NULL
+-- GROUP BY DATE_TRUNC('week', u.created_at)
+-- ORDER BY cohort_week DESC;
 
--- =====================================================
--- LOCATION & DEMOGRAPHICS VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- LOCATION & DEMOGRAPHICS VIEWS
+-- -- =====================================================
 
--- User distribution by location
-CREATE OR REPLACE VIEW views.user_location_stats AS
-SELECT 
-    up.country_code,
-    COUNT(DISTINCT up.user_id) as total_users,
-    COUNT(DISTINCT dau.user_id) as active_users_30d,
-    ROUND(
-        COUNT(DISTINCT dau.user_id)::NUMERIC / 
-        NULLIF(COUNT(DISTINCT up.user_id), 0) * 100, 
-        2
-    ) as activity_rate
-FROM users.profiles up
-LEFT JOIN analytics.daily_active_users dau ON dau.user_id = up.user_id 
-    AND dau.date >= CURRENT_DATE - INTERVAL '30 days'
-WHERE up.country_code IS NOT NULL
-GROUP BY up.country_code
-ORDER BY total_users DESC;
+-- -- User distribution by location
+-- CREATE OR REPLACE VIEW views.user_location_stats AS
+-- SELECT 
+--     up.country_code,
+--     COUNT(DISTINCT up.user_id) as total_users,
+--     COUNT(DISTINCT dau.user_id) as active_users_30d,
+--     ROUND(
+--         COUNT(DISTINCT dau.user_id)::NUMERIC / 
+--         NULLIF(COUNT(DISTINCT up.user_id), 0) * 100, 
+--         2
+--     ) as activity_rate
+-- FROM users.profiles up
+-- LEFT JOIN analytics.daily_active_users dau ON dau.user_id = up.user_id 
+--     AND dau.date >= CURRENT_DATE - INTERVAL '30 days'
+-- WHERE up.country_code IS NOT NULL
+-- GROUP BY up.country_code
+-- ORDER BY total_users DESC;
 
--- =====================================================
--- MODERATION VIEWS
--- =====================================================
+-- -- =====================================================
+-- -- MODERATION VIEWS
+-- -- =====================================================
 
--- Moderation queue
-CREATE OR REPLACE VIEW views.moderation_queue AS
-SELECT 
-    mr.id as report_id,
-    mr.report_type,
-    mr.status,
-    mr.priority,
-    m.id as message_id,
-    m.content,
-    m.sender_user_id,
-    up.username as sender_username,
-    mr.reporter_user_id,
-    mr.created_at as reported_at,
-    mr.description
-FROM messages.message_reports mr
-JOIN messages.messages m ON m.id = mr.message_id
-JOIN users.profiles up ON up.user_id = m.sender_user_id
-WHERE mr.status = 'pending'
-ORDER BY 
-    CASE mr.priority 
-        WHEN 'high' THEN 1 
-        WHEN 'medium' THEN 2 
-        ELSE 3 
-    END,
-    mr.created_at;
+-- -- Moderation queue
+-- CREATE OR REPLACE VIEW views.moderation_queue AS
+-- SELECT 
+--     mr.id as report_id,
+--     mr.report_type,
+--     mr.status,
+--     mr.priority,
+--     m.id as message_id,
+--     m.content,
+--     m.sender_user_id,
+--     up.username as sender_username,
+--     mr.reporter_user_id,
+--     mr.created_at as reported_at,
+--     mr.description
+-- FROM messages.message_reports mr
+-- JOIN messages.messages m ON m.id = mr.message_id
+-- JOIN users.profiles up ON up.user_id = m.sender_user_id
+-- WHERE mr.status = 'pending'
+-- ORDER BY 
+--     CASE mr.priority 
+--         WHEN 'high' THEN 1 
+--         WHEN 'medium' THEN 2 
+--         ELSE 3 
+--     END,
+--     mr.created_at;
 
--- =====================================================
--- GRANT PERMISSIONS
--- =====================================================
+-- -- =====================================================
+-- -- GRANT PERMISSIONS
+-- -- =====================================================
 
-GRANT USAGE ON SCHEMA views TO app_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA views TO app_user;
+-- GRANT USAGE ON SCHEMA views TO app_user;
+-- GRANT SELECT ON ALL TABLES IN SCHEMA views TO app_user;
 
--- For admins/analysts
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'analyst') THEN
-        CREATE ROLE analyst;
-    END IF;
-END
-$$;
+-- -- For admins/analysts
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'analyst') THEN
+--         CREATE ROLE analyst;
+--     END IF;
+-- END
+-- $$;
 
-GRANT USAGE ON SCHEMA views TO analyst;
-GRANT SELECT ON ALL TABLES IN SCHEMA views TO analyst;
-GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO analyst;
-GRANT SELECT ON ALL TABLES IN SCHEMA audit TO analyst;
+-- GRANT USAGE ON SCHEMA views TO analyst;
+-- GRANT SELECT ON ALL TABLES IN SCHEMA views TO analyst;
+-- GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO analyst;
+-- GRANT SELECT ON ALL TABLES IN SCHEMA audit TO analyst;

@@ -409,22 +409,3 @@ CREATE TABLE location.vpn_detection_log (
     detected_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Indexes
-CREATE INDEX idx_ip_addresses_ip ON location.ip_addresses(ip_address);
-CREATE INDEX idx_ip_addresses_country ON location.ip_addresses(country_code);
-CREATE INDEX idx_user_locations_user ON location.user_locations(user_id);
-CREATE INDEX idx_user_locations_created ON location.user_locations(created_at);
-CREATE INDEX idx_user_locations_country ON location.user_locations(country);
-CREATE INDEX idx_location_shares_user ON location.location_shares(user_id);
-CREATE INDEX idx_location_shares_active ON location.location_shares(is_active);
-CREATE INDEX idx_places_location ON location.places(latitude, longitude);
-CREATE INDEX idx_places_google_id ON location.places(google_place_id);
-CREATE INDEX idx_check_ins_user ON location.check_ins(user_id);
-CREATE INDEX idx_check_ins_place ON location.check_ins(place_id);
-CREATE INDEX idx_geofences_user ON location.geofences(user_id);
-CREATE INDEX idx_geofence_events_geofence ON location.geofence_events(geofence_id);
-CREATE INDEX idx_nearby_users_user ON location.nearby_users(user_id);
-CREATE INDEX idx_nearby_users_detected ON location.nearby_users(detected_at);
-CREATE INDEX idx_ip_blacklist_ip ON location.ip_blacklist(ip_address);
-CREATE INDEX idx_ip_blacklist_active ON location.ip_blacklist(is_active);

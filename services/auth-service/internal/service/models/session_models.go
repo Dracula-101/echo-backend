@@ -3,6 +3,7 @@ package models
 import (
 	dbModels "shared/pkg/database/postgres/models"
 	"shared/server/request"
+	"time"
 )
 
 type CreateSessionInput struct {
@@ -19,11 +20,11 @@ type CreateSessionInput struct {
 	FCMToken        string
 	APNSToken       string
 	SessionType     dbModels.SessionType
+	ExpiresAt       time.Time
 	Metadata        map[string]interface{}
 }
 
 type CreateSessionOutput struct {
-	SessionId         string
-	SessionToken      string
-	DeviceFingerprint string
+	SessionId    string
+	SessionToken string
 }

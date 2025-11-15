@@ -19,7 +19,7 @@ type User struct {
 	AccountLockedUntil     *time.Time           `db:"account_locked_until"`
 	FailedLoginAttempts    int                  `db:"failed_login_attempts"`
 	RequiresPasswordChange bool                 `db:"requires_password_change"`
-	CreatedAt              time.Time            `db:"created_at"`
+	CreatedAt              *time.Time           `db:"created_at"`
 	UpdatedAt              time.Time            `db:"updated_at"`
 	DeletedAt              *time.Time           `db:"deleted_at"`
 }

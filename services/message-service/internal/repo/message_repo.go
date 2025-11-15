@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"echo-backend/services/message-service/internal/models"
-	"encoding/json"
 	"fmt"
 
 	"shared/pkg/database"
@@ -60,18 +59,7 @@ func (r *messageRepository) CreateMessage(ctx context.Context, msg *models.Messa
 		RETURNING id, created_at, updated_at
 	`
 
-	mentionsJSON, err := json.Marshal(msg.Mentions)
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal mentions").
-			WithDetail("message_id", msg.ID.String())
-	}
-
-	metadataJSON, err := json.Marshal(msg.Metadata)
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal metadata").
-			WithDetail("message_id", msg.ID.String())
-	}
-
+	// Mentions and Metadata are already json.RawMessage from the service layer
 	row := r.db.QueryRow(ctx, query,
 		msg.ID,
 		msg.ConversationID,
@@ -80,12 +68,12 @@ func (r *messageRepository) CreateMessage(ctx context.Context, msg *models.Messa
 		msg.Content,
 		msg.MessageType,
 		msg.Status,
-		mentionsJSON,
-		metadataJSON,
+		msg.Mentions,
+		msg.Metadata,
 		msg.CreatedAt,
 		msg.UpdatedAt,
 	)
-	err = row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt)
+	err := row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt)
 
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create message").

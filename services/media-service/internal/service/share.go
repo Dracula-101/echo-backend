@@ -73,7 +73,6 @@ func (s *MediaService) CreateShare(ctx context.Context, input models.CreateShare
 		ShareToken: token,
 		ShareURL:   shareURL,
 		ExpiresAt:  expiresAt,
-		CreatedAt:  time.Now(),
 	}, nil
 }
 

@@ -79,7 +79,6 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.
 		FailedLoginAttempts:    user.FailedLoginAttempts,
 		RequiresPasswordChange: user.RequiresPasswordChange,
 		DeletedAt:              user.DeletedAt,
-		CreatedAt:              user.CreatedAt,
 		UpdatedAt:              user.UpdatedAt,
 	}, nil
 }
@@ -242,7 +241,6 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 			PhoneVerified:    user.PhoneVerified,
 			AccountStatus:    user.AccountStatus,
 			TFAEnabled:       user.TwoFactorEnabled,
-			CreatedAt:        user.CreatedAt.Unix(),
 			UpdatedAt:        user.UpdatedAt.Unix(),
 		},
 		Session: dto.Session{

@@ -176,6 +176,9 @@ func RequestCompletedLogger(log logger.Logger) Handler {
 			if userID := GetUserID(r.Context()); userID != "" {
 				fields = append(fields, logger.String("user_id", userID))
 			}
+			if sessionID := GetSessionID(r.Context()); sessionID != "" {
+				fields = append(fields, logger.String("session_id", sessionID))
+			}
 
 			statusCode := wrapped.statusCode
 			log.Request(
@@ -375,6 +378,13 @@ func GetCorrelationID(ctx context.Context) string {
 
 func GetUserID(ctx context.Context) string {
 	if id, ok := ctx.Value(sContext.UserIDKey).(string); ok {
+		return id
+	}
+	return ""
+}
+
+func GetSessionID(ctx context.Context) string {
+	if id, ok := ctx.Value(sContext.SessionIDKey).(string); ok {
 		return id
 	}
 	return ""
@@ -883,6 +893,31 @@ func InterceptUserId() Handler {
 			}
 
 			response.UnauthorizedError(r.Context(), r, w, "Missing or Invalid Auth Token", errors.New("missing user id in header"))
+		})
+	}
+}
+
+func InterceptSessionId() Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sessionID := r.Header.Get("X-Session-ID")
+			if sessionID != "" {
+				ctx := context.WithValue(r.Context(), sContext.SessionIDKey, sessionID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			response.UnauthorizedError(r.Context(), r, w, "Missing or Invalid Session Token", errors.New("missing session id in header"))
+		})
+	}
+}
+
+func InterceptSessionToken() Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sessionToken := r.Header.Get("X-Session-Token")
+			ctx := context.WithValue(r.Context(), sContext.SessionTokenKey, sessionToken)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

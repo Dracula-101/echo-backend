@@ -41,23 +41,9 @@ type SessionRepositoryInterface interface {
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
-// SecurityEventRepositoryInterface defines the contract for security event repository operations
-type SecurityEventRepositoryInterface interface {
-	// Security event management
-	LogSecurityEvent(ctx context.Context, event *models.SecurityEvent) pkgErrors.AppError
-	GetSecurityEventsByUserID(ctx context.Context, userID string, limit int) ([]*models.SecurityEvent, error)
-	GetSecurityEventByID(ctx context.Context, id string) (*models.SecurityEvent, error)
-	GetSuspiciousEvents(ctx context.Context, userID string, limit int) ([]*models.SecurityEvent, error)
-	GetEventsByType(ctx context.Context, userID string, eventType string, limit int) ([]*models.SecurityEvent, error)
-	CountEventsBySeverity(ctx context.Context, userID string, severity string, duration string) (int, error)
-	DeleteSecurityEventsByUserID(ctx context.Context, userID string) pkgErrors.AppError
-	DeleteSecurityEventByID(ctx context.Context, id string) pkgErrors.AppError
-}
-
 // Compile-time interface compliance checks
 var (
-	_ AuthRepositoryInterface          = (*AuthRepository)(nil)
-	_ LoginHistoryRepositoryInterface  = (*LoginHistoryRepo)(nil)
-	_ SessionRepositoryInterface       = (*SessionRepo)(nil)
-	_ SecurityEventRepositoryInterface = (*SecurityEventRepo)(nil)
+	_ AuthRepositoryInterface         = (*AuthRepository)(nil)
+	_ LoginHistoryRepositoryInterface = (*LoginHistoryRepo)(nil)
+	_ SessionRepositoryInterface      = (*SessionRepo)(nil)
 )

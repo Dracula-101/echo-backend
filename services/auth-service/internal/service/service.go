@@ -17,7 +17,6 @@ type AuthService struct {
 	cfg            *config.AuthConfig
 	log            logger.Logger
 	*repository.LoginHistoryRepo
-	*repository.SecurityEventRepo
 }
 
 func NewAuthServiceBuilder() *AuthServiceBuilder {
@@ -25,14 +24,13 @@ func NewAuthServiceBuilder() *AuthServiceBuilder {
 }
 
 type AuthServiceBuilder struct {
-	repo              *repository.AuthRepository
-	loginHistoryRepo  *repository.LoginHistoryRepo
-	securityEventRepo *repository.SecurityEventRepo
-	tokenService      token.JWTTokenService
-	hashingService    hashing.HashingService
-	cache             cache.Cache
-	cfg               *config.AuthConfig
-	log               logger.Logger
+	repo             *repository.AuthRepository
+	loginHistoryRepo *repository.LoginHistoryRepo
+	tokenService     token.JWTTokenService
+	hashingService   hashing.HashingService
+	cache            cache.Cache
+	cfg              *config.AuthConfig
+	log              logger.Logger
 }
 
 func (b *AuthServiceBuilder) WithRepo(repo *repository.AuthRepository) *AuthServiceBuilder {
@@ -42,11 +40,6 @@ func (b *AuthServiceBuilder) WithRepo(repo *repository.AuthRepository) *AuthServ
 
 func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo *repository.LoginHistoryRepo) *AuthServiceBuilder {
 	b.loginHistoryRepo = repo
-	return b
-}
-
-func (b *AuthServiceBuilder) WithSecurityEventRepo(repo *repository.SecurityEventRepo) *AuthServiceBuilder {
-	b.securityEventRepo = repo
 	return b
 }
 
@@ -82,9 +75,6 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 	if b.loginHistoryRepo == nil {
 		panic("LoginHistoryRepo is required")
 	}
-	if b.securityEventRepo == nil {
-		panic("SecurityEventRepo is required")
-	}
 	if b.cfg == nil {
 		panic("Config is required")
 	}
@@ -97,14 +87,13 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 	)
 
 	return &AuthService{
-		repo:              b.repo,
-		LoginHistoryRepo:  b.loginHistoryRepo,
-		SecurityEventRepo: b.securityEventRepo,
-		tokenService:      b.tokenService,
-		hashingService:    b.hashingService,
-		cache:             b.cache,
-		cfg:               b.cfg,
-		log:               b.log,
+		repo:             b.repo,
+		LoginHistoryRepo: b.loginHistoryRepo,
+		tokenService:     b.tokenService,
+		hashingService:   b.hashingService,
+		cache:            b.cache,
+		cfg:              b.cfg,
+		log:              b.log,
 	}
 }
 

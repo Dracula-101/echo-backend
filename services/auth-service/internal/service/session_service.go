@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"shared/pkg/cache"
 	"shared/pkg/database/postgres/models"
@@ -71,12 +70,6 @@ func (s *SessionService) generateSessionToken(userID string) (string, error) {
 	return token, nil
 }
 
-func (s *SessionService) GenerateDeviceFingerprint(deviceID string, deviceOS string, deviceName string) string {
-	data := fmt.Sprintf("%s|%s|%s", deviceID, deviceOS, deviceName)
-	hash := sha256.Sum256([]byte(data))
-	return hex.EncodeToString(hash[:])
-}
-
 func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, error) {
 	s.log.Info("Creating session",
 		logger.String("service", authErrors.ServiceName),
@@ -130,6 +123,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		Latitude:           &input.Latitude,
 		Longitude:          &input.Longitude,
 		IsMobile:           input.IsMobile,
+		ExpiresAt:          input.ExpiresAt,
 		IsTrustedDevice:    input.IsTrustedDevice,
 		FCMToken:           &input.FCMToken,
 		APNSToken:          &input.APNSToken,
@@ -166,19 +160,15 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		}
 	}
 
-	deviceFingerprint := s.GenerateDeviceFingerprint(input.Device.ID, input.Device.OS, input.Device.Name)
-
 	s.log.Info("Session created successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
 		logger.String("user_id", input.UserID),
-		logger.String("device_fingerprint", deviceFingerprint),
 	)
 
 	return &serviceModels.CreateSessionOutput{
-		SessionId:         sessionID,
-		SessionToken:      sessionToken,
-		DeviceFingerprint: deviceFingerprint,
+		SessionId:    sessionID,
+		SessionToken: sessionToken,
 	}, nil
 }
 

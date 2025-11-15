@@ -9,18 +9,17 @@ import (
 
 // GetFileResponse represents the response for getting a file
 type GetFileResponse struct {
-	FileID           string    `json:"file_id"`
-	FileName         string    `json:"file_name"`
-	FileSize         int64     `json:"file_size"`
-	FileType         string    `json:"file_type"`
-	StorageURL       string    `json:"storage_url"`
-	CDNURL           string    `json:"cdn_url,omitempty"`
-	ThumbnailURL     string    `json:"thumbnail_url,omitempty"`
-	ProcessingStatus string    `json:"processing_status"`
-	Visibility       string    `json:"visibility"`
-	DownloadCount    int       `json:"download_count"`
-	ViewCount        int       `json:"view_count"`
-	CreatedAt        time.Time `json:"created_at"`
+	FileID           string `json:"file_id"`
+	FileName         string `json:"file_name"`
+	FileSize         int64  `json:"file_size"`
+	FileType         string `json:"file_type"`
+	StorageURL       string `json:"storage_url"`
+	CDNURL           string `json:"cdn_url,omitempty"`
+	ThumbnailURL     string `json:"thumbnail_url,omitempty"`
+	ProcessingStatus string `json:"processing_status"`
+	Visibility       string `json:"visibility"`
+	DownloadCount    int    `json:"download_count"`
+	ViewCount        int    `json:"view_count"`
 }
 
 type ListFilesRequest struct {

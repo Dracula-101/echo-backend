@@ -294,15 +294,10 @@ CREATE TABLE users.reports (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX idx_profiles_user ON users.profiles(user_id);
-CREATE INDEX idx_profiles_username ON users.profiles(username);
-CREATE INDEX idx_contacts_user ON users.contacts(user_id);
-CREATE INDEX idx_contacts_contact_user ON users.contacts(contact_user_id);
-CREATE INDEX idx_contacts_status ON users.contacts(status);
-CREATE INDEX idx_blocked_users_user ON users.blocked_users(user_id);
-CREATE INDEX idx_blocked_users_blocked ON users.blocked_users(blocked_user_id);
-CREATE INDEX idx_status_history_user ON users.status_history(user_id);
-CREATE INDEX idx_status_history_expires ON users.status_history(expires_at);
-CREATE INDEX idx_activity_log_user ON users.activity_log(user_id);
-CREATE INDEX idx_activity_log_created ON users.activity_log(created_at);
+-- Comments
+COMMENT ON TABLE users.profiles IS 'Public user profile information';
+COMMENT ON TABLE users.contacts IS 'User relationships and contacts';
+COMMENT ON TABLE users.settings IS 'User application settings and preferences';
+COMMENT ON TABLE users.blocked_users IS 'Users that have been blocked';
+COMMENT ON TABLE users.status_history IS 'Temporary status updates (stories)';
+COMMENT ON TABLE users.devices IS 'User registered devices';

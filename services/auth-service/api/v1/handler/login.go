@@ -15,6 +15,7 @@ import (
 	"shared/pkg/utils"
 	"shared/server/request"
 	"shared/server/response"
+	"time"
 )
 
 func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceInfo, locationInfo *request.IpAddressInfo, userID string, userAgent string, failureReason string) {
@@ -27,16 +28,16 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 	)
 
 	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
-		DeviceFingerprint: h.sessionService.GenerateDeviceFingerprint(device.ID, device.OS, device.Name),
-		DeviceInfo:        device,
-		IPInfo:            *locationInfo,
-		UserID:            userID,
-		SessionID:         nil,
-		LoginMethod:       utils.PtrString("password"),
-		Status:            utils.PtrString("failure"),
-		UserAgent:         &userAgent,
-		IsNewDevice:       utils.PtrBool(false),
-		IsNewLocation:     utils.PtrBool(false),
+		DeviceInfo:    device,
+		IPInfo:        *locationInfo,
+		FailureReason: &failureReason,
+		UserID:        userID,
+		SessionID:     nil,
+		LoginMethod:   utils.PtrString("password"),
+		Status:        utils.PtrString("failure"),
+		UserAgent:     &userAgent,
+		IsNewDevice:   utils.PtrBool(false),
+		IsNewLocation: utils.PtrBool(false),
 	})
 	if err != nil {
 		var appErr pkgErrors.AppError
@@ -51,107 +52,6 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 			)
 		} else {
 			h.log.Error("Failed to create login history record", logger.Error(err))
-		}
-	}
-
-	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &dbModels.SecurityEvent{
-		UserID:          &userID,
-		EventType:       dbModels.SecurityEventLoginFailed,
-		EventCategory:   utils.PtrString("authentication"),
-		Severity:        dbModels.SecuritySeverityMedium,
-		Status:          utils.PtrString("failed"),
-		Description:     utils.PtrString(fmt.Sprintf("User login attempt failed: %s", failureReason)),
-		IPAddress:       &locationInfo.IP,
-		UserAgent:       &userAgent,
-		DeviceID:        &device.ID,
-		LocationCountry: &locationInfo.Country,
-		LocationCity:    &locationInfo.City,
-		IsSuspicious:    false,
-		Metadata:        nil,
-	})
-	if err != nil {
-		var appErr pkgErrors.AppError
-		if errors.As(err, &appErr) {
-			h.log.Error("Failed to log security event",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
-		} else {
-			h.log.Error("Failed to log security event", logger.Error(err))
-		}
-	}
-}
-
-func (h *AuthHandler) LogSuccessfulLogin(ctx context.Context, session *serviceModels.CreateSessionOutput, device request.DeviceInfo, locationInfo *request.IpAddressInfo, userID string, userAgent string, failureReason string) {
-	h.log.Info("Logging successful login",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-		logger.String("session_id", session.SessionId),
-		logger.String("ip_address", locationInfo.IP),
-		logger.String("device_os", device.OS),
-	)
-
-	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
-		DeviceFingerprint: session.DeviceFingerprint,
-		DeviceInfo:        device,
-		IPInfo:            *locationInfo,
-		UserID:            userID,
-		SessionID:         &session.SessionId,
-		LoginMethod:       utils.PtrString("password"),
-		Status:            utils.PtrString("success"),
-		UserAgent:         &userAgent,
-		IsNewDevice:       utils.PtrBool(false),
-		IsNewLocation:     utils.PtrBool(false),
-	})
-	if err != nil {
-		var appErr pkgErrors.AppError
-		if errors.As(err, &appErr) {
-			h.log.Error("Failed to create login history record",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
-		} else {
-			h.log.Error("Failed to create login history record", logger.Error(err))
-		}
-	}
-
-	err = h.service.SecurityEventRepo.LogSecurityEvent(ctx, &dbModels.SecurityEvent{
-		UserID:          &userID,
-		SessionID:       &session.SessionId,
-		EventType:       dbModels.SecurityEventLogin,
-		EventCategory:   utils.PtrString("authentication"),
-		Severity:        dbModels.SecuritySeverityMedium,
-		Status:          utils.PtrString("initiated"),
-		Description:     utils.PtrString("User login attempt initiated"),
-		IPAddress:       &locationInfo.IP,
-		UserAgent:       &userAgent,
-		DeviceID:        &device.ID,
-		LocationCountry: &locationInfo.Country,
-		LocationCity:    &locationInfo.City,
-		IsSuspicious:    false,
-		Metadata:        nil,
-	})
-	if err != nil {
-		var appErr pkgErrors.AppError
-		if errors.As(err, &appErr) {
-			h.log.Error("Failed to log security event",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
-		} else {
-			h.log.Error("Failed to log security event", logger.Error(err))
 		}
 	}
 }
@@ -296,6 +196,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				}
 				return dbModels.SessionTypeWeb
 			}(),
+			ExpiresAt: time.Unix(userResult.Session.ExpiresAt, 0),
 			Metadata: map[string]interface{}{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
@@ -321,10 +222,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	} else {
 		session.SessionId = activeSession.ID
 		session.SessionToken = activeSession.SessionToken
-		session.DeviceFingerprint = h.sessionService.GenerateDeviceFingerprint(*activeSession.DeviceID, *activeSession.DeviceOS, *activeSession.DeviceName)
 	}
-
-	h.LogSuccessfulLogin(r.Context(), session, deviceInfo, locationInfo, userResult.User.ID, userAgent, "User logged in successfully")
 
 	h.log.Info("Login successful",
 		logger.String("service", authErrors.ServiceName),
@@ -340,6 +238,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			"expires_at":    userResult.Session.ExpiresAt,
 			"refresh_token": userResult.Session.RefreshToken,
 			"session_token": session.SessionToken,
+			"session_id":    session.SessionId,
 		},
 	)
 }

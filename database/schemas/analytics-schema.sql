@@ -817,30 +817,3 @@ CREATE TABLE analytics.heatmap_data (
     date DATE DEFAULT CURRENT_DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Indexes for analytics performance
-CREATE INDEX idx_events_user ON analytics.events(user_id);
-CREATE INDEX idx_events_name ON analytics.events(event_name);
-CREATE INDEX idx_events_created ON analytics.events(created_at);
-CREATE INDEX idx_events_category ON analytics.events(event_category);
-CREATE INDEX idx_user_sessions_user ON analytics.user_sessions(user_id);
-CREATE INDEX idx_user_sessions_start ON analytics.user_sessions(session_start);
-CREATE INDEX idx_daily_active_date ON analytics.daily_active_users(date);
-CREATE INDEX idx_daily_active_user ON analytics.daily_active_users(user_id);
-CREATE INDEX idx_funnels_user ON analytics.funnels(user_id);
-CREATE INDEX idx_funnels_name ON analytics.funnels(funnel_name);
-CREATE INDEX idx_feature_usage_user ON analytics.feature_usage(user_id);
-CREATE INDEX idx_feature_usage_date ON analytics.feature_usage(date);
-CREATE INDEX idx_ab_assignments_test ON analytics.ab_test_assignments(test_id);
-CREATE INDEX idx_ab_assignments_user ON analytics.ab_test_assignments(user_id);
-CREATE INDEX idx_performance_metrics_type ON analytics.performance_metrics(metric_type);
-CREATE INDEX idx_performance_metrics_timestamp ON analytics.performance_metrics(timestamp);
-CREATE INDEX idx_error_logs_severity ON analytics.error_logs(severity);
-CREATE INDEX idx_error_logs_service ON analytics.error_logs(service_name);
-CREATE INDEX idx_error_logs_created ON analytics.error_logs(created_at);
-CREATE INDEX idx_revenue_events_user ON analytics.revenue_events(user_id);
-CREATE INDEX idx_revenue_events_date ON analytics.revenue_events(transaction_date);
-CREATE INDEX idx_page_views_user ON analytics.page_views(user_id);
-CREATE INDEX idx_page_views_viewed ON analytics.page_views(viewed_at);
-CREATE INDEX idx_api_usage_endpoint ON analytics.api_usage(endpoint);
-CREATE INDEX idx_api_usage_timestamp ON analytics.api_usage(timestamp);

@@ -12,7 +12,7 @@
 .PHONY: location-up location-down location-logs location-restart location-build location-rerun location-rebuild
 .PHONY: media-up media-down media-logs media-restart media-build media-rerun media-rebuild
 .PHONY: kafka-up kafka-down kafka-logs kafka-restart kafka-topics kafka-create-topics
-.PHONY: db-init db-seed db-connect db-reset db-migrate db-migrate-down db-migrate-status
+.PHONY: db-up db-init db-seed db-connect db-clean db-reset db-migrate db-migrate-down db-migrate-status
 .PHONY: redis-connect redis-flush test setup test-auth verify-security dev generate-routes update-gateway-routes
 
 # =============================================================================
@@ -139,6 +139,7 @@ help:
 	@echo "  make kafka-create-topics  Create required Kafka topics"
 	@echo ""
 	@echo "$(BOLD)Database:$(NC)"
+	@echo "  make db-up            Start PostgreSQL"
 	@echo "  make db-init          Initialize database schemas"
 	@echo "  make db-seed          Seed database with test data"
 	@echo "  make db-connect       Connect to PostgreSQL"
@@ -895,6 +896,21 @@ kafka-create-topics:
 # DATABASE
 # =============================================================================
 
+## db-up: Start PostgreSQL
+db-up:
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting PostgreSQL$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d postgres
+	@echo ""
+	@echo "$(GREEN)$(CHECK) PostgreSQL started$(NC)"
+	@echo "  URL: $(CYAN)localhost:5432$(NC)"
+	@echo "  User: $(CYAN)echo$(NC)"
+	@echo "  DB:   $(CYAN)echo_db$(NC)"
+	@echo ""
+
 ## db-init: Initialize database
 db-init:
 	@echo ""
@@ -933,6 +949,26 @@ db-connect:
 	@echo ""
 	@docker exec -it echo-postgres psql -U echo -d echo_db
 
+# db-clean: Remove all the data from the database
+db-clean:
+	@echo ""
+	@echo "$(BOLD)$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Database Clean $(NC)$(RED)$(CROSS) This will delete all data!$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd infra/scripts && chmod +x clean-db.sh && ./clean-db.sh; \
+		echo ""; \
+		echo "$(GREEN)$(CHECK) Database cleaned$(NC)"; \
+		echo ""; \
+	else \
+		echo ""; \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+		echo ""; \
+	fi
+
 ## db-reset: Reset database (drop and recreate)
 db-reset:
 	@echo ""
@@ -942,13 +978,31 @@ db-reset:
 	@echo ""
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
-	if [[ $REPLY =~ ^[Yy]$ ]]; then \
-		docker exec -it echo-postgres psql -U echo -c "DROP DATABASE IF EXISTS echo_db;"; \
-		docker exec -it echo-postgres psql -U echo -c "CREATE DATABASE echo_db;"; \
-		$(MAKE) db-init; \
-		echo ""; \
-		echo "$(GREEN)$(CHECK) Database reset complete$(NC)"; \
-		echo ""; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		if docker exec -it echo-postgres psql -U echo -c "DROP DATABASE IF EXISTS echo_db;" 2>/dev/null; then \
+			if docker exec -it echo-postgres psql -U echo -c "CREATE DATABASE echo_db;" 2>/dev/null; then \
+				if $(MAKE) db-init; then \
+					echo ""; \
+					echo "$(GREEN)$(CHECK) Database reset complete$(NC)"; \
+					echo ""; \
+				else \
+					echo ""; \
+					echo "$(RED)$(CROSS) Failed to initialize database$(NC)"; \
+					echo ""; \
+					exit 1; \
+				fi; \
+			else \
+				echo ""; \
+				echo "$(RED)$(CROSS) Failed to create database$(NC)"; \
+				echo ""; \
+				exit 1; \
+			fi; \
+		else \
+			echo ""; \
+			echo "$(RED)$(CROSS) Failed to drop database$(NC)"; \
+			echo ""; \
+			exit 1; \
+		fi; \
 	else \
 		echo ""; \
 		echo "$(YELLOW)Cancelled$(NC)"; \
@@ -1011,7 +1065,7 @@ redis-flush:
 	@echo ""
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
-	if [[ $REPLY =~ ^[Yy]$ ]]; then \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		docker exec -it echo-redis redis-cli -a redis_password FLUSHALL; \
 		echo ""; \
 		echo "$(GREEN)$(CHECK) Redis flushed$(NC)"; \

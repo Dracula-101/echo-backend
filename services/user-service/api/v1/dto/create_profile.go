@@ -11,7 +11,7 @@ type CreateProfileRequest struct {
 	FirstName    string `json:"first_name" validate:"max=30"`
 	LastName     string `json:"last_name" validate:"max=30"`
 	Bio          string `json:"bio" validate:"max=160"`
-	AvatarURL    string `json:"avatar_url" validate:"omitempty,url"`
+	AvatarURL    string `json:"avatar_url" validate:"required,url"`
 	LanguageCode string `json:"language_code" validate:"omitempty,len=2"`
 	Timezone     string `json:"timezone" validate:"omitempty"`
 	CountryCode  string `json:"country_code" validate:"omitempty,len=2"`
@@ -63,7 +63,12 @@ func (cpr *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) (
 				})
 			}
 		case "AvatarURL":
-			if err.Tag() == "url" {
+			if err.Tag() == "required" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Avatar URL is required",
+					Code: request.REQUIRED_FIELD,
+				})
+			} else if err.Tag() == "url" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Msg:  "Avatar URL must be a valid URL",
 					Code: request.INVALID_FORMAT,

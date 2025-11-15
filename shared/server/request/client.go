@@ -4,8 +4,6 @@ import (
 	"net"
 	"shared/server/headers"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // DeviceInfo contains device information
@@ -88,7 +86,7 @@ func (h *RequestHandler) GetUserAgent() string {
 func (h *RequestHandler) GetDeviceInfo() DeviceInfo {
 	id := h.request.Header.Get(headers.XDeviceID)
 	if id == "" {
-		id = uuid.NewString()
+		id = "device-id"
 	}
 	name := h.request.Header.Get(headers.XDeviceName)
 	if name == "" {

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"media-service/internal/service/models"
 	dbModels "shared/pkg/database/postgres/models"
@@ -34,7 +33,6 @@ func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbum
 		AlbumID:   albumID,
 		Title:     input.Title,
 		AlbumType: input.AlbumType,
-		CreatedAt: time.Now(),
 	}, nil
 }
 
@@ -67,7 +65,6 @@ func (s *MediaService) GetAlbum(ctx context.Context, input models.GetAlbumInput)
 		AlbumType:   string(album.AlbumType),
 		FileCount:   album.FileCount,
 		Visibility:  string(album.Visibility),
-		CreatedAt:   album.CreatedAt,
 		UpdatedAt:   album.UpdatedAt,
 	}, nil
 }
@@ -99,7 +96,6 @@ func (s *MediaService) ListAlbums(ctx context.Context, input models.ListAlbumsIn
 			AlbumType:   string(album.AlbumType),
 			FileCount:   album.FileCount,
 			Visibility:  string(album.Visibility),
-			CreatedAt:   album.CreatedAt,
 			UpdatedAt:   album.UpdatedAt,
 		})
 	}

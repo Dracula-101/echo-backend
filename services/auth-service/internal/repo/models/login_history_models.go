@@ -3,7 +3,6 @@ package models
 import "shared/server/request"
 
 type CreateLoginHistoryInput struct {
-	DeviceFingerprint string
 	DeviceInfo        request.DeviceInfo
 	IPInfo            request.IpAddressInfo
 	UserID            string

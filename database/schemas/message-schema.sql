@@ -413,19 +413,3 @@ CREATE TABLE messages.conversation_settings (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Indexes for performance
-CREATE INDEX idx_conversations_creator ON messages.conversations(creator_user_id);
-CREATE INDEX idx_conversations_last_message ON messages.conversations(last_message_at);
-CREATE INDEX idx_participants_conversation ON messages.conversation_participants(conversation_id);
-CREATE INDEX idx_participants_user ON messages.conversation_participants(user_id);
-CREATE INDEX idx_messages_conversation ON messages.messages(conversation_id);
-CREATE INDEX idx_messages_sender ON messages.messages(sender_user_id);
-CREATE INDEX idx_messages_created ON messages.messages(created_at);
-CREATE INDEX idx_messages_parent ON messages.messages(parent_message_id);
-CREATE INDEX idx_reactions_message ON messages.reactions(message_id);
-CREATE INDEX idx_reactions_user ON messages.reactions(user_id);
-CREATE INDEX idx_delivery_status_message ON messages.delivery_status(message_id);
-CREATE INDEX idx_delivery_status_user ON messages.delivery_status(user_id);
-CREATE INDEX idx_search_index_conversation ON messages.search_index(conversation_id);
-CREATE INDEX idx_search_index_content ON messages.search_index USING GIN(content_tsvector);

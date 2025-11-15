@@ -73,7 +73,7 @@ func (r *FileRepository) ListFilesByUser(ctx context.Context, userID string, lim
 		if err := rows.Scan(
 			&file.ID, &file.UploaderUserID, &file.FileName, &file.FileType,
 			&file.FileSizeBytes, &file.ThumbnailURL, &file.StorageURL,
-			&file.ProcessingStatus, &file.Visibility, &file.CreatedAt,
+			&file.ProcessingStatus, &file.Visibility,
 		); err != nil {
 			// Log scan errors but continue (partial success)
 			r.log.Debug("Failed to scan file row", logger.Error(err))
@@ -319,8 +319,7 @@ func (r *FileRepository) ListAlbumsByUser(ctx context.Context, userID string, li
 		if err := rows.Scan(
 			&album.ID, &album.UserID, &album.Title, &album.Description,
 			&album.CoverFileID, &album.AlbumType, &album.IsSystemAlbum,
-			&album.FileCount, &album.Visibility, &album.SortOrder,
-			&album.CreatedAt, &album.UpdatedAt,
+			&album.FileCount, &album.Visibility, &album.SortOrder, &album.UpdatedAt,
 		); err != nil {
 			// Log scan errors but continue (partial success)
 			r.log.Debug("Failed to scan album row", logger.Error(err))
@@ -398,7 +397,7 @@ func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, lim
 		if err := rows.Scan(
 			&file.ID, &file.UploaderUserID, &file.FileName, &file.FileType,
 			&file.FileSizeBytes, &file.ThumbnailURL, &file.StorageURL,
-			&file.ProcessingStatus, &file.Visibility, &file.CreatedAt,
+			&file.ProcessingStatus, &file.Visibility,
 		); err != nil {
 			// Log scan errors but continue (partial success)
 			r.log.Debug("Failed to scan file row", logger.Error(err))
@@ -449,7 +448,7 @@ func (r *FileRepository) GetShareByToken(ctx context.Context, token string) (*mo
 		&share.ID, &share.FileID, &share.SharedByUserID, &share.SharedWithUserID,
 		&share.SharedWithConversationID, &share.ShareToken, &share.AccessType,
 		&share.PasswordHash, &share.ExpiresAt, &share.MaxViews, &share.ViewCount,
-		&share.DownloadCount, &share.IsActive, &share.CreatedAt, &share.RevokedAt,
+		&share.DownloadCount, &share.IsActive, &share.RevokedAt,
 	)
 
 	if err != nil {
@@ -515,7 +514,7 @@ func (r *FileRepository) GetStorageStats(ctx context.Context, userID string) (*m
 		&stats.ImagesCount, &stats.ImagesSizeBytes, &stats.VideosCount, &stats.VideosSizeBytes,
 		&stats.AudioCount, &stats.AudioSizeBytes, &stats.DocumentsCount, &stats.DocumentsSizeBytes,
 		&stats.StorageQuotaBytes, &stats.StorageUsedPercentage, &stats.LastCalculatedAt,
-		&stats.CreatedAt, &stats.UpdatedAt,
+		&stats.UpdatedAt,
 	)
 
 	if err != nil {

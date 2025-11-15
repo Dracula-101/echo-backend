@@ -38,6 +38,10 @@ POSTGRES_DB=${POSTGRES_DB:-echo_db}
 
 # Check if PostgreSQL is running (connect to postgres default database)
 echo "[INFO] Checking PostgreSQL connection..."
+echo "       Host: $POSTGRES_HOST"
+echo "       Port: $POSTGRES_PORT"
+echo "       User: $POSTGRES_USER"  
+echo "       Database: $POSTGRES_DB"
 if ! PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d postgres -c '\q' 2>/dev/null; then
     echo "[ERROR] Cannot connect to PostgreSQL. Please check your connection settings."
     exit 1
@@ -76,6 +80,7 @@ echo "[INFO] Enabling PostgreSQL extensions..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB <<EOF
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "btree_gin";
 CREATE EXTENSION IF NOT EXISTS "btree_gist";
 EOF
@@ -132,6 +137,21 @@ if [ -d "$DATABASE_DIR/triggers" ]; then
     echo "   [INFO] Loaded $TRIGGER_COUNT trigger files"
 else
     echo "   [WARNING] Triggers directory not found"
+fi
+
+echo "[INFO] Creating database rls policies..."
+if [ -d "$DATABASE_DIR/rls" ]; then
+    RLS_COUNT=0
+    for rls in "$DATABASE_DIR/rls"/*.sql; do
+        if [ -f "$rls" ]; then
+            echo "   ✓ Loading $(basename $rls)"
+            PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -f "$rls" 2>&1 | grep -v "NOTICE" || true
+            RLS_COUNT=$((RLS_COUNT + 1))
+        fi
+    done
+    echo "   [INFO] Loaded $RLS_COUNT RLS policy files"
+else
+    echo "   [WARNING] RLS directory not found"
 fi
 
 echo "[INFO] Creating database views..."

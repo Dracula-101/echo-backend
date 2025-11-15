@@ -314,7 +314,6 @@ func main() {
 	locationService := service.NewLocationService(cfg.LocationService.Endpoint, log)
 
 	loginHistoryRepo := repository.NewLoginHistoryRepo(dbClient, log)
-	securityEventRepo := repository.NewSecurityEventRepo(dbClient, log)
 
 	sessionRepo := repository.NewSessionRepo(dbClient, log)
 	sessionService := service.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
@@ -323,7 +322,6 @@ func main() {
 	authService := service.NewAuthServiceBuilder().
 		WithRepo(authRepo).
 		WithLoginHistoryRepo(loginHistoryRepo).
-		WithSecurityEventRepo(securityEventRepo).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
 		WithCache(cacheClient).
