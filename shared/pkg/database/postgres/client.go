@@ -294,6 +294,18 @@ func (c *client) FindOne(ctx context.Context, model database.Model, query string
 	return nil
 }
 
+func (c *client) FindOneAndUpdate(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
+	nargs := normalizeArgs(args)
+	c.logger.Debug("FindOneAndUpdate", logger.String("query", query))
+
+	row := c.db.QueryRowContext(ctx, query, nargs...)
+	if err := scanStruct(row, dest); err != nil {
+		c.logDatabaseError("FindOneAndUpdate", query, nargs, err)
+		return wrapDatabaseError(err, "FindOneAndUpdate", "Table", query)
+	}
+	return nil
+}
+
 func (c *client) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("FindMany", logger.String("query", query))
@@ -305,7 +317,7 @@ func (c *client) FindMany(ctx context.Context, dest interface{}, query string, a
 	}
 	defer rows.Close()
 
-	if err := scanStructs(rows, dest); err != nil {
+	if err := scanStructs(rows, dest, c.logger); err != nil {
 		c.logDatabaseError("FindMany:Scan", query, nargs, err)
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan results").
 			WithDetail("operation", "FindMany")
@@ -348,13 +360,13 @@ func (c *client) Query(ctx context.Context, query string, args ...interface{}) (
 		c.logDatabaseError("Query", query, nargs, err)
 		return nil, wrapDatabaseError(err, "Query", "", query)
 	}
-	return &rowsWrapper{rows: rows}, nil
+	return &rowsWrapper{rows: rows, log: c.logger}, nil
 }
 
 func (c *client) QueryRow(ctx context.Context, query string, args ...interface{}) database.Row {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("QueryRow", logger.String("query", query))
-	return &rowWrapper{row: c.db.QueryRowContext(ctx, query, nargs...)}
+	return &rowWrapper{row: c.db.QueryRowContext(ctx, query, nargs...), log: c.logger}
 }
 
 func (c *client) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, error) {
@@ -776,7 +788,7 @@ func (t *transactionWrapper) FindMany(ctx context.Context, dest interface{}, que
 	}
 	defer rows.Close()
 
-	if err := scanStructs(rows, dest); err != nil {
+	if err := scanStructs(rows, dest, t.logger); err != nil {
 		t.logDatabaseError("FindMany:Scan", query, nargs, err)
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan results").
 			WithDetail("operation", "TX:FindMany")
@@ -838,25 +850,33 @@ func (t *transactionWrapper) Rollback() error {
 
 type rowsWrapper struct {
 	rows *sql.Rows
+	log  logger.Logger
 }
 
 func (r *rowsWrapper) Next() bool {
+	r.log.Debug("Advancing to next row")
 	return r.rows.Next()
 }
 
 func (r *rowsWrapper) Scan(dest ...interface{}) error {
+	r.log.Debug("Scanning row", logger.Int("num_fields", len(dest)))
 	return r.rows.Scan(dest...)
 }
 
 func (r *rowsWrapper) ScanOne(model database.Model) *database.DBError {
+	r.log.Debug("Scanning one row into model", logger.String("table", model.TableName()))
 	if !r.rows.Next() {
+		r.log.Debug("No rows found", logger.String("table", model.TableName()))
 		if err := r.rows.Err(); err != nil {
+			r.log.Error("Failed to iterate rows", logger.Error(err))
 			return database.WrapDBError(err, database.CodeDBInternal, "failed to iterate rows")
 
 		}
 		return database.NewDBError(database.CodeDBNoRows, "no rows found")
 	}
+	r.log.Debug("Row found, scanning into model", logger.String("table", model.TableName()))
 	if err := scanStructRows(r.rows, model); err != nil {
+		r.log.Error("Failed to scan row", logger.Error(err))
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan row")
 
 	}
@@ -873,13 +893,20 @@ func (r *rowsWrapper) Err() error {
 
 type rowWrapper struct {
 	row *sql.Row
+	log logger.Logger
 }
 
 func (r *rowWrapper) Scan(dest ...interface{}) error {
+	r.log.Debug("Scanning single row", logger.Int("num_fields", len(dest)))
 	return r.row.Scan(dest...)
 }
 
 func (r *rowWrapper) ScanOne(model database.Model) error {
+	r.log.Debug("Scanning single row into model",
+		logger.String("table", model.TableName()),
+		logger.String("operation", "ScanOne"),
+		logger.Any("model", model),
+	)
 	return scanStruct(r.row, model)
 }
 
@@ -1131,8 +1158,9 @@ func scanStructRows(rows *sql.Rows, dest interface{}) error {
 	return rows.Scan(dests...)
 }
 
-func scanStructs(rows *sql.Rows, dest interface{}) error {
+func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) error {
 	destValue := reflect.ValueOf(dest)
+	log.Debug("Scanning multiple rows into slice", logger.String("dest_type", destValue.Type().String()))
 	if destValue.Kind() != reflect.Ptr {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to slice")
 
@@ -1153,6 +1181,9 @@ func scanStructs(rows *sql.Rows, dest interface{}) error {
 	}
 
 	for rows.Next() {
+		log.Debug("Advancing to next row",
+			logger.String("element_type", elemType.String()),
+		)
 		elemValue := reflect.New(elemType)
 		elem := elemValue.Elem()
 		dests := make([]interface{}, 0, elemType.NumField())

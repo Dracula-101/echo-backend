@@ -140,6 +140,41 @@ func (s *UserService) CreateProfile(ctx context.Context, profile *models.Profile
 	var createdProfile *models.Profile
 
 	repoInput := toRepoProfile(profile)
+	existingProfile, err := s.repo.GetProfileByUserID(ctx, profile.UserID)
+	if err != nil {
+		s.log.Error("Failed to check existing profile",
+			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+	if existingProfile != nil {
+		s.log.Info("Profile already exists, Updating existing profile",
+			logger.String("user_id", profile.UserID),
+		)
+		result, err := s.repo.UpdateProfile(ctx, repository.UpdateProfileParams{
+			UserID:       profile.UserID,
+			Username:     &repoInput.Username,
+			DisplayName:  repoInput.DisplayName,
+			FirstName:    repoInput.FirstName,
+			LastName:     repoInput.LastName,
+			Bio:          repoInput.Bio,
+			AvatarURL:    repoInput.AvatarURL,
+			LanguageCode: &repoInput.LanguageCode,
+			Timezone:     repoInput.Timezone,
+			CountryCode:  repoInput.CountryCode,
+		})
+		if err != nil {
+			s.log.Error("Failed to update existing profile",
+				logger.String("user_id", profile.UserID),
+				logger.Error(err),
+			)
+			return nil, err
+		}
+		createdProfile = fromRepoProfile(result)
+		return s.profileToUser(createdProfile), nil
+	}
+
 	result, err := s.repo.CreateProfile(ctx, repoInput)
 	if err != nil {
 		s.log.Error("Failed to create profile",

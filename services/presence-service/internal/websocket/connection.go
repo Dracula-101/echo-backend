@@ -163,7 +163,6 @@ func (h *ConnectionHandler) HandleConnection(w http.ResponseWriter, r *http.Requ
 	go client.ReadPump(messageHandler)
 }
 
-// createMessageHandler creates a message handler with all callbacks wired to the manager
 func (h *ConnectionHandler) createMessageHandler(ctx context.Context, client *Client) MessageHandler {
 	return CreateMessageHandler(
 		h.logger,

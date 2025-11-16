@@ -97,7 +97,8 @@ BEGIN
         v_changes := v_changes || jsonb_build_object('avatar_url', jsonb_build_object('old', OLD.avatar_url, 'new', NEW.avatar_url));
     END IF;
     
-    IF jsonb_object_keys(v_changes) IS NOT NULL THEN
+    -- Check if v_changes is not an empty object
+    IF v_changes != '{}'::JSONB THEN
         PERFORM users.log_activity(
             NEW.user_id,
             'profile_update',

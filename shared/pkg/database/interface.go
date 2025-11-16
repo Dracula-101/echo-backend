@@ -20,6 +20,7 @@ type Database interface {
 
 	FindOne(ctx context.Context, model Model, query string, args ...interface{}) *DBError
 	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *DBError
+	FindOneAndUpdate(ctx context.Context, dest interface{}, query string, args ...interface{}) *DBError
 	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, error)
 	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, error)
 

@@ -13,6 +13,7 @@ import (
 	userErrors "user-service/internal/errors"
 
 	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	"shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 )
@@ -140,7 +141,8 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 		logger.String("user_id", userID),
 	)
 
-	query := `SELECT * FROM users.profiles WHERE user_id = $1 AND deactivated_at IS NULL LIMIT 1`
+	// user_id has UNIQUE constraint, so LIMIT 1 is unnecessary
+	query := `SELECT * FROM users.profiles WHERE user_id = $1 AND deactivated_at IS NULL`
 	row := r.db.QueryRow(ctx, query, userID)
 
 	var profile models.Profile
@@ -177,7 +179,8 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 		logger.String("username", username),
 	)
 
-	query := `SELECT * FROM users.profiles WHERE username = $1 AND deactivated_at IS NULL LIMIT 1`
+	// username has UNIQUE constraint, so LIMIT 1 is unnecessary
+	query := `SELECT * FROM users.profiles WHERE username = $1 AND deactivated_at IS NULL`
 	row := r.db.QueryRow(ctx, query, username)
 
 	var profile models.Profile
@@ -270,68 +273,82 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		logger.String("user_id", params.UserID),
 	)
 
-	// Build dynamic update query
-	query := `UPDATE users.profiles SET updated_at = NOW()`
-	args := []interface{}{params.UserID}
-	argPos := 2
+	// Build dynamic SET clause
+	setClauses := []string{"updated_at = NOW()"}
+	args := []interface{}{}
+	argPos := 1
 
 	if params.Username != nil {
-		query += fmt.Sprintf(", username = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("username = $%d", argPos))
 		args = append(args, *params.Username)
 		argPos++
 	}
 	if params.DisplayName != nil {
-		query += fmt.Sprintf(", display_name = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("display_name = $%d", argPos))
 		args = append(args, *params.DisplayName)
 		argPos++
 	}
 	if params.FirstName != nil {
-		query += fmt.Sprintf(", first_name = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("first_name = $%d", argPos))
 		args = append(args, *params.FirstName)
 		argPos++
 	}
 	if params.LastName != nil {
-		query += fmt.Sprintf(", last_name = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("last_name = $%d", argPos))
 		args = append(args, *params.LastName)
 		argPos++
 	}
 	if params.Bio != nil {
-		query += fmt.Sprintf(", bio = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("bio = $%d", argPos))
 		args = append(args, *params.Bio)
 		argPos++
 	}
 	if params.AvatarURL != nil {
-		query += fmt.Sprintf(", avatar_url = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("avatar_url = $%d", argPos))
 		args = append(args, *params.AvatarURL)
 		argPos++
 	}
 	if params.LanguageCode != nil {
-		query += fmt.Sprintf(", language_code = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("language_code = $%d", argPos))
 		args = append(args, *params.LanguageCode)
 		argPos++
 	}
 	if params.Timezone != nil {
-		query += fmt.Sprintf(", timezone = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("timezone = $%d", argPos))
 		args = append(args, *params.Timezone)
 		argPos++
 	}
 	if params.CountryCode != nil {
-		query += fmt.Sprintf(", country_code = $%d", argPos)
+		setClauses = append(setClauses, fmt.Sprintf("country_code = $%d", argPos))
 		args = append(args, *params.CountryCode)
 		argPos++
 	}
 
-	query += ` WHERE user_id = $1 AND deactivated_at IS NULL RETURNING *`
+	args = append(args, params.UserID)
+
+	query := fmt.Sprintf(`
+		UPDATE users.profiles 
+		SET %s
+		WHERE user_id = $%d AND deactivated_at IS NULL 
+		RETURNING *`,
+		strings.Join(setClauses, ", "),
+		argPos,
+	)
 
 	r.log.Debug("Executing update query",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", params.UserID),
 	)
 
-	row := r.db.QueryRow(ctx, query, args...)
 	var profile models.Profile
-	err := row.ScanOne(&profile)
-	if err != nil {
+	if err := r.db.FindOneAndUpdate(ctx, &profile, query, args...); err != nil {
+		if postgres.IsNoRowsError(err) {
+			r.log.Debug("No profile updated - not found",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", params.UserID),
+			)
+			return nil, nil
+		}
 		r.log.Error("Failed to update profile",
 			logger.String("service", userErrors.ServiceName),
 			logger.String("user_id", params.UserID),
