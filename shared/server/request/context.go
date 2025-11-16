@@ -3,6 +3,8 @@ package request
 import (
 	"context"
 	sContext "shared/server/context"
+
+	"github.com/google/uuid"
 )
 
 // WithUserID adds user ID to context
@@ -13,6 +15,18 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 func GetUserIDFromContext(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(sContext.UserIDKey).(string)
 	return userID, ok
+}
+
+func GetUserIDUUIDFromContext(ctx context.Context) (uuid.UUID, bool) {
+	userIDStr, ok := ctx.Value(sContext.UserIDKey).(string)
+	if !ok {
+		return uuid.Nil, false
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return userID, true
 }
 
 // WithSessionID adds session ID to context

@@ -46,6 +46,8 @@ volumes:
     driver: local
   media-service-build-cache:
     driver: local
+  presence-service-build-cache:
+    driver: local
 
 # =============================================================================
 # SERVICES
@@ -76,13 +78,14 @@ services:
         echo 'Warming Up Go Module Cache';
         echo '========================================';
         echo '';
-        cd /workspace/shared && echo '[1/7] Processing shared...' && go mod download;
-        cd /workspace/services/api-gateway && echo '[2/7] Processing api-gateway...' && go mod download;
-        cd /workspace/services/auth-service && echo '[3/7] Processing auth-service...' && go mod download;
-        cd /workspace/services/message-service && echo '[4/7] Processing message-service...' && go mod download;
-        cd /workspace/services/location-service && echo '[5/7] Processing location-service...' && go mod download;
-        cd /workspace/services/user-service && echo '[6/7] Processing user-service...' && go mod download 2>/dev/null || echo 'user-service not found, skipping...';
-        cd /workspace/services/media-service && echo '[7/7] Processing media-service...' && go mod download;
+        cd /workspace/shared && echo '[1/8] Processing shared...' && go mod download;
+        cd /workspace/services/api-gateway && echo '[2/8] Processing api-gateway...' && go mod download;
+        cd /workspace/services/auth-service && echo '[3/8] Processing auth-service...' && go mod download;
+        cd /workspace/services/message-service && echo '[4/8] Processing message-service...' && go mod download;
+        cd /workspace/services/location-service && echo '[5/8] Processing location-service...' && go mod download;
+        cd /workspace/services/presence-service && echo '[6/8] Processing presence-service...' && go mod download;
+        cd /workspace/services/user-service && echo '[7/8] Processing user-service...' && go mod download 2>/dev/null || echo 'user-service not found, skipping...';
+        cd /workspace/services/media-service && echo '[8/8] Processing media-service...' && go mod download;
         echo '';
         echo '========================================';
         echo '✓ Go cache warmup complete!';
@@ -267,6 +270,8 @@ services:
       MESSAGE_SERVICE_URL: http://message-service:8083
       MEDIA_SERVICE_ADDR: media-service:8084
       MEDIA_SERVICE_URL: http://media-service:8084
+      PRESENCE_SERVICE_ADDR: presence-service:8085
+      PRESENCE_SERVICE_URL: http://presence-service:8085
     volumes:
       # Source code (hot reload)
       - ${PWD}/services/api-gateway:/app/services/api-gateway
@@ -518,6 +523,68 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Presence Service
+  # ---------------------------------------------------------------------------
+  presence-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/presence-service/Dockerfile.dev
+    container_name: echo-presence-service
+    image: presence-service:latest
+    expose:
+      - "8085"
+    env_file:
+      - ${PWD}/.env
+      - ${PWD}/services/presence-service/.env
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8085
+      APP_ENV: development
+      CONFIG_PATH: /app/services/presence-service/configs/config.yaml
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSL_MODE: disable
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: 0
+    volumes:
+      # Source code (hot reload)
+      - ${PWD}/services/presence-service:/app/services/presence-service
+      - ${PWD}/shared:/app/shared
+      # Centralized Go cache
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service build cache
+      - presence-service-build-cache:/app/services/presence-service/tmp
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8085/health" ]
       interval: 30s
       timeout: 3s
       retries: 3

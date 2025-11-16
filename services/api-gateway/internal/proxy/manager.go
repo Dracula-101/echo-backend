@@ -25,6 +25,11 @@ import (
 // HTTP Headers Configuration
 // ============================================================================
 
+// Context key type for WebSocket upgrade detection
+type contextKey string
+
+const isWebSocketKey contextKey = "isWebSocket"
+
 var hopByHopHeaders = []string{
 	"Connection",
 	"Proxy-Connection",
@@ -170,11 +175,20 @@ func newSingleHostReverseProxy(target *url.URL, serviceName string, l mlog) *htt
 	originalDirector := proxy.Director
 
 	proxy.Director = func(req *http.Request) {
+		// Check if this is a WebSocket upgrade request from context or headers
+		isWebSocket := req.Context().Value(isWebSocketKey) == true
+		if !isWebSocket {
+			// Fallback to checking headers directly
+			isWebSocket = strings.ToLower(req.Header.Get("Upgrade")) == "websocket" &&
+				strings.Contains(strings.ToLower(req.Header.Get("Connection")), "upgrade")
+		}
+
 		l.Debug("Directing request to upstream service",
 			logger.String("service", gwErrors.ServiceName),
 			logger.String("target_service", serviceName),
 			logger.String("path", req.URL.Path),
 			logger.String("method", req.Method),
+			logger.Bool("is_websocket", isWebSocket),
 		)
 
 		originalDirector(req)
@@ -187,7 +201,18 @@ func newSingleHostReverseProxy(target *url.URL, serviceName string, l mlog) *htt
 		if req.Host == "" {
 			req.Host = target.Host
 		}
-		removeHopByHop(req.Header)
+
+		// Only remove hop-by-hop headers for non-WebSocket requests
+		if !isWebSocket {
+			removeHopByHop(req.Header)
+		} else {
+			l.Debug("Preserving WebSocket upgrade headers",
+				logger.String("service", gwErrors.ServiceName),
+				logger.String("target_service", serviceName),
+				logger.String("upgrade", req.Header.Get("Upgrade")),
+				logger.String("connection", req.Header.Get("Connection")),
+			)
+		}
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
@@ -311,12 +336,53 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 	serviceConfig := m.services[serviceName]
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Check for WebSocket upgrade headers at the entry point
+		upgradeHeader := r.Header.Get("Upgrade")
+		connectionHeader := r.Header.Get("Connection")
+		isWebSocketRequest := strings.ToLower(upgradeHeader) == "websocket" &&
+			strings.Contains(strings.ToLower(connectionHeader), "upgrade")
+
 		m.logger.Info("Proxy request received",
 			logger.String("service", gwErrors.ServiceName),
 			logger.String("target_service", serviceName),
 			logger.String("method", r.Method),
 			logger.String("path", r.URL.Path),
+			logger.Bool("is_websocket_request", isWebSocketRequest),
+			logger.String("upgrade_header", upgradeHeader),
+			logger.String("connection_header", connectionHeader),
 		)
+
+		// For WebSocket requests, use hijacking to preserve upgrade headers
+		if isWebSocketRequest {
+			if len(serviceConfig.Addresses) == 0 {
+				m.logger.Error("No addresses configured for service",
+					logger.String("service", gwErrors.ServiceName),
+					logger.String("target_service", serviceName),
+				)
+				response.ServiceUnavailableError(r.Context(), r, w, serviceName, 0)
+				return
+			}
+			target, err := url.Parse(serviceConfig.Protocol + "://" + serviceConfig.Addresses[0])
+			if err != nil {
+				m.logger.Error("Failed to parse service address",
+					logger.String("service", gwErrors.ServiceName),
+					logger.String("target_service", serviceName),
+					logger.Error(err),
+				)
+				response.InternalServerError(r.Context(), r, w, "Failed to parse service address", err)
+				return
+			}
+
+			// Extract path transformation vars
+			vars := mux.Vars(r)
+			remainingPath := vars["rest"]
+			if remainingPath == "" {
+				remainingPath = vars["path"]
+			}
+
+			m.handleWebSocketProxy(w, r, target, serviceName, transform, remainingPath)
+			return
+		}
 
 		vars := mux.Vars(r)
 		remainingPath := vars["rest"]
@@ -359,6 +425,12 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 			)
 			ctx, cancel := context.WithTimeout(r.Context(), serviceConfig.Timeout)
 			defer cancel()
+
+			// Store WebSocket state in context before creating new request
+			// because r.WithContext creates a shallow copy that may lose headers
+			if isWebSocketRequest {
+				ctx = context.WithValue(ctx, isWebSocketKey, true)
+			}
 			r = r.WithContext(ctx)
 		}
 
@@ -401,4 +473,66 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 			logger.String("path", originalPath),
 		)
 	}
+}
+
+// handleWebSocketProxy handles WebSocket connections using a custom reverse proxy
+func (m *Manager) handleWebSocketProxy(w http.ResponseWriter, r *http.Request, target *url.URL, serviceName string, transform bool, remainingPath string) {
+	// Transform the path if needed
+	targetPath := r.URL.Path
+	if transform {
+		if remainingPath != "" {
+			targetPath = "/" + remainingPath
+		} else {
+			targetPath = "/"
+		}
+	}
+	if strings.HasSuffix(targetPath, "/") && len(targetPath) > 1 {
+		targetPath = strings.TrimSuffix(targetPath, "/")
+	}
+
+	m.logger.Debug("WebSocket proxy request",
+		logger.String("service", gwErrors.ServiceName),
+		logger.String("target_service", serviceName),
+		logger.String("original_path", r.URL.Path),
+		logger.String("target_path", targetPath),
+		logger.String("target_host", target.Host),
+	)
+
+	// Create a custom reverse proxy for this WebSocket request
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = target.Scheme
+			req.URL.Host = target.Host
+			req.URL.Path = targetPath
+			req.Host = target.Host
+
+			// Preserve WebSocket upgrade headers
+			req.Header.Set("X-Forwarded-For", r.RemoteAddr)
+			req.Header.Set("X-Forwarded-Proto", "http")
+
+			m.logger.Debug("WebSocket director",
+				logger.String("service", gwErrors.ServiceName),
+				logger.String("target_service", serviceName),
+				logger.String("target_url", req.URL.String()),
+				logger.String("upgrade", req.Header.Get("Upgrade")),
+				logger.String("connection", req.Header.Get("Connection")),
+			)
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			m.logger.Error("WebSocket proxy error",
+				logger.String("service", gwErrors.ServiceName),
+				logger.String("target_service", serviceName),
+				logger.Error(err),
+			)
+			response.ServiceUnavailableError(r.Context(), r, w, serviceName, 30)
+		},
+	}
+
+	// Use the proxy to handle the WebSocket upgrade
+	proxy.ServeHTTP(w, r)
+
+	m.logger.Info("WebSocket proxy completed",
+		logger.String("service", gwErrors.ServiceName),
+		logger.String("target_service", serviceName),
+	)
 }

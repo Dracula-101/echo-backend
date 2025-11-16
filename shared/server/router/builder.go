@@ -22,6 +22,7 @@ type Builder struct {
 	earlyMiddleware    []Middleware
 	lateMiddleware     []Middleware
 	systemEndpoints    []Endpoint
+	routes             []func(*Router)
 	routeGroups        []routeGroupRegistration
 	notFoundHandler    Handler
 	notAllowedHandler  Handler
@@ -51,6 +52,7 @@ func NewBuilder() *Builder {
 		earlyMiddleware:    make([]Middleware, 0),
 		lateMiddleware:     make([]Middleware, 0),
 		systemEndpoints:    make([]Endpoint, 0),
+		routes:             make([]func(*Router), 0),
 		routeGroups:        make([]routeGroupRegistration, 0),
 		enableSystemRoutes: true,
 		logger:             log,
@@ -140,7 +142,8 @@ func (b *Builder) DisableSystemRoutes() *Builder {
 }
 
 func (b *Builder) WithRoutes(registrar func(*Router)) *Builder {
-	registrar(b.router)
+	b.routes = append(b.routes, registrar)
+	b.logger.Debug("Routes queued for registration")
 	return b
 }
 
@@ -166,21 +169,35 @@ func (b *Builder) Build() *Router {
 		}
 	}
 
+	appMux := mux.NewRouter().StrictSlash(true)
+	appRouter := &Router{
+		mux:            appMux,
+		routes:         make([]RouteInfo, 0),
+		strictPriority: b.router.strictPriority,
+	}
+
+	for _, routeRegistrar := range b.routes {
+		routeRegistrar(appRouter)
+		b.logger.Debug("Routes registered on app router")
+	}
+
 	for _, rg := range b.routeGroups {
-		group := b.router.Group(rg.prefix)
+		group := appRouter.Group(rg.prefix)
 		rg.registrar(group)
 		b.logger.Debug("Route group registered", logger.String("prefix", rg.prefix))
 	}
 
 	for _, mw := range b.earlyMiddleware {
-		b.router.Use(mux.MiddlewareFunc(mw))
-		b.logger.Debug("Applied early middleware", logger.String("name", getFunctionName(mw)))
+		appRouter.Use(mux.MiddlewareFunc(mw))
+		b.logger.Debug("Applied early middleware to app router", logger.String("name", getFunctionName(mw)))
 	}
 
 	for _, mw := range b.lateMiddleware {
-		b.router.Use(mux.MiddlewareFunc(mw))
-		b.logger.Debug("Applied late middleware", logger.String("name", getFunctionName(mw)))
+		appRouter.Use(mux.MiddlewareFunc(mw))
+		b.logger.Debug("Applied late middleware to app router", logger.String("name", getFunctionName(mw)))
 	}
+
+	b.router.Mux().PathPrefix("/").Handler(appMux)
 
 	if b.notFoundHandler != nil {
 		b.router.Mux().NotFoundHandler = http.HandlerFunc(b.notFoundHandler)

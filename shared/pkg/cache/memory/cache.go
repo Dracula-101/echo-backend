@@ -63,6 +63,88 @@ func (c *memoryCache) Set(ctx context.Context, key string, value []byte, ttl tim
 	return nil
 }
 
+func (c *memoryCache) GetString(ctx context.Context, key string) (string, pkgErrors.AppError) {
+	data, err := c.Get(ctx, key)
+	if err != nil {
+		if err == cache.ErrNotFound {
+			return "", pkgErrors.FromError(err, pkgErrors.CodeNotFound, "key not found").
+				WithService("memory-cache").
+				WithDetail("key", key)
+		}
+		return "", pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get string key").
+			WithService("memory-cache").
+			WithDetail("key", key)
+	}
+	return string(data), nil
+}
+
+func (c *memoryCache) SetString(ctx context.Context, key string, value string, ttl time.Duration) pkgErrors.AppError {
+	return c.Set(ctx, key, []byte(value), ttl)
+}
+
+func (c *memoryCache) GetInt(ctx context.Context, key string) (int64, pkgErrors.AppError) {
+	data, err := c.Get(ctx, key)
+	if err != nil {
+		if err == cache.ErrNotFound {
+			return 0, pkgErrors.FromError(err, pkgErrors.CodeNotFound, "key not found").
+				WithService("memory-cache").
+				WithDetail("key", key)
+		}
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get int key").
+			WithService("memory-cache").
+			WithDetail("key", key)
+	}
+
+	var result int64
+	_, parseErr := fmt.Sscanf(string(data), "%d", &result)
+	if parseErr != nil {
+		return 0, pkgErrors.FromError(parseErr, pkgErrors.CodeCacheError, "failed to parse int value").
+			WithService("memory-cache").
+			WithDetail("key", key)
+	}
+	return result, nil
+}
+
+func (c *memoryCache) SetInt(ctx context.Context, key string, value int64, ttl time.Duration) pkgErrors.AppError {
+	return c.Set(ctx, key, []byte(fmt.Sprintf("%d", value)), ttl)
+}
+
+func (c *memoryCache) GetBool(ctx context.Context, key string) (bool, pkgErrors.AppError) {
+	data, err := c.Get(ctx, key)
+	if err != nil {
+		if err == cache.ErrNotFound {
+			return false, pkgErrors.FromError(err, pkgErrors.CodeNotFound, "key not found").
+				WithService("memory-cache").
+				WithDetail("key", key)
+		}
+		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get bool key").
+			WithService("memory-cache").
+			WithDetail("key", key)
+	}
+
+	str := string(data)
+	if str == "true" || str == "1" {
+		return true, nil
+	} else if str == "false" || str == "0" {
+		return false, nil
+	}
+
+	return false, pkgErrors.New(pkgErrors.CodeCacheError, "invalid bool value").
+		WithService("memory-cache").
+		WithDetail("key", key).
+		WithDetail("value", str)
+}
+
+func (c *memoryCache) SetBool(ctx context.Context, key string, value bool, ttl time.Duration) pkgErrors.AppError {
+	var strValue string
+	if value {
+		strValue = "true"
+	} else {
+		strValue = "false"
+	}
+	return c.Set(ctx, key, []byte(strValue), ttl)
+}
+
 func (c *memoryCache) Delete(ctx context.Context, key string) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()

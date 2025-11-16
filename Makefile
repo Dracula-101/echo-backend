@@ -11,6 +11,7 @@
 .PHONY: message-up message-down message-logs message-restart message-build message-rerun message-rebuild
 .PHONY: location-up location-down location-logs location-restart location-build location-rerun location-rebuild
 .PHONY: media-up media-down media-logs media-restart media-build media-rerun media-rebuild
+.PHONY: presence-up presence-down presence-logs presence-restart presence-build presence-rerun presence-rebuild
 .PHONY: kafka-up kafka-down kafka-logs kafka-restart kafka-topics kafka-create-topics
 .PHONY: db-up db-init db-seed db-connect db-clean db-reset db-migrate db-migrate-down db-migrate-status
 .PHONY: redis-connect redis-flush test setup test-auth verify-security dev generate-routes update-gateway-routes
@@ -130,6 +131,15 @@ help:
 	@echo "  make media-rebuild    Rebuild Media Service (no cache)"
 	@echo "  make media-logs       View Media Service logs"
 	@echo ""
+	@echo "$(BOLD)Presence Service:$(NC)"
+	@echo "  make presence-up      Start Presence Service"
+	@echo "  make presence-down    Stop Presence Service"
+	@echo "  make presence-rerun   Stop and restart Presence Service"
+	@echo "  make presence-restart Restart Presence Service"
+	@echo "  make presence-build   Rebuild Presence Service"
+	@echo "  make presence-rebuild Rebuild Presence Service (no cache)"
+	@echo "  make presence-logs    View Presence Service logs"
+	@echo ""
 	@echo "$(BOLD)Kafka:$(NC)"
 	@echo "  make kafka-up         Start Kafka and Zookeeper"
 	@echo "  make kafka-down       Stop Kafka and Zookeeper"
@@ -189,6 +199,7 @@ up:
 	@echo "  User Service     	$(GRAY)Internal only (via gateway)$(NC)"
 	@echo "  Messages Service 	$(GRAY)Internal only (via gateway)$(NC)"
 	@echo "  Media Service    	$(GRAY)Internal only (via gateway)$(NC)"
+	@echo "  Presence Service 	$(GRAY)Internal only (via gateway)$(NC)"
 	@echo "  Location Service 	$(CYAN)http://localhost:8090$(NC)"
 	@echo "  WebSocket        	$(CYAN)ws://localhost:8083/ws$(NC)"
 	@echo ""
@@ -306,6 +317,11 @@ status:
 	@docker inspect -f '{{.State.Running}}' echo-media-service 2>/dev/null | grep -q true && \
 		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
 	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-media-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
+	@echo ""
+	@echo "$(BOLD)Presence Service$(NC)"
+	@docker inspect -f '{{.State.Running}}' echo-presence-service 2>/dev/null | grep -q true && \
+		echo "  Status:  $(GREEN)$(CHECK) Running$(NC)" || echo "  Status:  $(RED)$(CROSS) Stopped$(NC)"
+	@echo "  Uptime:  $(CYAN)$$(docker inspect -f '{{.State.StartedAt}}' echo-presence-service 2>/dev/null | cut -d'.' -f1 || echo 'N/A')$(NC)"
 	@echo ""
 	@echo "$(BOLD)Location Service$(NC)"
 	@docker inspect -f '{{.State.Running}}' location-service 2>/dev/null | grep -q true && \
@@ -826,6 +842,84 @@ media-logs:
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@docker-compose -f $(COMPOSE_FILE) logs -f media-service --no-log-prefix
+
+# =============================================================================
+# PRESENCE SERVICE
+# =============================================================================
+
+## presence-up: Start Presence Service
+presence-up:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Starting Presence Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) up -d presence-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Presence Service started$(NC)"
+	@echo ""
+
+## presence-down: Stop Presence Service
+presence-down:
+	@echo ""
+	@echo "$(YELLOW)Stopping Presence Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) stop presence-service
+	@echo "$(GREEN)$(CHECK) Presence Service stopped$(NC)"
+	@echo ""
+
+## presence-rerun: Stop and restart Presence Service
+presence-rerun:
+	@echo ""
+	@echo "$(BOLD)$(PURPLE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rerunning Presence Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) stop presence-service
+	@docker-compose -f $(COMPOSE_FILE) up -d presence-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Presence Service rerun complete$(NC)"
+	@echo ""
+
+## presence-restart: Restart Presence Service
+presence-restart:
+	@echo ""
+	@echo "$(YELLOW)Restarting Presence Service...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) restart presence-service
+	@echo "$(GREEN)$(CHECK) Presence Service restarted$(NC)"
+	@echo ""
+
+## presence-build: Rebuild Presence Service
+presence-build:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Building Presence Service$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build presence-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Build complete$(NC)"
+	@echo ""
+
+## presence-rebuild: Rebuild Presence Service (no cache)
+presence-rebuild:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Rebuilding Presence Service $(DIM)(no cache)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) build --no-cache presence-service
+	@echo ""
+	@echo "$(GREEN)$(CHECK) Rebuild complete$(NC)"
+	@echo ""
+
+## presence-logs: View Presence Service logs
+presence-logs:
+	@echo ""
+	@echo "$(BOLD)$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BOLD)  Presence Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
+	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker-compose -f $(COMPOSE_FILE) logs -f presence-service --no-log-prefix
 
 # =============================================================================
 # KAFKA & ZOOKEEPER

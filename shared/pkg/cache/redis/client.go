@@ -74,6 +74,84 @@ func (c *client) Set(ctx context.Context, key string, value []byte, ttl time.Dur
 	return nil
 }
 
+func (c *client) GetString(ctx context.Context, key string) (string, pkgErrors.AppError) {
+	c.logger.Debug("Getting string key from Redis", logger.String("key", key))
+	result, err := c.rdb.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	if err != nil {
+		return "", pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get string key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return result, nil
+}
+
+func (c *client) SetString(ctx context.Context, key string, value string, ttl time.Duration) pkgErrors.AppError {
+	c.logger.Debug("Setting string key in Redis", logger.String("key", key))
+	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to set string key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return nil
+}
+
+func (c *client) GetInt(ctx context.Context, key string) (int64, pkgErrors.AppError) {
+	c.logger.Debug("Getting int key from Redis", logger.String("key", key))
+	result, err := c.rdb.Get(ctx, key).Int64()
+	if err == redis.Nil {
+		return 0, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	if err != nil {
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get int key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return result, nil
+}
+
+func (c *client) SetInt(ctx context.Context, key string, value int64, ttl time.Duration) pkgErrors.AppError {
+	c.logger.Debug("Setting int key in Redis", logger.String("key", key), logger.Int64("value", value))
+	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to set int key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return nil
+}
+
+func (c *client) GetBool(ctx context.Context, key string) (bool, pkgErrors.AppError) {
+	c.logger.Debug("Getting bool key from Redis", logger.String("key", key))
+	result, err := c.rdb.Get(ctx, key).Bool()
+	if err == redis.Nil {
+		return false, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	if err != nil {
+		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get bool key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return result, nil
+}
+
+func (c *client) SetBool(ctx context.Context, key string, value bool, ttl time.Duration) pkgErrors.AppError {
+	c.logger.Debug("Setting bool key in Redis", logger.String("key", key), logger.Bool("value", value))
+	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to set bool key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return nil
+}
+
 func (c *client) Delete(ctx context.Context, key string) pkgErrors.AppError {
 	c.logger.Debug("Deleting key from Redis", logger.String("key", key))
 	if err := c.rdb.Del(ctx, key).Err(); err != nil {

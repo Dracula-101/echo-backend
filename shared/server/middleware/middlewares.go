@@ -150,6 +150,12 @@ func RequestReceivedLogger(log logger.Logger) Handler {
 func RequestCompletedLogger(log logger.Logger) Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.ToLower(r.Header.Get("Upgrade")) == "websocket" &&
+				strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			start := time.Now()
 
 			wrapped := &responseWriterWithSize{
@@ -739,6 +745,13 @@ func Compression(config CompressionConfig) Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip compression for WebSocket upgrade requests
+			if strings.ToLower(r.Header.Get("Upgrade")) == "websocket" &&
+				strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 				next.ServeHTTP(w, r)
 				return
