@@ -1,16 +1,22 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"echo-backend/services/api-gateway/internal/config"
 	gwErrors "echo-backend/services/api-gateway/internal/errors"
+	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"shared/pkg/logger"
+	contextx "shared/server/context"
 	"shared/server/response"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -191,6 +197,86 @@ func newSingleHostReverseProxy(target *url.URL, serviceName string, l mlog) *htt
 			logger.Int("status", resp.StatusCode),
 			logger.String("content_type", resp.Header.Get("Content-Type")),
 		)
+
+		// Only modify JSON responses that might contain our response structure
+		contentType := resp.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "application/json") {
+			return nil
+		}
+
+		// Get the start time from the request context
+		startTime, ok := resp.Request.Context().Value(contextx.StartTimeKey).(time.Time)
+		if !ok {
+			// No start time in context, can't recalculate duration
+			return nil
+		}
+
+		// Read the response body
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			l.Error("Failed to read response body for duration correction",
+				logger.String("service", gwErrors.ServiceName),
+				logger.String("target_service", serviceName),
+				logger.Error(err),
+			)
+			return err
+		}
+		resp.Body.Close()
+
+		// Try to parse as our standard response structure
+		var apiResponse struct {
+			Success  bool                   `json:"success"`
+			Message  string                 `json:"message,omitempty"`
+			Data     interface{}            `json:"data,omitempty"`
+			Error    interface{}            `json:"error,omitempty"`
+			Metadata map[string]interface{} `json:"metadata,omitempty"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &apiResponse); err != nil {
+			// Not our response format or invalid JSON, return as-is
+			resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			return nil
+		}
+
+		// Check if metadata exists
+		if apiResponse.Metadata == nil {
+			// No metadata to update
+			resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			return nil
+		}
+
+		// Calculate actual duration from gateway perspective
+		actualDuration := time.Since(startTime)
+
+		// Update duration fields in metadata
+		apiResponse.Metadata["duration"] = actualDuration.String()
+		apiResponse.Metadata["duration_ms"] = float64(actualDuration.Microseconds()) / 1000.0
+
+		// Re-marshal the response
+		modifiedBody, err := json.Marshal(apiResponse)
+		if err != nil {
+			l.Error("Failed to marshal modified response",
+				logger.String("service", gwErrors.ServiceName),
+				logger.String("target_service", serviceName),
+				logger.Error(err),
+			)
+			// Return original body on error
+			resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			return nil
+		}
+
+		// Update response body and content length
+		resp.Body = io.NopCloser(bytes.NewReader(modifiedBody))
+		resp.ContentLength = int64(len(modifiedBody))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(modifiedBody)))
+
+		l.Debug("Updated response duration",
+			logger.String("service", gwErrors.ServiceName),
+			logger.String("target_service", serviceName),
+			logger.String("duration", actualDuration.String()),
+			logger.Float64("duration_ms", float64(actualDuration.Microseconds())/1000.0),
+		)
+
 		return nil
 	}
 

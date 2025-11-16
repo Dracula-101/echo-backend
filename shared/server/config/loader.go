@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -112,7 +113,23 @@ func Load[T any](opts LoadOptions) (*T, error) {
 	}
 
 	var cfg T
-	if err := v2.Unmarshal(&cfg); err != nil {
+	// Create a decoder with custom hooks to handle time.Duration
+	decoderConfig := &mapstructure.DecoderConfig{
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+		),
+		WeaklyTypedInput: true,
+		Result:           &cfg,
+		TagName:          "yaml",
+	}
+
+	decoder, err := mapstructure.NewDecoder(decoderConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create decoder: %w", err)
+	}
+
+	if err := decoder.Decode(v2.AllSettings()); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
