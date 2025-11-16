@@ -703,7 +703,7 @@ location-rerun:
 	@echo "$(BOLD)$(GRAY)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@docker-compose -f $(COMPOSE_FILE) stop location-service
-	@docker-compose -f $(COMPOSE_FILE) up -d location-service
+	@docker-compose -f $(COMPOSE_FILE) up -d location-service --build --force-recreate
 	@echo ""
 	@echo "$(GREEN)$(CHECK) Location Service rerun complete$(NC)"
 	@echo ""

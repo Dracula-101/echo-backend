@@ -8,8 +8,10 @@ import (
 	"location-service/service"
 	"net"
 	"net/http"
+	"shared/pkg/database"
 	"shared/pkg/logger"
 	"shared/pkg/logger/adapter"
+	"shared/pkg/utils"
 	"shared/server/env"
 	"time"
 )
@@ -246,7 +248,14 @@ func main() {
 		Logger:        log,
 	}
 
-	svc, err := service.NewLocationService(cfg)
+	svc, err := service.NewLocationService(cfg, database.Config{
+		Host:     env.GetEnv("DB_HOST", "localhost"),
+		Port:     utils.StringToMustInt(env.GetEnv("DB_PORT", "5432")),
+		User:     env.GetEnv("DB_USER", "postgres"),
+		Password: env.GetEnv("DB_PASSWORD", "password"),
+		Database: env.GetEnv("DB_NAME", "echo_db"),
+		SSLMode:  env.GetEnv("DB_SSL_MODE", "disable"),
+	})
 	if err != nil {
 		log.Fatal("Failed to initialize location service:", logger.Error(err))
 	}

@@ -539,6 +539,12 @@ services:
       - ${PWD}/.env
       - ${PWD}/services/location-service/.env
     environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSLMODE: disable
       # Server Configuration
       HOST: 0.0.0.0
       PORT: 8090

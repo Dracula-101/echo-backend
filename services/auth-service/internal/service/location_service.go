@@ -71,19 +71,17 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
 	}
 
 	return &request.IpAddressInfo{
-		Latitude:      locationData.Latitude,
-		Longitude:     locationData.Longitude,
-		City:          locationData.City,
-		Continent:     locationData.Continent,
-		ContinentCode: locationData.ContinentCode,
-		State:         locationData.State,
-		StateCode:     locationData.StateCode,
-		PostalCode:    locationData.PostalCode,
-		Country:       locationData.Country,
-		CountryCode:   locationData.CountryCode,
-		Timezone:      locationData.Timezone,
-		ISP:           locationData.ISP,
-		IP:            locationData.IP,
+		Latitude:    locationData.Latitude,
+		Longitude:   locationData.Longitude,
+		City:        locationData.City,
+		State:       locationData.State,
+		StateCode:   locationData.StateCode,
+		PostalCode:  locationData.PostalCode,
+		Country:     locationData.Country,
+		CountryCode: locationData.CountryCode,
+		Timezone:    locationData.Timezone,
+		ISP:         locationData.ISP,
+		IP:          locationData.IP,
 	}, nil
 }
 

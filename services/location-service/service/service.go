@@ -1,9 +1,13 @@
 package service
 
 import (
+	"context"
 	locErrors "location-service/errors"
 	"location-service/model"
 	"net"
+	"shared/pkg/database"
+	"shared/pkg/database/postgres"
+	dbModels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	"sync"
 
@@ -18,6 +22,7 @@ type LocationService struct {
 	cityDB    *maxminddb.Reader
 	asnDB     *maxminddb.Reader
 	countryDB *maxminddb.Reader
+	db        database.Database
 	mu        sync.RWMutex
 	log       logger.Logger
 }
@@ -29,7 +34,7 @@ type Config struct {
 	Logger        logger.Logger
 }
 
-func NewLocationService(cfg Config) (*LocationService, error) {
+func NewLocationService(cfg Config, dbConfig database.Config) (*LocationService, error) {
 	if cfg.Logger == nil {
 		panic("Logger is required for LocationService")
 	}
@@ -41,7 +46,28 @@ func NewLocationService(cfg Config) (*LocationService, error) {
 		logger.String("country_db", cfg.CountryDBPath),
 	)
 
+	cfg.Logger.Debug("Connecting to database",
+		logger.String("service", locErrors.ServiceName),
+		logger.String("host", dbConfig.Host),
+		logger.Int("port", dbConfig.Port),
+		logger.String("database", dbConfig.Database),
+	)
+
+	db, dbErr := postgres.New(dbConfig)
+	if dbErr != nil {
+		cfg.Logger.Error("Failed to connect to database",
+			logger.String("service", locErrors.ServiceName),
+			logger.Error(dbErr),
+		)
+		return nil, dbErr
+	}
+
+	cfg.Logger.Info("Database connection established",
+		logger.String("service", locErrors.ServiceName),
+	)
+
 	svc := &LocationService{
+		db:  db,
 		log: cfg.Logger,
 	}
 	var err error
@@ -140,6 +166,21 @@ func (s *LocationService) Lookup(ipStr string) (*model.LocationResult, error) {
 
 	result := &model.LocationResult{IP: ipStr}
 
+	// check from db
+	var ipModel dbModels.IPAddress
+	query := `SELECT * FROM location.ip_addresses WHERE ip_address = $1 LIMIT 1`
+	err := s.db.FindOne(context.Background(), &ipModel, query, ipStr)
+	if err == nil {
+		result = generateLocationResultFromModel(&ipModel)
+		return result, nil
+	}
+
+	s.log.Debug("IP address queried from database",
+		logger.String("service", locErrors.ServiceName),
+		logger.String("ip", ipStr),
+		logger.Any("ip_model", ipModel),
+	)
+
 	if s.cityDB != nil {
 		var city model.CityRecord
 		if err := s.cityDB.Lookup(ip, &city); err != nil {
@@ -198,6 +239,21 @@ func (s *LocationService) Lookup(ipStr string) (*model.LocationResult, error) {
 		logger.Bool("has_country", result.Country != nil),
 		logger.Bool("has_asn", result.ASN != nil),
 	)
+
+	m := generateModelFromLocationResult(ipStr, result.City, result.Country, result.ASN)
+	_, dbErr := s.db.Create(context.Background(), m)
+	if dbErr != nil {
+		s.log.Warn("Failed to store IP address lookup in database",
+			logger.String("service", locErrors.ServiceName),
+			logger.String("ip", ipStr),
+			logger.Error(dbErr),
+		)
+	} else {
+		s.log.Debug("Stored IP address lookup in database",
+			logger.String("service", locErrors.ServiceName),
+			logger.String("ip", ipStr),
+		)
+	}
 
 	return result, nil
 }
