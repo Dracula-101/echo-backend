@@ -204,8 +204,7 @@ BEGIN
             NEW.location_country,
             NEW.location_city,
             jsonb_build_object(
-                'reason', NEW.failure_reason,
-                'device_fingerprint', NEW.device_fingerprint
+                'reason', NEW.failure_reason
             )
         );
     END IF;

@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"shared/pkg/cache"
 	"shared/pkg/database/postgres/models"
@@ -92,6 +93,22 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 	sessionID := uuid.NewString()
 	pushEnabled := input.FCMToken != "" || input.APNSToken != ""
 
+	// Marshal metadata map into *json.RawMessage expected by models.AuthSession.Metadata
+	var metadata *json.RawMessage
+	if len(input.Metadata) > 0 {
+		b, err := json.Marshal(input.Metadata)
+		if err != nil {
+			if appErr, ok := err.(pkgErrors.AppError); ok {
+				return nil, appErr.WithService(authErrors.ServiceName)
+			}
+			return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to marshal session metadata").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", input.UserID)
+		}
+		raw := json.RawMessage(b)
+		metadata = &raw
+	}
+
 	s.log.Debug("Storing session in database",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -129,6 +146,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		APNSToken:          &input.APNSToken,
 		SessionType:        input.SessionType,
 		PushEnabled:        pushEnabled,
+		Metadata:           metadata,
 	})
 	if err != nil {
 		if appErr, ok := err.(pkgErrors.AppError); ok {
