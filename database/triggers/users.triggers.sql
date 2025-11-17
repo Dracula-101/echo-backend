@@ -65,6 +65,21 @@ CREATE TRIGGER trigger_auth_users_create_profile
     FOR EACH ROW
     EXECUTE FUNCTION users.create_default_profile();
 
+-- Trigger to create default device when user is created
+CREATE OR REPLACE FUNCTION users.create_default_device()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO users.devices (user_id, device_name, is_active, last_active_at)
+    VALUES (NEW.id, 'Default Device', TRUE, NOW());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_auth_users_create_device
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION users.create_default_device();
+
 -- Trigger to create default settings when user is created
 CREATE OR REPLACE FUNCTION users.create_default_settings()
 RETURNS TRIGGER AS $$

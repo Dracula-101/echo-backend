@@ -109,7 +109,6 @@ func createCacheClient(cfg config.RedisConfig, log logger.Logger) (cache.Cache, 
 func setupRoutes(
 	builder *router.Builder,
 	presenceHandler *handler.PresenceHandler,
-	wsConnectionHandler *websocket.ConnectionHandler,
 ) *router.Builder {
 	// Presence routes with auth middleware
 	builder = builder.WithRoutes(func(r *router.Router) {
@@ -161,7 +160,7 @@ func createRouter(
 		r.Get("/health/readiness", healthHandler.Readiness)
 	})
 
-	builder = setupRoutes(builder, presenceHandler, wsConnectionHandler)
+	builder = setupRoutes(builder, presenceHandler)
 
 	r := builder.Build()
 	return r, nil

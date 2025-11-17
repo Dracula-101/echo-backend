@@ -181,6 +181,19 @@ func CreateMessageHandler(
 				logger.String("client_id", client.ID),
 				logger.Error(err),
 			)
+			errMsg := model.PresenceEvent{
+				Type: "error",
+				Payload: map[string]interface{}{
+					"message": "invalid json format",
+					"error":   err.Error(),
+				},
+			}
+			if sendErr := client.SendMessage(errMsg); sendErr != nil {
+				log.Error("Failed to send error message to client",
+					logger.String("client_id", client.ID),
+					logger.Error(sendErr),
+				)
+			}
 			return
 		}
 
@@ -202,6 +215,19 @@ func CreateMessageHandler(
 				logger.String("type", msg.Type),
 				logger.String("client_id", client.ID),
 			)
+			errMsg := model.PresenceEvent{
+				Type: "error",
+				Payload: map[string]interface{}{
+					"message": "unknown message type",
+					"type":    msg.Type,
+				},
+			}
+			if sendErr := client.SendMessage(errMsg); sendErr != nil {
+				log.Error("Failed to send error message to client",
+					logger.String("client_id", client.ID),
+					logger.Error(sendErr),
+				)
+			}
 		}
 	}
 }

@@ -2,26 +2,27 @@ package repo
 
 import (
 	"context"
-	"fmt"
 
 	"presence-service/internal/model"
 
 	"shared/pkg/database"
 	"shared/pkg/logger"
 
+	pkgErrors "shared/pkg/errors"
+
 	"github.com/google/uuid"
 )
 
 type PresenceRepository interface {
-	UserExists(ctx context.Context, userID uuid.UUID) (bool, error)
-	UpdatePresence(ctx context.Context, update *model.PresenceUpdate) error
-	GetPresence(ctx context.Context, userID uuid.UUID) (*model.UserPresence, error)
-	GetBulkPresence(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]*model.UserPresence, error)
-	UpdateHeartbeat(ctx context.Context, userID uuid.UUID, deviceID string) error
-	GetActiveDevices(ctx context.Context, userID uuid.UUID) ([]*model.Device, error)
-	SetTypingIndicator(ctx context.Context, indicator *model.TypingIndicator) error
-	GetTypingIndicators(ctx context.Context, conversationID uuid.UUID) ([]*model.TypingIndicator, error)
-	GetPrivacySettings(ctx context.Context, userID uuid.UUID) (*model.PresencePrivacy, error)
+	UserExists(ctx context.Context, userID uuid.UUID) (bool, pkgErrors.AppError)
+	UpdatePresence(ctx context.Context, update *model.PresenceUpdate) pkgErrors.AppError
+	GetPresence(ctx context.Context, userID uuid.UUID) (*model.UserPresence, pkgErrors.AppError)
+	GetBulkPresence(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]*model.UserPresence, pkgErrors.AppError)
+	UpdateHeartbeat(ctx context.Context, userID uuid.UUID, deviceID string) pkgErrors.AppError
+	GetActiveDevices(ctx context.Context, userID uuid.UUID) ([]*model.Device, pkgErrors.AppError)
+	SetTypingIndicator(ctx context.Context, indicator *model.TypingIndicator) pkgErrors.AppError
+	GetTypingIndicators(ctx context.Context, conversationID uuid.UUID) ([]*model.TypingIndicator, pkgErrors.AppError)
+	GetPrivacySettings(ctx context.Context, userID uuid.UUID) (*model.PresencePrivacy, pkgErrors.AppError)
 }
 
 type presenceRepo struct {
@@ -36,7 +37,7 @@ func NewPresenceRepository(db database.Database, log logger.Logger) PresenceRepo
 	}
 }
 
-func (r *presenceRepo) UserExists(ctx context.Context, userID uuid.UUID) (bool, error) {
+func (r *presenceRepo) UserExists(ctx context.Context, userID uuid.UUID) (bool, pkgErrors.AppError) {
 	query := `
 		SELECT EXISTS(
 			SELECT 1 
@@ -52,7 +53,7 @@ func (r *presenceRepo) UserExists(ctx context.Context, userID uuid.UUID) (bool, 
 			logger.Error(err),
 			logger.String("user_id", userID.String()),
 		)
-		return false, fmt.Errorf("failed to check if user exists: %w", err)
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check user existence")
 	}
 
 	r.log.Debug("User existence check",
@@ -63,7 +64,7 @@ func (r *presenceRepo) UserExists(ctx context.Context, userID uuid.UUID) (bool, 
 	return exists, nil
 }
 
-func (r *presenceRepo) UpdatePresence(ctx context.Context, update *model.PresenceUpdate) error {
+func (r *presenceRepo) UpdatePresence(ctx context.Context, update *model.PresenceUpdate) pkgErrors.AppError {
 	query := `
 		UPDATE users.profiles
 		SET online_status = $1,
@@ -78,7 +79,7 @@ func (r *presenceRepo) UpdatePresence(ctx context.Context, update *model.Presenc
 			logger.Error(err),
 			logger.String("user_id", update.UserID.String()),
 		)
-		return fmt.Errorf("failed to update presence: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update presence")
 	}
 
 	r.log.Debug("Presence updated",
@@ -89,7 +90,7 @@ func (r *presenceRepo) UpdatePresence(ctx context.Context, update *model.Presenc
 	return nil
 }
 
-func (r *presenceRepo) GetPresence(ctx context.Context, userID uuid.UUID) (*model.UserPresence, error) {
+func (r *presenceRepo) GetPresence(ctx context.Context, userID uuid.UUID) (*model.UserPresence, pkgErrors.AppError) {
 	query := `
 		SELECT user_id, online_status, last_seen_at, updated_at
 		FROM users.profiles
@@ -105,13 +106,13 @@ func (r *presenceRepo) GetPresence(ctx context.Context, userID uuid.UUID) (*mode
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get presence: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get presence")
 	}
 
 	return &presence, nil
 }
 
-func (r *presenceRepo) GetBulkPresence(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]*model.UserPresence, error) {
+func (r *presenceRepo) GetBulkPresence(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]*model.UserPresence, pkgErrors.AppError) {
 	if len(userIDs) == 0 {
 		return make(map[uuid.UUID]*model.UserPresence), nil
 	}
@@ -124,7 +125,7 @@ func (r *presenceRepo) GetBulkPresence(ctx context.Context, userIDs []uuid.UUID)
 
 	rows, err := r.db.Query(ctx, query, userIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bulk presence: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get bulk presence")
 	}
 	defer rows.Close()
 
@@ -146,7 +147,7 @@ func (r *presenceRepo) GetBulkPresence(ctx context.Context, userIDs []uuid.UUID)
 	return presences, nil
 }
 
-func (r *presenceRepo) UpdateHeartbeat(ctx context.Context, userID uuid.UUID, deviceID string) error {
+func (r *presenceRepo) UpdateHeartbeat(ctx context.Context, userID uuid.UUID, deviceID string) pkgErrors.AppError {
 	// Update device last_active_at
 	query := `
 		UPDATE users.devices
@@ -157,7 +158,7 @@ func (r *presenceRepo) UpdateHeartbeat(ctx context.Context, userID uuid.UUID, de
 
 	_, err := r.db.Exec(ctx, query, userID, deviceID)
 	if err != nil {
-		return fmt.Errorf("failed to update heartbeat: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update heartbeat")
 	}
 
 	// Update user profile last_seen_at if online
@@ -170,13 +171,13 @@ func (r *presenceRepo) UpdateHeartbeat(ctx context.Context, userID uuid.UUID, de
 
 	_, err = r.db.Exec(ctx, updatePresenceQuery, userID)
 	if err != nil {
-		return fmt.Errorf("failed to update presence heartbeat: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update presence heartbeat")
 	}
 
 	return nil
 }
 
-func (r *presenceRepo) GetActiveDevices(ctx context.Context, userID uuid.UUID) ([]*model.Device, error) {
+func (r *presenceRepo) GetActiveDevices(ctx context.Context, userID uuid.UUID) ([]*model.Device, pkgErrors.AppError) {
 	query := `
 		SELECT id, user_id, device_id, device_name, device_type,
 		       app_version, is_active, last_active_at, registered_at,
@@ -190,7 +191,7 @@ func (r *presenceRepo) GetActiveDevices(ctx context.Context, userID uuid.UUID) (
 
 	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active devices: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get active devices")
 	}
 	defer rows.Close()
 
@@ -229,7 +230,7 @@ func (r *presenceRepo) GetActiveDevices(ctx context.Context, userID uuid.UUID) (
 	return devices, nil
 }
 
-func (r *presenceRepo) SetTypingIndicator(ctx context.Context, indicator *model.TypingIndicator) error {
+func (r *presenceRepo) SetTypingIndicator(ctx context.Context, indicator *model.TypingIndicator) pkgErrors.AppError {
 	// For now, we'll use a simple approach - you may want to create a separate typing_indicators table
 	// This is a placeholder that could use Redis for better performance
 	r.log.Debug("Typing indicator set",
@@ -242,12 +243,12 @@ func (r *presenceRepo) SetTypingIndicator(ctx context.Context, indicator *model.
 	return nil
 }
 
-func (r *presenceRepo) GetTypingIndicators(ctx context.Context, conversationID uuid.UUID) ([]*model.TypingIndicator, error) {
+func (r *presenceRepo) GetTypingIndicators(ctx context.Context, conversationID uuid.UUID) ([]*model.TypingIndicator, pkgErrors.AppError) {
 	// TODO: Implement with Redis or dedicated table
 	return []*model.TypingIndicator{}, nil
 }
 
-func (r *presenceRepo) GetPrivacySettings(ctx context.Context, userID uuid.UUID) (*model.PresencePrivacy, error) {
+func (r *presenceRepo) GetPrivacySettings(ctx context.Context, userID uuid.UUID) (*model.PresencePrivacy, pkgErrors.AppError) {
 	query := `
 		SELECT user_id, last_seen_visibility, online_status_visibility,
 		       typing_indicators_enabled, read_receipts_enabled
@@ -265,7 +266,7 @@ func (r *presenceRepo) GetPrivacySettings(ctx context.Context, userID uuid.UUID)
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get privacy settings: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get privacy settings")
 	}
 
 	return &privacy, nil

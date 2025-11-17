@@ -51,37 +51,19 @@ func (h *ConnectionHandler) HandleConnection(w http.ResponseWriter, r *http.Requ
 	)
 
 	userID := r.URL.Query().Get("user_id")
-
 	h.logger.Debug("Extracted user_id from query",
 		logger.String("user_id", userID),
 		logger.String("query_params", r.URL.RawQuery),
 	)
 
-	// If not in query params, try to get from context (for middleware-based auth)
-	if userID == "" {
-		contextUserID, ok := req.GetUserIDFromContext(r.Context())
-		if ok {
-			userID = contextUserID
-		}
-	}
-
-	if userID == "" {
-		h.logger.Warn("User ID not provided for WebSocket connection",
-			logger.String("request_id", requestID),
-		)
-		response.UnauthorizedError(r.Context(), r, w, "User ID required. Provide via query parameter: ?user_id=xxx", nil)
-		return
-	}
-
-	// Parse and validate user ID format
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
-		h.logger.Warn("Invalid user ID format",
+		h.logger.Warn("Invalid user_id format",
 			logger.String("request_id", requestID),
 			logger.String("user_id", userID),
 			logger.Error(err),
 		)
-		response.BadRequestError(r.Context(), r, w, "Invalid user ID format. Must be a valid UUID", err)
+		response.BadRequestError(r.Context(), r, w, "Invalid user_id format", nil)
 		return
 	}
 
