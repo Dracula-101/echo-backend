@@ -1,529 +1,217 @@
 # Database Schema Reference
 
-Complete database schema documentation for Echo Backend PostgreSQL database.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Schema Diagram](#schema-diagram)
-- [Auth Schema](#auth-schema)
-- [Users Schema](#users-schema)
-- [Messages Schema](#messages-schema)
-- [Media Schema](#media-schema)
-- [Notifications Schema](#notifications-schema)
-- [Analytics Schema](#analytics-schema)
-- [Location Schema](#location-schema)
-- [Common Patterns](#common-patterns)
-- [Indexes](#indexes)
-- [Triggers](#triggers)
+Complete reference for Echo Backend PostgreSQL database schemas - based on ACTUAL implementation.
 
 ## Overview
 
-The Echo Backend database uses PostgreSQL with a multi-schema design for logical separation of concerns. Each schema corresponds to a microservice domain.
+Echo Backend uses PostgreSQL 15+ with a multi-schema design. Each domain has its own schema for logical separation and access control.
 
-**Database**: `echo`
-**PostgreSQL Version**: 15+
-**Character Set**: UTF8
-**Collation**: en_US.UTF-8
+**Database Name**: `echo_db`
 
-### Schema List
-
-| Schema | Service | Tables | Purpose |
-|--------|---------|--------|---------|
-| `auth` | Auth Service | 6 | Authentication, sessions, OTP |
-| `users` | User Service | 4 | User profiles, contacts |
-| `messages` | Message Service | 5 | Messages, conversations |
-| `media` | Media Service | 3 | Media files, uploads |
-| `notifications` | Notification Service | 3 | Push notifications |
-| `analytics` | Analytics Service | 2 | Usage metrics |
-| `location` | Location Service | 1 | Phone geolocation |
-
-## Schema Diagram
-
-### Complete Entity Relationship Diagram
-
-```mermaid
-erDiagram
-    %% Auth Schema
-    AUTH_USERS ||--o{ AUTH_SESSIONS : has
-    AUTH_USERS ||--o{ AUTH_OTP_VERIFICATIONS : has
-    AUTH_USERS ||--o{ AUTH_REFRESH_TOKENS : has
-    AUTH_USERS ||--o{ AUTH_OAUTH_PROVIDERS : has
-    AUTH_USERS ||--o{ AUTH_LOGIN_HISTORY : has
-
-    %% Users Schema
-    AUTH_USERS ||--o| USERS_PROFILES : has
-    AUTH_USERS ||--o{ USERS_CONTACTS : has
-    AUTH_USERS ||--o{ USERS_BLOCKED_USERS : blocks
-    AUTH_USERS ||--o| USERS_PRIVACY_SETTINGS : has
-
-    %% Messages Schema
-    AUTH_USERS ||--o{ MESSAGES_CONVERSATIONS : participates
-    MESSAGES_CONVERSATIONS ||--o{ MESSAGES_MESSAGES : contains
-    MESSAGES_MESSAGES ||--o{ MESSAGES_DELIVERY_TRACKING : tracks
-    MESSAGES_MESSAGES ||--o{ MESSAGES_REACTIONS : has
-    MESSAGES_MESSAGES ||--o{ MESSAGES_THREADS : replies
-
-    %% Media Schema
-    MESSAGES_MESSAGES ||--o{ MEDIA_FILES : contains
-    MEDIA_FILES ||--o{ MEDIA_THUMBNAILS : has
-
-    %% Notifications Schema
-    AUTH_USERS ||--o{ NOTIFICATIONS_PUSH_TOKENS : has
-    AUTH_USERS ||--o| NOTIFICATIONS_PREFERENCES : has
-
-    AUTH_USERS {
-        uuid id PK
-        string phone UK
-        string password_hash
-        boolean verified
-        boolean locked
-        timestamp created_at
-        timestamp updated_at
-        timestamp deleted_at
-    }
-
-    AUTH_SESSIONS {
-        uuid id PK
-        uuid user_id FK
-        string session_token UK
-        string device_id
-        jsonb device_metadata
-        string ip_address
-        timestamp expires_at
-        timestamp created_at
-    }
-
-    MESSAGES_MESSAGES {
-        uuid id PK
-        uuid conversation_id FK
-        uuid from_user_id FK
-        uuid to_user_id FK
-        text content
-        string type
-        uuid reply_to_id FK
-        boolean edited
-        boolean deleted
-        jsonb metadata
-        timestamp created_at
-        timestamp updated_at
-        timestamp deleted_at
-    }
-
-    USERS_PROFILES {
-        uuid user_id PK_FK
-        string display_name
-        text bio
-        string avatar_url
-        string status
-        timestamp last_seen
-        boolean phone_visible
-        boolean profile_visible
-        timestamp created_at
-        timestamp updated_at
-    }
-```
-
-### Auth Schema Relationships
-
-```mermaid
-erDiagram
-    USERS ||--o{ SESSIONS : "has many"
-    USERS ||--o{ OTP_VERIFICATIONS : "has many"
-    USERS ||--o{ REFRESH_TOKENS : "has many"
-    USERS ||--o{ OAUTH_PROVIDERS : "has many"
-    USERS ||--o{ LOGIN_HISTORY : "has many"
-
-    USERS {
-        uuid id
-        string phone
-        string password_hash
-        boolean verified
-        boolean locked
-        int failed_attempts
-        timestamp locked_until
-    }
-
-    SESSIONS {
-        uuid id
-        uuid user_id
-        string session_token
-        string device_id
-        string device_name
-        string platform
-        timestamp expires_at
-    }
-
-    OTP_VERIFICATIONS {
-        uuid id
-        uuid user_id
-        string otp_code
-        string purpose
-        boolean verified
-        timestamp expires_at
-    }
-```
-
-### Messages Schema Relationships
-
-```mermaid
-erDiagram
-    CONVERSATIONS ||--o{ MESSAGES : contains
-    MESSAGES ||--o{ DELIVERY_TRACKING : tracked_by
-    MESSAGES ||--o{ REACTIONS : has
-    MESSAGES ||--o{ THREADS : parent_of
-
-    CONVERSATIONS {
-        uuid id
-        string type
-        jsonb participants
-        timestamp last_message_at
-    }
-
-    MESSAGES {
-        uuid id
-        uuid conversation_id
-        uuid from_user_id
-        uuid to_user_id
-        text content
-        string type
-        boolean edited
-    }
-
-    DELIVERY_TRACKING {
-        uuid id
-        uuid message_id
-        uuid user_id
-        string status
-        timestamp delivered_at
-        timestamp read_at
-    }
-
-    REACTIONS {
-        uuid id
-        uuid message_id
-        uuid user_id
-        string emoji
-    }
-```
+**Schemas**:
+- `auth` - Authentication & session management (10 tables)
+- `messages` - Conversations & messaging (20 tables)
+- `users` - User profiles & relationships (13 tables)
+- `media` - File storage & management
+- `notifications` - Push notifications
+- `location` - IP geolocation data
+- `analytics` - Usage metrics
 
 ## Auth Schema
 
 ### auth.users
 
-Core user authentication table.
+Core authentication table for user accounts.
 
 ```sql
 CREATE TABLE auth.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    phone VARCHAR(20) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    verified BOOLEAN DEFAULT FALSE,
-    locked BOOLEAN DEFAULT FALSE,
-    failed_login_attempts INT DEFAULT 0,
-    locked_until TIMESTAMP NULL,
-    email VARCHAR(255) NULL UNIQUE,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    phone_number VARCHAR(20) UNIQUE,
+    phone_country_code VARCHAR(5),
     email_verified BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP NULL
+    phone_verified BOOLEAN DEFAULT FALSE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    password_algorithm VARCHAR(50) DEFAULT 'bcrypt',
+    password_last_changed_at TIMESTAMPTZ,
+    two_factor_enabled BOOLEAN DEFAULT FALSE,
+    two_factor_secret TEXT,
+    two_factor_backup_codes TEXT[],
+    account_status VARCHAR(50) DEFAULT 'active',
+    account_locked_until TIMESTAMPTZ,
+    failed_login_attempts INTEGER DEFAULT 0,
+    last_failed_login_at TIMESTAMPTZ,
+    last_successful_login_at TIMESTAMPTZ,
+    requires_password_change BOOLEAN DEFAULT FALSE,
+    password_history JSONB DEFAULT '[]'::JSONB,
+    security_questions JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    created_by_ip INET,
+    created_by_user_agent TEXT
 );
-
-CREATE INDEX idx_users_phone ON auth.users(phone) WHERE deleted_at IS NULL;
-CREATE INDEX idx_users_email ON auth.users(email) WHERE email IS NOT NULL AND deleted_at IS NULL;
-CREATE INDEX idx_users_verified ON auth.users(verified) WHERE deleted_at IS NULL;
 ```
 
-**Columns:**
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Unique user identifier |
-| phone | VARCHAR(20) | NOT NULL, UNIQUE | E.164 format phone number |
-| password_hash | VARCHAR(255) | NOT NULL | Argon2id hashed password |
-| verified | BOOLEAN | DEFAULT FALSE | Phone verification status |
-| locked | BOOLEAN | DEFAULT FALSE | Account lock status |
-| failed_login_attempts | INT | DEFAULT 0 | Failed login counter |
-| locked_until | TIMESTAMP | NULL | Account unlock time |
-| email | VARCHAR(255) | UNIQUE, NULL | Optional email address |
-| email_verified | BOOLEAN | DEFAULT FALSE | Email verification status |
-| created_at | TIMESTAMP | NOT NULL | Account creation time |
-| updated_at | TIMESTAMP | NOT NULL | Last update time |
-| deleted_at | TIMESTAMP | NULL | Soft delete timestamp |
+**Key Features**:
+- Email and phone number both unique
+- Password history tracking (last 5 hashes)
+- Account lockout support
+- Two-factor authentication (2FA) support
+- Account status: active, suspended, banned, deleted, pending
+- Soft delete with `deleted_at`
 
 ---
 
 ### auth.sessions
 
-Active user sessions with device information.
+Active user sessions with comprehensive device tracking.
 
 ```sql
 CREATE TABLE auth.sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    session_token VARCHAR(255) NOT NULL UNIQUE,
-    device_id VARCHAR(255) NOT NULL,
-    device_name VARCHAR(255) NULL,
-    platform VARCHAR(50) NOT NULL,
-    device_metadata JSONB DEFAULT '{}'::jsonb,
-    ip_address INET NULL,
-    user_agent TEXT NULL,
-    location JSONB NULL,
-    expires_at TIMESTAMP NOT NULL,
-    last_activity_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    session_token TEXT UNIQUE NOT NULL,
+    refresh_token TEXT UNIQUE,
+    device_id VARCHAR(255),
+    device_name VARCHAR(255),
+    device_type VARCHAR(50), -- mobile, tablet, desktop, web
+    device_os VARCHAR(100),
+    device_os_version VARCHAR(50),
+    device_model VARCHAR(100),
+    device_manufacturer VARCHAR(100),
+    browser_name VARCHAR(100),
+    browser_version VARCHAR(50),
+    user_agent TEXT,
+    ip_address INET NOT NULL,
+    ip_country VARCHAR(100),
+    ip_region VARCHAR(100),
+    ip_city VARCHAR(100),
+    ip_timezone VARCHAR(100),
+    ip_isp VARCHAR(255),
+    latitude DECIMAL(10, 8),
+    longitude DECIMAL(11, 8),
+    is_mobile BOOLEAN DEFAULT FALSE,
+    is_trusted_device BOOLEAN DEFAULT FALSE,
+    fcm_token TEXT, -- Firebase Cloud Messaging
+    apns_token TEXT, -- Apple Push Notification
+    push_enabled BOOLEAN DEFAULT TRUE,
+    session_type VARCHAR(50) DEFAULT 'user',
+    expires_at TIMESTAMPTZ NOT NULL,
+    last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+    last_refresh_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ,
+    revoked_reason TEXT,
+    metadata JSONB DEFAULT '{}'::JSONB
 );
-
-CREATE INDEX idx_sessions_user_id ON auth.sessions(user_id);
-CREATE INDEX idx_sessions_token ON auth.sessions(session_token);
-CREATE INDEX idx_sessions_device_id ON auth.sessions(device_id);
-CREATE INDEX idx_sessions_expires_at ON auth.sessions(expires_at);
 ```
 
-**Columns:**
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PRIMARY KEY | Session identifier |
-| user_id | UUID | FK, NOT NULL | Reference to auth.users |
-| session_token | VARCHAR(255) | UNIQUE, NOT NULL | Session token hash |
-| device_id | VARCHAR(255) | NOT NULL | Unique device identifier |
-| device_name | VARCHAR(255) | NULL | Human-readable device name |
-| platform | VARCHAR(50) | NOT NULL | ios, android, web |
-| device_metadata | JSONB | DEFAULT '{}' | OS, browser, version info |
-| ip_address | INET | NULL | Client IP address |
-| user_agent | TEXT | NULL | HTTP User-Agent string |
-| location | JSONB | NULL | City, country, timezone |
-| expires_at | TIMESTAMP | NOT NULL | Session expiration time |
-| last_activity_at | TIMESTAMP | NOT NULL | Last activity timestamp |
-| created_at | TIMESTAMP | NOT NULL | Session creation time |
-
-**device_metadata JSONB structure:**
-```json
-{
-  "os": "iOS",
-  "os_version": "17.2",
-  "browser": "Safari",
-  "browser_version": "17.2",
-  "device_model": "iPhone 14 Pro",
-  "app_version": "1.2.3"
-}
-```
+**Key Features**:
+- Full device fingerprinting
+- Geolocation tracking
+- Push notification token storage
+- Session expiration and revocation
+- Activity tracking
 
 ---
 
 ### auth.otp_verifications
 
-OTP codes for phone/email verification.
+One-time passwords for verification flows.
 
 ```sql
 CREATE TABLE auth.otp_verifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    phone VARCHAR(20) NULL,
-    email VARCHAR(255) NULL,
-    otp_code VARCHAR(6) NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    identifier VARCHAR(255) NOT NULL, -- email or phone
+    identifier_type VARCHAR(20) NOT NULL, -- email, phone
+    otp_code VARCHAR(10) NOT NULL,
+    otp_hash TEXT NOT NULL,
     purpose VARCHAR(50) NOT NULL,
-    verified BOOLEAN DEFAULT FALSE,
-    attempts INT DEFAULT 0,
-    expires_at TIMESTAMP NOT NULL,
-    verified_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 5,
+    is_verified BOOLEAN DEFAULT FALSE,
+    verified_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    sent_via VARCHAR(50), -- sms, email, voice
+    ip_address INET,
+    user_agent TEXT,
+    metadata JSONB DEFAULT '{}'::JSONB
 );
-
-CREATE INDEX idx_otp_user_id ON auth.otp_verifications(user_id);
-CREATE INDEX idx_otp_phone ON auth.otp_verifications(phone) WHERE phone IS NOT NULL;
-CREATE INDEX idx_otp_email ON auth.otp_verifications(email) WHERE email IS NOT NULL;
-CREATE INDEX idx_otp_expires_at ON auth.otp_verifications(expires_at);
 ```
 
-**Purpose values:**
-- `registration` - New user registration
-- `login` - Two-factor authentication
+**Purpose Values**:
+- `registration` - Email/phone verification during signup
+- `login` - 2FA during login
 - `password_reset` - Password reset verification
-- `phone_change` - Phone number change
-- `email_verification` - Email verification
-
----
-
-### auth.refresh_tokens
-
-Refresh tokens for JWT renewal.
-
-```sql
-CREATE TABLE auth.refresh_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    token VARCHAR(255) NOT NULL UNIQUE,
-    device_id VARCHAR(255) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    revoked BOOLEAN DEFAULT FALSE,
-    revoked_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_refresh_tokens_user_id ON auth.refresh_tokens(user_id);
-CREATE INDEX idx_refresh_tokens_token ON auth.refresh_tokens(token);
-CREATE INDEX idx_refresh_tokens_expires_at ON auth.refresh_tokens(expires_at);
-```
+- `phone_verify` - Phone number verification
+- `email_verify` - Email address verification
+- `2fa` - Two-factor authentication
 
 ---
 
 ### auth.oauth_providers
 
-OAuth provider connections (Google, Apple, etc.).
+OAuth social login integrations.
 
 ```sql
 CREATE TABLE auth.oauth_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    provider VARCHAR(50) NOT NULL,
+    provider VARCHAR(50) NOT NULL, -- google, facebook, apple, github
     provider_user_id VARCHAR(255) NOT NULL,
-    provider_email VARCHAR(255) NULL,
-    access_token TEXT NULL,
-    refresh_token TEXT NULL,
-    token_expires_at TIMESTAMP NULL,
-    profile_data JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    provider_email VARCHAR(255),
+    provider_username VARCHAR(255),
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expires_at TIMESTAMPTZ,
+    scope TEXT[],
+    profile_data JSONB,
+    is_primary BOOLEAN DEFAULT FALSE,
+    linked_at TIMESTAMPTZ DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    unlinked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(provider, provider_user_id)
 );
-
-CREATE INDEX idx_oauth_user_id ON auth.oauth_providers(user_id);
-CREATE INDEX idx_oauth_provider ON auth.oauth_providers(provider, provider_user_id);
 ```
 
-**Provider values:**
-- `google`
-- `apple`
-- `facebook`
-- `github`
+**Supported Providers**:
+- Google
+- Facebook
+- Apple
+- GitHub
 
 ---
 
-### auth.login_history
+### Other Auth Tables
 
-Login attempt history for security auditing.
+**auth.password_reset_tokens** - Password reset flow tracking
 
-```sql
-CREATE TABLE auth.login_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NULL REFERENCES auth.users(id) ON DELETE SET NULL,
-    phone VARCHAR(20) NOT NULL,
-    success BOOLEAN NOT NULL,
-    failure_reason VARCHAR(100) NULL,
-    ip_address INET NULL,
-    user_agent TEXT NULL,
-    device_id VARCHAR(255) NULL,
-    location JSONB NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+**auth.email_verification_tokens** - Email verification tokens
 
-CREATE INDEX idx_login_history_user_id ON auth.login_history(user_id);
-CREATE INDEX idx_login_history_phone ON auth.login_history(phone);
-CREATE INDEX idx_login_history_created_at ON auth.login_history(created_at DESC);
-CREATE INDEX idx_login_history_success ON auth.login_history(success);
-```
+**auth.security_events** - Security audit log:
+- Event types: login, logout, password_change, 2fa_enable, suspicious_activity
+- Severity levels: info, warning, error, critical
+- Risk scoring (0-100)
 
----
+**auth.login_history** - Historical login attempts:
+- Login method: password, oauth, otp, biometric, api_key
+- Status: success, failed, blocked
+- New device/location detection
 
-## Users Schema
+**auth.rate_limits** - Rate limiting per user/IP:
+- Action types: login, register, password_reset, api_call
+- Configurable windows and thresholds
 
-### users.profiles
-
-User profile information.
-
-```sql
-CREATE TABLE users.profiles (
-    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    display_name VARCHAR(100) NOT NULL,
-    bio TEXT NULL,
-    avatar_url TEXT NULL,
-    status VARCHAR(50) DEFAULT 'offline',
-    last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    phone_visible BOOLEAN DEFAULT TRUE,
-    profile_visible BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_profiles_display_name ON users.profiles(display_name);
-CREATE INDEX idx_profiles_status ON users.profiles(status);
-```
-
-**Status values:**
-- `online` - User is active
-- `away` - User is idle
-- `busy` - Do not disturb mode
-- `offline` - User is offline
-
----
-
-### users.contacts
-
-User contact relationships.
-
-```sql
-CREATE TABLE users.contacts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    contact_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    nickname VARCHAR(100) NULL,
-    favorite BOOLEAN DEFAULT FALSE,
-    blocked BOOLEAN DEFAULT FALSE,
-    added_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, contact_user_id)
-);
-
-CREATE INDEX idx_contacts_user_id ON users.contacts(user_id);
-CREATE INDEX idx_contacts_contact_user_id ON users.contacts(contact_user_id);
-CREATE INDEX idx_contacts_favorite ON users.contacts(favorite) WHERE favorite = TRUE;
-```
-
----
-
-### users.blocked_users
-
-Blocked users list.
-
-```sql
-CREATE TABLE users.blocked_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    blocked_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    reason VARCHAR(255) NULL,
-    blocked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, blocked_user_id)
-);
-
-CREATE INDEX idx_blocked_users_user_id ON users.blocked_users(user_id);
-CREATE INDEX idx_blocked_users_blocked_user_id ON users.blocked_users(blocked_user_id);
-```
-
----
-
-### users.privacy_settings
-
-User privacy preferences.
-
-```sql
-CREATE TABLE users.privacy_settings (
-    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    show_last_seen VARCHAR(20) DEFAULT 'everyone',
-    show_profile_photo VARCHAR(20) DEFAULT 'everyone',
-    show_status VARCHAR(20) DEFAULT 'everyone',
-    show_read_receipts BOOLEAN DEFAULT TRUE,
-    show_typing_indicator BOOLEAN DEFAULT TRUE,
-    allow_group_invites VARCHAR(20) DEFAULT 'everyone',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-**Privacy level values:**
-- `everyone` - All users
-- `contacts` - Only contacts
-- `nobody` - No one
+**auth.api_keys** - Service-to-service authentication:
+- Scope-based permissions
+- Rate limiting per key
+- Expiration support
 
 ---
 
@@ -531,136 +219,177 @@ CREATE TABLE users.privacy_settings (
 
 ### messages.conversations
 
-Conversation containers for messages.
+Conversation containers (DMs, groups, channels).
 
 ```sql
 CREATE TABLE messages.conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type VARCHAR(20) NOT NULL DEFAULT 'direct',
-    name VARCHAR(255) NULL,
-    participants JSONB NOT NULL,
-    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    last_message_id UUID NULL,
-    last_message_at TIMESTAMP NULL,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP NULL
+    conversation_type VARCHAR(50) NOT NULL, -- direct, group, channel, broadcast
+    title VARCHAR(255),
+    description TEXT,
+    avatar_url TEXT,
+    creator_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+    is_group BOOLEAN DEFAULT FALSE,
+    is_channel BOOLEAN DEFAULT FALSE,
+    is_encrypted BOOLEAN DEFAULT TRUE,
+    encryption_key_id TEXT,
+    max_members INTEGER,
+    is_public BOOLEAN DEFAULT FALSE,
+    invite_link TEXT UNIQUE,
+    invite_link_expires_at TIMESTAMPTZ,
+    join_approval_required BOOLEAN DEFAULT FALSE,
+    who_can_send_messages VARCHAR(50) DEFAULT 'all',
+    who_can_add_members VARCHAR(50) DEFAULT 'admins',
+    who_can_edit_info VARCHAR(50) DEFAULT 'admins',
+    who_can_pin_messages VARCHAR(50) DEFAULT 'admins',
+    is_active BOOLEAN DEFAULT TRUE,
+    is_archived BOOLEAN DEFAULT FALSE,
+    archived_at TIMESTAMPTZ,
+    member_count INTEGER DEFAULT 0,
+    message_count BIGINT DEFAULT 0,
+    last_message_id UUID,
+    last_message_at TIMESTAMPTZ,
+    last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}'::JSONB
 );
-
-CREATE INDEX idx_conversations_type ON messages.conversations(type);
-CREATE INDEX idx_conversations_participants ON messages.conversations USING gin(participants);
-CREATE INDEX idx_conversations_last_message_at ON messages.conversations(last_message_at DESC);
 ```
 
-**Type values:**
+**Conversation Types**:
 - `direct` - One-on-one conversation
 - `group` - Group chat
-- `channel` - Broadcast channel
+- `channel` - Broadcast channel (one-way)
+- `broadcast` - Broadcast list
 
-**participants JSONB structure:**
-```json
-{
-  "user_ids": ["uuid1", "uuid2", "uuid3"],
-  "admins": ["uuid1"],
-  "muted": ["uuid2"]
-}
+**Permission Controls**:
+- Granular permissions for sending messages, adding members, editing info
+- Role-based access control
+
+---
+
+### messages.conversation_participants
+
+User participation in conversations.
+
+```sql
+CREATE TABLE messages.conversation_participants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES messages.conversations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    role VARCHAR(50) DEFAULT 'member', -- owner, admin, moderator, member
+    nickname VARCHAR(100),
+    custom_notifications BOOLEAN,
+    is_muted BOOLEAN DEFAULT FALSE,
+    muted_until TIMESTAMPTZ,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    pin_order INTEGER,
+    is_archived BOOLEAN DEFAULT FALSE,
+    last_read_message_id UUID,
+    last_read_at TIMESTAMPTZ,
+    unread_count INTEGER DEFAULT 0,
+    mention_count INTEGER DEFAULT 0,
+    can_send_messages BOOLEAN DEFAULT TRUE,
+    can_send_media BOOLEAN DEFAULT TRUE,
+    can_add_members BOOLEAN DEFAULT FALSE,
+    can_remove_members BOOLEAN DEFAULT FALSE,
+    can_edit_info BOOLEAN DEFAULT FALSE,
+    can_pin_messages BOOLEAN DEFAULT FALSE,
+    can_delete_messages BOOLEAN DEFAULT FALSE,
+    join_method VARCHAR(50),
+    invited_by_user_id UUID REFERENCES auth.users(id),
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    left_at TIMESTAMPTZ,
+    removed_at TIMESTAMPTZ,
+    removed_by_user_id UUID REFERENCES auth.users(id),
+    removal_reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(conversation_id, user_id)
+);
 ```
+
+**Roles**:
+- `owner` - Full control
+- `admin` - Manage members and settings
+- `moderator` - Content moderation
+- `member` - Regular participant
 
 ---
 
 ### messages.messages
 
-Individual messages.
+Individual messages with rich features.
 
 ```sql
 CREATE TABLE messages.messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES messages.conversations(id) ON DELETE CASCADE,
-    from_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    to_user_id UUID NULL REFERENCES auth.users(id) ON DELETE SET NULL,
-    content TEXT NOT NULL,
-    type VARCHAR(50) NOT NULL DEFAULT 'text',
-    reply_to_id UUID NULL REFERENCES messages.messages(id) ON DELETE SET NULL,
-    forwarded_from_id UUID NULL REFERENCES messages.messages(id) ON DELETE SET NULL,
-    edited BOOLEAN DEFAULT FALSE,
-    deleted BOOLEAN DEFAULT FALSE,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP NULL
+    sender_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+    parent_message_id UUID REFERENCES messages.messages(id) ON DELETE SET NULL,
+    message_type VARCHAR(50) DEFAULT 'text',
+    content TEXT,
+    content_encrypted BOOLEAN DEFAULT TRUE,
+    content_hash TEXT,
+    format_type VARCHAR(50) DEFAULT 'plain', -- plain, markdown, html
+    mentions JSONB DEFAULT '[]'::JSONB,
+    hashtags TEXT[],
+    links JSONB DEFAULT '[]'::JSONB,
+    status VARCHAR(50) DEFAULT 'sent', -- sending, sent, delivered, read, failed
+    is_edited BOOLEAN DEFAULT FALSE,
+    edited_at TIMESTAMPTZ,
+    edit_history JSONB DEFAULT '[]'::JSONB,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
+    deleted_for VARCHAR(50), -- everyone, sender
+    is_pinned BOOLEAN DEFAULT FALSE,
+    pinned_at TIMESTAMPTZ,
+    pinned_by_user_id UUID REFERENCES auth.users(id),
+    delivered_at TIMESTAMPTZ,
+    delivery_count INTEGER DEFAULT 0,
+    read_count INTEGER DEFAULT 0,
+    is_flagged BOOLEAN DEFAULT FALSE,
+    flag_reason TEXT,
+    flagged_at TIMESTAMPTZ,
+    flagged_by_user_id UUID REFERENCES auth.users(id),
+    scheduled_at TIMESTAMPTZ,
+    is_scheduled BOOLEAN DEFAULT FALSE,
+    reply_count INTEGER DEFAULT 0,
+    last_reply_at TIMESTAMPTZ,
+    reaction_count INTEGER DEFAULT 0,
+    is_forwarded BOOLEAN DEFAULT FALSE,
+    forwarded_from_message_id UUID REFERENCES messages.messages(id),
+    forward_count INTEGER DEFAULT 0,
+    sent_from_device_id VARCHAR(255),
+    sent_from_ip INET,
+    expires_at TIMESTAMPTZ,
+    expire_after_seconds INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::JSONB
 );
-
-CREATE INDEX idx_messages_conversation_id ON messages.messages(conversation_id, created_at DESC);
-CREATE INDEX idx_messages_from_user_id ON messages.messages(from_user_id);
-CREATE INDEX idx_messages_to_user_id ON messages.messages(to_user_id);
-CREATE INDEX idx_messages_reply_to_id ON messages.messages(reply_to_id) WHERE reply_to_id IS NOT NULL;
-CREATE INDEX idx_messages_created_at ON messages.messages(created_at DESC);
 ```
 
-**Type values:**
-- `text` - Plain text message
+**Message Types**:
+- `text` - Plain text
 - `image` - Image with optional caption
-- `video` - Video with optional caption
+- `video` - Video message
 - `audio` - Voice message
 - `document` - File attachment
 - `location` - GPS coordinates
-- `contact` - Shared contact card
+- `contact` - Shared contact
 - `sticker` - Sticker/emoji
+- `gif` - Animated GIF
 - `poll` - Poll/survey
 
-**metadata JSONB structure (type-specific):**
-
-*For image/video:*
-```json
-{
-  "file_url": "https://cdn.echo.app/...",
-  "thumbnail_url": "https://cdn.echo.app/...",
-  "width": 1920,
-  "height": 1080,
-  "size": 2457600,
-  "mime_type": "image/jpeg",
-  "caption": "Beautiful sunset"
-}
-```
-
-*For location:*
-```json
-{
-  "latitude": 37.7749,
-  "longitude": -122.4194,
-  "name": "San Francisco",
-  "address": "123 Main St, San Francisco, CA"
-}
-```
-
----
-
-### messages.delivery_tracking
-
-Message delivery status per recipient.
-
-```sql
-CREATE TABLE messages.delivery_tracking (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id UUID NOT NULL REFERENCES messages.messages(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    status VARCHAR(20) NOT NULL DEFAULT 'sent',
-    delivered_at TIMESTAMP NULL,
-    read_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(message_id, user_id)
-);
-
-CREATE INDEX idx_delivery_tracking_message_id ON messages.delivery_tracking(message_id);
-CREATE INDEX idx_delivery_tracking_user_id ON messages.delivery_tracking(user_id);
-CREATE INDEX idx_delivery_tracking_status ON messages.delivery_tracking(status);
-```
-
-**Status flow:**
-```
-sent → delivered → read
-```
+**Advanced Features**:
+- Message threading (replies)
+- Edit history tracking
+- Disappearing messages
+- Message scheduling
+- Content moderation/flagging
+- Forwarding tracking
 
 ---
 
@@ -673,116 +402,252 @@ CREATE TABLE messages.reactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id UUID NOT NULL REFERENCES messages.messages(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    emoji VARCHAR(10) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(message_id, user_id, emoji)
+    reaction_type VARCHAR(100) NOT NULL,
+    reaction_emoji VARCHAR(100),
+    reaction_skin_tone VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(message_id, user_id, reaction_type)
 );
-
-CREATE INDEX idx_reactions_message_id ON messages.reactions(message_id);
-CREATE INDEX idx_reactions_user_id ON messages.reactions(user_id);
 ```
 
 ---
 
-### messages.threads
+### messages.delivery_status
 
-Message threads (replies).
+Per-recipient delivery tracking.
 
 ```sql
-CREATE TABLE messages.threads (
+CREATE TABLE messages.delivery_status (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parent_message_id UUID NOT NULL REFERENCES messages.messages(id) ON DELETE CASCADE,
-    reply_message_id UUID NOT NULL REFERENCES messages.messages(id) ON DELETE CASCADE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(parent_message_id, reply_message_id)
+    message_id UUID NOT NULL REFERENCES messages.messages(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'sent', -- sent, delivered, read, failed
+    delivered_at TIMESTAMPTZ,
+    read_at TIMESTAMPTZ,
+    failed_reason TEXT,
+    retry_count INTEGER DEFAULT 0,
+    device_id VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(message_id, user_id)
 );
-
-CREATE INDEX idx_threads_parent_message_id ON messages.threads(parent_message_id);
-CREATE INDEX idx_threads_reply_message_id ON messages.threads(reply_message_id);
 ```
+
+**Status Flow**: sent → delivered → read
 
 ---
 
-## Media Schema
+### Additional Message Tables
 
-### media.files
+- **messages.message_media** - Media attachments (references media.files)
+- **messages.link_previews** - Rich link preview data
+- **messages.polls** - Poll messages
+- **messages.poll_options** - Poll answer choices
+- **messages.poll_votes** - User poll votes
+- **messages.typing_indicators** - Real-time typing status with TTL
+- **messages.message_reports** - User-reported messages
+- **messages.drafts** - Unsent message drafts
+- **messages.bookmarks** - Saved/starred messages
+- **messages.pinned_messages** - Pinned conversation messages
+- **messages.conversation_invites** - Invite links
+- **messages.search_index** - Full-text search optimization
+- **messages.calls** - Voice/video call records
+- **messages.call_participants** - Per-user call participation
+- **messages.conversation_settings** - Per-conversation settings (disappearing messages, read receipts, etc.)
 
-Uploaded media files.
+---
+
+## Users Schema
+
+### users.profiles
+
+User profile information.
 
 ```sql
-CREATE TABLE media.files (
+CREATE TABLE users.profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    display_name VARCHAR(100),
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    middle_name VARCHAR(100),
+    bio TEXT,
+    bio_links JSONB DEFAULT '[]'::JSONB,
+    avatar_url TEXT,
+    avatar_thumbnail_url TEXT,
+    cover_image_url TEXT,
+    date_of_birth DATE,
+    gender VARCHAR(50),
+    pronouns VARCHAR(50),
+    language_code VARCHAR(10) DEFAULT 'en',
+    timezone VARCHAR(100),
+    country_code VARCHAR(5),
+    city VARCHAR(100),
+    phone_visible BOOLEAN DEFAULT FALSE,
+    email_visible BOOLEAN DEFAULT FALSE,
+    online_status VARCHAR(20) DEFAULT 'offline',
+    last_seen_at TIMESTAMPTZ,
+    profile_visibility VARCHAR(20) DEFAULT 'public',
+    search_visibility BOOLEAN DEFAULT TRUE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    website_url TEXT,
+    social_links JSONB DEFAULT '{}'::JSONB,
+    interests TEXT[],
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deactivated_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}'::JSONB
+);
+```
+
+**Online Status**:
+- `online` - Currently active
+- `offline` - Not connected
+- `away` - Idle
+- `busy` - Do not disturb
+- `invisible` - Appear offline
+
+**Profile Visibility**:
+- `public` - Visible to everyone
+- `friends` - Visible to contacts only
+- `private` - Hidden
+
+---
+
+### users.contacts
+
+Friend/contact relationships.
+
+```sql
+CREATE TABLE users.contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    message_id UUID NULL REFERENCES messages.messages(id) ON DELETE SET NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_type VARCHAR(100) NOT NULL,
-    file_size BIGINT NOT NULL,
-    mime_type VARCHAR(100) NOT NULL,
-    storage_path TEXT NOT NULL,
-    url TEXT NOT NULL,
-    width INT NULL,
-    height INT NULL,
-    duration INT NULL,
-    checksum VARCHAR(64) NOT NULL,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP NULL
+    contact_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    relationship_type VARCHAR(50) DEFAULT 'contact',
+    status VARCHAR(50) DEFAULT 'pending',
+    nickname VARCHAR(100),
+    notes TEXT,
+    is_favorite BOOLEAN DEFAULT FALSE,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    is_archived BOOLEAN DEFAULT FALSE,
+    is_muted BOOLEAN DEFAULT FALSE,
+    muted_until TIMESTAMPTZ,
+    custom_notifications JSONB,
+    contact_source VARCHAR(50),
+    contact_groups TEXT[],
+    last_interaction_at TIMESTAMPTZ,
+    interaction_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    accepted_at TIMESTAMPTZ,
+    blocked_at TIMESTAMPTZ,
+    block_reason TEXT,
+    UNIQUE(user_id, contact_user_id),
+    CHECK (user_id != contact_user_id)
 );
+```
 
-CREATE INDEX idx_media_files_user_id ON media.files(user_id);
-CREATE INDEX idx_media_files_message_id ON media.files(message_id);
-CREATE INDEX idx_media_files_file_type ON media.files(file_type);
-CREATE INDEX idx_media_files_created_at ON media.files(created_at DESC);
+**Relationship Types**:
+- `friend` - Mutual friendship
+- `contact` - Added contact
+- `blocked` - Blocked user
+- `follow` - One-way follow
+
+**Status**:
+- `pending` - Friend request sent
+- `accepted` - Friends
+- `rejected` - Request declined
+- `blocked` - User blocked
+
+---
+
+### users.settings
+
+Comprehensive user preferences.
+
+```sql
+CREATE TABLE users.settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+
+    -- Privacy Settings
+    profile_visibility VARCHAR(20) DEFAULT 'public',
+    last_seen_visibility VARCHAR(20) DEFAULT 'everyone',
+    online_status_visibility VARCHAR(20) DEFAULT 'everyone',
+    profile_photo_visibility VARCHAR(20) DEFAULT 'everyone',
+    about_visibility VARCHAR(20) DEFAULT 'everyone',
+    read_receipts_enabled BOOLEAN DEFAULT TRUE,
+    typing_indicators_enabled BOOLEAN DEFAULT TRUE,
+
+    -- Notification Settings
+    push_notifications_enabled BOOLEAN DEFAULT TRUE,
+    email_notifications_enabled BOOLEAN DEFAULT TRUE,
+    sms_notifications_enabled BOOLEAN DEFAULT FALSE,
+    message_notifications BOOLEAN DEFAULT TRUE,
+    group_message_notifications BOOLEAN DEFAULT TRUE,
+    mention_notifications BOOLEAN DEFAULT TRUE,
+    reaction_notifications BOOLEAN DEFAULT TRUE,
+    call_notifications BOOLEAN DEFAULT TRUE,
+    notification_sound VARCHAR(100) DEFAULT 'default',
+    vibration_enabled BOOLEAN DEFAULT TRUE,
+    notification_preview VARCHAR(20) DEFAULT 'full',
+    quiet_hours_enabled BOOLEAN DEFAULT FALSE,
+    quiet_hours_start TIME,
+    quiet_hours_end TIME,
+
+    -- Chat Settings
+    enter_key_to_send BOOLEAN DEFAULT FALSE,
+    auto_download_photos BOOLEAN DEFAULT TRUE,
+    auto_download_videos BOOLEAN DEFAULT FALSE,
+    auto_download_documents BOOLEAN DEFAULT FALSE,
+    auto_download_on_wifi_only BOOLEAN DEFAULT TRUE,
+    compress_images BOOLEAN DEFAULT TRUE,
+    save_to_gallery BOOLEAN DEFAULT FALSE,
+    chat_backup_enabled BOOLEAN DEFAULT TRUE,
+    chat_backup_frequency VARCHAR(20) DEFAULT 'daily',
+
+    -- Security Settings
+    screen_lock_enabled BOOLEAN DEFAULT FALSE,
+    screen_lock_timeout INTEGER DEFAULT 0,
+    fingerprint_unlock BOOLEAN DEFAULT FALSE,
+    face_unlock BOOLEAN DEFAULT FALSE,
+    show_security_notifications BOOLEAN DEFAULT TRUE,
+
+    -- Display Settings
+    theme VARCHAR(20) DEFAULT 'system', -- light, dark, system
+    font_size VARCHAR(20) DEFAULT 'medium',
+    chat_wallpaper TEXT,
+    use_system_emoji BOOLEAN DEFAULT TRUE,
+
+    -- Language & Region
+    language_code VARCHAR(10) DEFAULT 'en',
+    timezone VARCHAR(100),
+    date_format VARCHAR(20) DEFAULT 'MM/DD/YYYY',
+    time_format VARCHAR(20) DEFAULT '12h',
+
+    -- Data Usage
+    low_data_mode BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
 ---
 
-## Notifications Schema
+### Additional User Tables
 
-### notifications.push_tokens
-
-FCM/APNS push notification tokens.
-
-```sql
-CREATE TABLE notifications.push_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    device_id VARCHAR(255) NOT NULL,
-    platform VARCHAR(50) NOT NULL,
-    token TEXT NOT NULL,
-    active BOOLEAN DEFAULT TRUE,
-    last_used_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(device_id, platform)
-);
-
-CREATE INDEX idx_push_tokens_user_id ON notifications.push_tokens(user_id);
-CREATE INDEX idx_push_tokens_active ON notifications.push_tokens(active) WHERE active = TRUE;
-```
-
----
-
-## Location Schema
-
-### location.phone_locations
-
-Phone number to location mapping.
-
-```sql
-CREATE TABLE location.phone_locations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    country_code VARCHAR(5) NOT NULL,
-    country VARCHAR(100) NOT NULL,
-    country_name VARCHAR(255) NOT NULL,
-    region VARCHAR(255) NULL,
-    timezone VARCHAR(100) NULL,
-    carrier VARCHAR(255) NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_phone_locations_country_code ON location.phone_locations(country_code);
-```
+- **users.contact_groups** - Organize contacts into groups
+- **users.blocked_users** - Blocked user list (separate from contacts)
+- **users.privacy_overrides** - Per-contact privacy customization
+- **users.status_history** - User status/stories (temporary, WhatsApp-style)
+- **users.status_views** - Who viewed user's status
+- **users.activity_log** - User activity audit trail
+- **users.preferences** - Key-value user preferences
+- **users.devices** - Registered devices for multi-device support
+- **users.achievements** - User badges/achievements (gamification)
+- **users.reports** - User-reported profiles
 
 ---
 
@@ -790,113 +655,46 @@ CREATE INDEX idx_phone_locations_country_code ON location.phone_locations(countr
 
 ### UUID Primary Keys
 
-All tables use UUID v4 for primary keys:
+All tables use UUID v4:
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ```
 
-### Soft Deletes
-
-Most tables support soft deletes:
-```sql
-deleted_at TIMESTAMP NULL
-```
-
-Query only non-deleted records:
-```sql
-SELECT * FROM table_name WHERE deleted_at IS NULL;
-```
-
 ### Timestamps
 
-All tables have automatic timestamps:
+Standard timestamp fields:
 ```sql
-created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+created_at TIMESTAMPTZ DEFAULT NOW(),
+updated_at TIMESTAMPTZ DEFAULT NOW()
+```
+
+### Soft Deletes
+
+Most tables support soft deletion:
+```sql
+deleted_at TIMESTAMPTZ
+```
+
+Query non-deleted records:
+```sql
+SELECT * FROM table WHERE deleted_at IS NULL
 ```
 
 ### JSONB Metadata
 
-Flexible metadata storage:
+Flexible additional data:
 ```sql
-metadata JSONB DEFAULT '{}'::jsonb
+metadata JSONB DEFAULT '{}'::JSONB
 ```
 
 ### Foreign Key Cascades
 
-Standard cascade rules:
+Standard cascade behavior:
 - `ON DELETE CASCADE` - Delete child records
 - `ON DELETE SET NULL` - Nullify reference
 - `ON DELETE RESTRICT` - Prevent deletion (default)
 
 ---
 
-## Indexes
-
-### Index Strategy
-
-**Primary Indexes:**
-- All primary keys (automatic)
-- All foreign keys
-- Unique constraints
-
-**Search Indexes:**
-- Phone numbers
-- Email addresses
-- Session tokens
-
-**Range Indexes:**
-- Timestamps (created_at, updated_at, expires_at)
-- Status columns
-
-**Partial Indexes:**
-- WHERE deleted_at IS NULL (soft deletes)
-- WHERE active = TRUE (active records)
-
-**GIN Indexes:**
-- JSONB columns (participants, metadata)
-
----
-
-## Triggers
-
-### Update Timestamp Trigger
-
-Automatically update `updated_at` on row modifications:
-
-```sql
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Apply to all tables
-CREATE TRIGGER update_users_updated_at
-    BEFORE UPDATE ON auth.users
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-```
-
-### Session Cleanup Trigger
-
-Delete expired sessions:
-
-```sql
-CREATE OR REPLACE FUNCTION cleanup_expired_sessions()
-RETURNS void AS $$
-BEGIN
-    DELETE FROM auth.sessions
-    WHERE expires_at < CURRENT_TIMESTAMP;
-END;
-$$ LANGUAGE plpgsql;
-
--- Run periodically via pg_cron or app scheduler
-```
-
----
-
 **Last Updated**: January 2025
-**Version**: 1.0.0
+**Based on actual SQL schema files in `/database/schemas/`**

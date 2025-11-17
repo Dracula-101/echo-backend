@@ -1,6 +1,6 @@
 # Echo Backend Architecture
 
-This document provides a comprehensive overview of the Echo Backend microservices architecture, design patterns, and technical decisions.
+Comprehensive overview of Echo Backend's microservices architecture, design patterns, and technical decisions - based on **ACTUAL** implementation.
 
 ## Table of Contents
 
@@ -20,18 +20,19 @@ This document provides a comprehensive overview of the Echo Backend microservice
 Echo Backend is a production-ready messaging platform built with Go, following microservices architecture principles. The system is designed for:
 
 - **Scalability**: Horizontal scaling of independent services
-- **Reliability**: Fault tolerance, graceful degradation
-- **Maintainability**: Clean architecture, clear boundaries
-- **Performance**: Sub-10ms response times, 10K+ concurrent connections
+- **Reliability**: Fault tolerance, graceful degradation, priority-based shutdown
+- **Maintainability**: Clean architecture, Builder pattern, interface-based design
+- **Performance**: Sub-10ms response times, 10K+ concurrent WebSocket connections
 - **Developer Experience**: Hot reload, comprehensive tooling, clear patterns
 
-### Key Metrics
+### Implementation Status
 
-- **Services**: 9 microservices (6 implemented, 3 placeholders)
-- **Code**: 25,000+ lines of Go code
-- **Database Schemas**: 7 domain-specific schemas
+- **Services**: 9 microservices total
+  - **✅ Fully Implemented**: 5 services (API Gateway, Auth, Message, User, Location)
+  - **🚧 Partial**: 2 services (Presence - stubbed routes, Media - placeholder)
+  - **❌ Placeholder**: 2 services (Notification, Analytics - empty implementations)
+- **Database Schemas**: 7 domain-specific schemas (all defined, not all fully used)
 - **Shared Components**: 15+ reusable middleware, 5 infrastructure abstractions
-- **Test Coverage**: Growing (target: 80%+)
 
 ## System Architecture
 
@@ -46,18 +47,21 @@ graph TB
     end
 
     subgraph "API Layer"
-        Gateway[API Gateway<br/>:8080]
+        Gateway[API Gateway<br/>:8080<br/>✅ IMPLEMENTED]
     end
 
-    subgraph "Service Layer"
-        Auth[Auth Service<br/>:8081]
-        User[User Service<br/>:8082]
-        Message[Message Service<br/>:8083]
-        Presence[Presence Service<br/>:8084]
-        Media[Media Service<br/>:8085]
-        Notification[Notification Service<br/>:8086]
-        Analytics[Analytics Service<br/>:8087]
-        Location[Location Service<br/>:8090]
+    subgraph "Service Layer - Implemented"
+        Auth[Auth Service<br/>:8081<br/>✅ IMPLEMENTED]
+        User[User Service<br/>:8082<br/>⚠️ PARTIAL]
+        Message[Message Service<br/>:8083<br/>✅ IMPLEMENTED]
+        Location[Location Service<br/>:8090<br/>✅ IMPLEMENTED]
+    end
+
+    subgraph "Service Layer - Placeholder"
+        Presence[Presence Service<br/>:8085<br/>🚧 STUBBED]
+        Media[Media Service<br/>:8084<br/>❌ PLACEHOLDER]
+        Notification[Notification Service<br/>:8086<br/>❌ PLACEHOLDER]
+        Analytics[Analytics Service<br/>:8087<br/>❌ PLACEHOLDER]
     end
 
     subgraph "Data Layer"
@@ -69,15 +73,11 @@ graph TB
     iOS & Android & Web -->|HTTP/WebSocket| Gateway
 
     Gateway -->|JWT Validation| Auth
-    Gateway -->|Route /api/v1/*| User & Message & Presence & Media & Notification
+    Gateway -->|Proxy Routes| User & Message & Presence & Media
 
     Auth --> DB & Redis & Location
     User --> DB
     Message --> DB & Redis & Kafka
-    Presence --> Redis & DB
-    Media --> DB
-    Notification --> Kafka & DB
-    Analytics --> DB
     Location --> DB
 
     style Gateway fill:#4CAF50,color:#fff
@@ -91,289 +91,392 @@ graph TB
 ### Architecture Principles
 
 1. **Service Independence**: Each service owns its data and logic
-2. **Interface-Based Design**: All dependencies are interfaces
-3. **Asynchronous Communication**: Kafka for event-driven patterns
-4. **Stateless Services**: State stored in databases/cache only
-5. **API Gateway Pattern**: Single entry point for clients
-6. **Database per Service**: Schema-level isolation
-7. **Graceful Degradation**: Services continue with reduced functionality
+2. **Interface-Based Design**: All dependencies are interfaces for testability
+3. **Asynchronous Communication**: Kafka for event-driven patterns (offline messages)
+4. **Stateless Services**: State stored in databases/cache only (except WebSocket Hub)
+5. **API Gateway Pattern**: Single entry point for all client requests
+6. **Database per Service**: Schema-level isolation within single PostgreSQL instance
+7. **Graceful Degradation**: Services continue with reduced functionality when dependencies unavailable
+
+---
 
 ## Microservices
 
-### 1. API Gateway (:8080)
+### 1. API Gateway (:8080) - ✅ IMPLEMENTED
 
 **Purpose**: Single entry point for all client requests
 
 **Responsibilities**:
-- Route requests to appropriate services
-- JWT token validation
-- Rate limiting (global and per-endpoint)
-- Request/response transformation
-- Health check aggregation
+- Reverse proxy to downstream services
+- JWT token validation via middleware
+- Global rate limiting (fixed window, sliding window, token bucket)
+- Request/response logging with correlation IDs
 - CORS handling
+- Security headers
+- Health check aggregation
 
 **Key Features**:
-- Path-based routing with prefix mapping
+- Path-based routing with prefix transformation
 - Dynamic route configuration via YAML
-- Circuit breaker for downstream services
-- Request deduplication
-- Response caching
+- Compression support (gzip)
+- TLS support (optional)
+- Request deduplication via RequestID
 
-**Routes Configuration**:
+**Route Configuration** (`services/api-gateway/configs/routes.yaml`):
 ```yaml
-routes:
-  - path: /api/v1/auth/*
-    target: http://auth-service:8081
-    strip_prefix: /api/v1/auth
-  - path: /api/v1/messages/*
-    target: http://message-service:8083
-    auth_required: true
+router_groups:
+  - prefix: /api/v1/auth
+    service: auth-service
+    transform: /api/v1/auth -> /
+    methods: [POST]
+
+  - prefix: /api/v1/messages
+    service: message-service
+    transform: /api/v1/messages -> /
+    methods: [GET, POST, PUT, DELETE]
 ```
 
-### 2. Auth Service (:8081)
+**Middleware Stack**:
+```
+Early Middleware (before routing):
+  1. RequestID
+  2. CorrelationID
+  3. RequestReceivedLogger
+  4. GlobalRateLimiting
+  5. Auth (JWT validation, skip paths: /health, /register, /login)
 
-**Purpose**: Authentication and authorization
+Late Middleware (after routing):
+  1. RequestCompletedLogger
+
+Common Chain:
+  - Recovery
+  - SecurityHeaders
+  - APIVersion
+  - CORS
+  - CacheControl
+  - Compression
+```
+
+---
+
+### 2. Auth Service (:8081) - ✅ IMPLEMENTED
+
+**Purpose**: Authentication and session management
+
+**Implementation Status**: **ONLY 2 endpoints implemented**
+
+**Actual Endpoints**:
+- `POST /register` - Email-based registration
+- `POST /login` - Email/password authentication
 
 **Responsibilities**:
-- User registration with OTP verification
-- Login/logout with JWT tokens
-- Session management (multi-device)
-- Password management (reset, change)
-- Token refresh and blacklisting
-- OAuth integration (Google, Apple)
+- User registration with email + password
+- Login with JWT token generation
+- Session management (multi-device support)
+- Password hashing (Argon2id, bcrypt, scrypt)
+- Integration with Location Service for IP geolocation
 
 **Authentication Flow**:
 ```mermaid
 sequenceDiagram
     participant C as Client
+    participant G as API Gateway
     participant A as Auth Service
     participant L as Location Service
-    participant DB as Database
+    participant DB as PostgreSQL
     participant R as Redis
 
-    C->>A: POST /register {phone, password}
-    A->>L: GET /lookup?phone=+1234
+    C->>G: POST /api/v1/auth/register
+    G->>A: POST /register {email, password}
+    A->>A: Validate email format
+    A->>DB: Check if email exists
+    A->>A: Hash password (Argon2id)
+    A->>L: GET /lookup?ip=client_ip
     L-->>A: {country, region, timezone}
-    A->>DB: Create user (unverified)
-    A->>DB: Generate OTP
-    A->>R: Store OTP (TTL: 5min)
-    A-->>C: OTP sent (201 Created)
+    A->>DB: INSERT INTO auth.users
+    A-->>G: 201 Created {user_id, email}
+    G-->>C: 201 Created
 
-    C->>A: POST /verify-otp {phone, otp}
-    A->>R: Validate OTP
-    A->>DB: Mark user verified
-    A->>A: Generate JWT + Refresh
-    A->>R: Store session
-    A-->>C: {access_token, refresh_token}
+    C->>G: POST /api/v1/auth/login
+    G->>A: POST /login {email, password, device_id}
+    A->>DB: SELECT FROM auth.users WHERE email=?
+    A->>A: Verify password hash
+    A->>A: Generate JWT tokens (access + refresh)
+    A->>DB: INSERT INTO auth.sessions
+    A->>R: SET session:{id} (TTL: 15min)
+    A->>DB: INSERT INTO auth.login_history
+    A-->>G: 200 OK {access_token, refresh_token}
+    G-->>C: 200 OK
 ```
 
 **Token Strategy**:
-- **Access Token**: JWT, 15 minutes, includes user_id, device_id, roles
-- **Refresh Token**: UUID, 7 days, stored in database
-- **Blacklisting**: Redis set for revoked tokens
+- **Access Token**: JWT, 15 minutes, includes user_id, device_id
+- **Refresh Token**: JWT, 7 days
+- **Blacklisting**: Not yet implemented (planned for Redis)
+- **Session Storage**: PostgreSQL + Redis cache
 
-### 3. Message Service (:8083)
+**What's NOT Implemented**:
+- ❌ OTP verification endpoints
+- ❌ Phone-based authentication
+- ❌ Logout endpoint
+- ❌ Token refresh endpoint
+- ❌ Password reset endpoints
+- ❌ OAuth integration (schema defined, not implemented)
+
+---
+
+### 3. Message Service (:8083) - ✅ IMPLEMENTED
 
 **Purpose**: Real-time messaging and conversation management
 
-**Responsibilities**:
-- WebSocket connection management
-- Message sending/receiving
-- Delivery tracking (sent → delivered → read)
-- Typing indicators
-- Read receipts
-- Message editing/deletion
-- Conversation management
+**Implementation Status**: **9 REST endpoints + WebSocket**
+
+**Actual Endpoints**:
+- `GET /ws` - WebSocket connection for real-time messaging
+- `POST /` - Send a new message
+- `GET /` - Get messages with pagination
+- `PUT /{id}` - Edit a message
+- `DELETE /{id}` - Delete a message
+- `POST /read` - Mark message(s) as read
+- `POST /typing` - Send typing indicator
+- `POST /conversations` - Create new conversation
+- `GET /conversations` - Get user's conversations
 
 **WebSocket Hub Architecture**:
 ```mermaid
 graph TB
-    subgraph "WebSocket Hub"
-        Hub[Hub Manager]
-        UserMap[User → Devices Map]
-        ConnPool[Connection Pool]
+    subgraph "WebSocket Hub (In-Memory)"
+        Hub[Hub Manager<br/>Single Goroutine]
+        ClientsMap[clients:<br/>map UserID → map Client bool]
+        ConnectionsMap[connections:<br/>map ClientID → Client]
 
-        Hub --> UserMap
-        Hub --> ConnPool
+        Hub --> ClientsMap
+        Hub --> ConnectionsMap
     end
 
     subgraph "Channels"
-        Register[Register Chan]
-        Unregister[Unregister Chan]
-        Broadcast[Broadcast Chan]
+        Register[register chan Client<br/>buffer: 256]
+        Unregister[unregister chan Client<br/>buffer: 256]
+        Broadcast[broadcast chan Message<br/>buffer: 1024]
     end
 
-    Client1[Client 1] -->|WebSocket| ConnPool
-    Client2[Client 2] -->|WebSocket| ConnPool
-    Client3[Client 3] -->|WebSocket| ConnPool
+    Client1[Client 1<br/>iPhone] -->|WebSocket| ConnectionsMap
+    Client2[Client 2<br/>Web] -->|WebSocket| ConnectionsMap
+    Client3[Client 3<br/>Android] -->|WebSocket| ConnectionsMap
 
-    ConnPool --> Register
-    ConnPool --> Unregister
+    ConnectionsMap --> Register
+    ConnectionsMap --> Unregister
     Hub --> Broadcast
 
-    Hub -->|Online Users| DB[(Database)]
-    Hub -->|Offline Users| Kafka[Kafka Queue]
+    Hub -->|Send to online users| Client1 & Client2 & Client3
+    Hub -->|Offline users| Kafka[Kafka Topic:<br/>notifications]
 ```
 
-**Hub Implementation**:
-- One goroutine per Hub managing all connections
-- User → [Device connections] mapping
-- Automatic cleanup of stale connections
-- Graceful shutdown with connection draining
-- Metrics: active connections, messages sent, broadcast count
+**Hub Implementation Details**:
+- **Multi-Device Support**: One user can have multiple connected devices
+- **Buffer Sizes**:
+  - Client send buffer: 256 messages
+  - Register/Unregister: 256 clients
+  - Broadcast channel: 1024 messages
+- **Max Message Size**: 1 MB
+- **Heartbeat**: Ping every 45 seconds, timeout after 90 seconds
+- **Cleanup**: Automatic removal of stale connections every 90 seconds
+
+**WebSocket Events** (Only 3 events supported):
+1. **read_receipt**: Mark message as read
+2. **typing**: Send typing indicator (TTL: 3 seconds)
+3. **ping**: Connection keep-alive
 
 **Message Flow**:
-1. Client sends message via REST API
-2. Service saves to database
-3. Creates delivery records for recipients
-4. If recipient online: send via WebSocket (mark delivered)
-5. If recipient offline: publish to Kafka → Notification Service
-6. Client receives read receipt → update delivery status
+1. Client sends message via `POST /` (REST API)
+2. Service saves to `messages.messages` table
+3. Creates delivery records in `messages.delivery_status`
+4. Hub checks if recipients are online:
+   - **Online**: Send via WebSocket, mark as delivered
+   - **Offline**: Publish to Kafka topic `notifications`
+5. Recipient sends read receipt → update delivery status to 'read'
 
-### 4. User Service (:8082)
+See [WebSocket Protocol](./WEBSOCKET_PROTOCOL.md) for complete protocol details.
 
-**Purpose**: User profile and contact management
+---
+
+### 4. User Service (:8082) - ⚠️ PARTIAL
+
+**Purpose**: User profile management
+
+**Implementation Status**: **ONLY 2 endpoints**
+
+**Actual Endpoints**:
+- `POST /` - Create or update user profile
+- `GET /{user_id}` - Get user profile by ID
+
+**Features**:
+- Automatic username generation if not provided
+- Update existing profile if already exists for user_id
+- Profile fields: username, display_name, bio, avatar_url
+
+**What's NOT Implemented**:
+- ❌ Contact management
+- ❌ User blocking
+- ❌ Privacy settings
+- ❌ User search
+- ❌ Profile picture upload
+
+---
+
+### 5. Location Service (:8090) - ✅ IMPLEMENTED
+
+**Purpose**: IP address and phone number geolocation
+
+**Implementation Status**: **2 endpoints**
+
+**Actual Endpoints**:
+- `GET /health` - Health check
+- `GET /lookup?ip={ip_address}` - IP geolocation lookup
 
 **Responsibilities**:
-- User profile CRUD
-- Profile updates (name, bio, avatar)
-- Contact management
-- User blocking
-- Privacy settings
-- User search
+- IP address to country/region/timezone mapping
+- Used by Auth Service during registration/login
+- Stores geolocation data in `location` schema
 
-**Profile Structure**:
-```go
-type Profile struct {
-    UserID        uuid.UUID
-    DisplayName   string
-    Bio           string
-    AvatarURL     string
-    Status        string // online, away, busy, offline
-    LastSeen      time.Time
-    PhoneVisible  bool
-    ProfileVisible bool
+**Example Usage**:
+```http
+GET /lookup?ip=8.8.8.8
+
+Response:
+{
+  "success": true,
+  "data": {
+    "ip": "8.8.8.8",
+    "country": "United States",
+    "country_code": "US",
+    "region": "California",
+    "city": "Mountain View",
+    "timezone": "America/Los_Angeles",
+    "isp": "Google LLC",
+    "coordinates": {
+      "latitude": 37.386,
+      "longitude": -122.084
+    }
+  }
 }
 ```
 
-### 5. Presence Service (:8084)
+---
 
-**Purpose**: Track user online status and activity
+### 6. Presence Service (:8085) - 🚧 STUBBED
 
-**Responsibilities**:
+**Status**: Routes defined, no actual implementation
+
+**Planned Features**:
 - Online/offline status tracking
 - Last seen timestamps
 - Activity status (typing, recording)
-- Presence broadcasting
+- Presence broadcasting via WebSocket
 
-**Redis Strategy**:
-- User presence: `presence:{user_id}` → {status, last_seen, device_ids}
-- TTL-based expiration for automatic offline marking
-- Pub/Sub for real-time presence updates
+---
 
-### 6. Location Service (:8090)
+### 7. Media Service (:8084) - ❌ PLACEHOLDER
 
-**Purpose**: Phone number geolocation
+**Status**: Placeholder service with empty handlers
 
-**Responsibilities**:
-- Phone number to country mapping
-- Region and timezone lookup
-- Carrier information (optional)
-
-**Usage**:
-```http
-GET /lookup?phone=+1234567890
-Response:
-{
-  "country": "US",
-  "country_code": "+1",
-  "region": "California",
-  "timezone": "America/Los_Angeles"
-}
-```
-
-### 7-9. Placeholder Services
-
-**Media Service** (:8085):
+**Planned Features**:
 - File uploads (images, videos, documents)
 - Thumbnail generation
+- Media storage (S3/Cloudflare R2)
 - CDN integration
-- Storage management (S3/R2)
 
-**Notification Service** (:8086):
+---
+
+### 8. Notification Service (:8086) - ❌ PLACEHOLDER
+
+**Status**: No implementation
+
+**Planned Features**:
 - Push notification delivery (FCM, APNS)
-- Notification preferences
-- Device token management
 - Kafka consumer for offline messages
+- Device token management
+- Notification preferences
 
-**Analytics Service** (:8087):
+---
+
+### 9. Analytics Service (:8087) - ❌ PLACEHOLDER
+
+**Status**: No implementation
+
+**Planned Features**:
 - Usage metrics collection
 - User activity tracking
 - Message analytics
 - Dashboard data aggregation
 
+---
+
 ## Shared Infrastructure
 
-### Shared Package Structure
+### Package Structure
 
 ```
 shared/
-├── pkg/                  # Core infrastructure
-│   ├── database/        # PostgreSQL interface
-│   ├── cache/           # Redis interface
-│   ├── messaging/       # Kafka interface
-│   ├── logger/          # Structured logging
-│   ├── config/          # Configuration utilities
-│   ├── errors/          # Error handling
-│   └── storage/         # Object storage (R2)
-└── server/              # HTTP utilities
-    ├── router/          # Router builder
-    ├── middleware/      # 15+ middleware
-    ├── response/        # Standard responses
-    ├── shutdown/        # Graceful shutdown
-    ├── health/          # Health checks
-    └── common/          # Token, hashing, encryption
+├── pkg/                    # Core infrastructure abstractions
+│   ├── database/          # PostgreSQL interface + implementation
+│   ├── cache/             # Redis interface + implementation
+│   ├── messaging/         # Kafka interface + implementation
+│   ├── logger/            # Structured logging (Zap adapter)
+│   ├── config/            # Configuration utilities
+│   ├── errors/            # Error handling
+│   └── storage/           # Object storage (planned)
+└── server/                # HTTP server utilities
+    ├── router/            # Gorilla mux wrapper with Builder
+    ├── middleware/        # 15+ middleware components
+    ├── response/          # Standardized JSON responses
+    ├── shutdown/          # Graceful shutdown with priorities
+    ├── health/            # Health check system
+    ├── headers/           # Standard header constants
+    ├── context/           # Context key constants
+    └── common/            # Token, hashing, encryption services
 ```
 
 ### Database Abstraction
 
-**Interface Design**:
+**Interface**: `shared/pkg/database/database.go`
+
 ```go
 type Database interface {
     // CRUD Operations
     Create(ctx context.Context, model Model) error
     FindByID(ctx context.Context, model Model, id interface{}) error
+    FindOne(ctx context.Context, model Model, query string, args ...interface{}) error
+    FindAll(ctx context.Context, models interface{}, query string, args ...interface{}) error
     Update(ctx context.Context, model Model) error
-    Delete(ctx context.Context, model Model) error  // Soft delete
+    Delete(ctx context.Context, model Model) error        // Soft delete
     HardDelete(ctx context.Context, model Model) error
 
-    // Query Operations
-    FindOne(ctx context.Context, model Model, query string, args ...interface{}) error
-    FindMany(ctx context.Context, models interface{}, query string, args ...interface{}) error
-    Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
-    Exec(ctx context.Context, query string, args ...interface{}) error
+    // Raw Queries
+    RawQuery(ctx context.Context, query string, args ...interface{}) (Rows, error)
+    RawExec(ctx context.Context, query string, args ...interface{}) error
 
-    // Transaction Support
+    // Transactions
     WithTransaction(ctx context.Context, fn func(tx Transaction) error) error
 
-    // Health & Stats
+    // Health & Lifecycle
     Ping(ctx context.Context) error
     Stats() Stats
     Close() error
 }
-```
 
-**Model Interface**:
-```go
 type Model interface {
     TableName() string   // e.g., "auth.users"
     PrimaryKey() string  // e.g., "id"
 }
 ```
 
+**Implementation**: PostgreSQL with pgx driver
+
 ### Cache Abstraction
 
-**Interface Design**:
+**Interface**: `shared/pkg/cache/cache.go`
+
 ```go
 type Cache interface {
     // Basic Operations
@@ -398,216 +501,277 @@ type Cache interface {
     SetString(ctx context.Context, key string, value string, ttl time.Duration) error
     GetInt(ctx context.Context, key string) (int64, error)
     SetInt(ctx context.Context, key string, value int64, ttl time.Duration) error
+
+    // Health & Lifecycle
+    Ping(ctx context.Context) error
+    Close() error
 }
 ```
 
+**Implementation**: Redis 7+
+
 ### Middleware Components
 
-**Available Middleware** (15+ components):
+**Available Middleware** (15+ components in `shared/server/middleware/`):
 
-1. **RequestID**: Generate unique request ID
-2. **CorrelationID**: Extract/generate correlation ID
-3. **RequestReceivedLogger**: Log incoming requests
-4. **RequestCompletedLogger**: Log request completion with duration
-5. **Recovery**: Panic recovery with stack traces
-6. **Timeout**: Request timeout enforcement
-7. **BodyLimit**: Limit request body size
-8. **RateLimit**: Multiple strategies (fixed window, sliding window, token bucket)
-9. **Auth**: JWT token validation
-10. **CORS**: Cross-origin resource sharing
-11. **SecurityHeaders**: Security headers (CSP, HSTS, etc.)
-12. **CacheControl**: Cache control headers
-13. **Compression**: Gzip compression
-14. **InterceptUserId**: Extract user ID from context
-15. **InterceptSessionId**: Extract session ID from context
+| Middleware | Purpose | Configuration |
+|------------|---------|---------------|
+| **RequestID** | Generate unique request ID | Header name |
+| **CorrelationID** | Distributed tracing ID | Header name |
+| **RequestReceivedLogger** | Log incoming requests | Logger instance |
+| **RequestCompletedLogger** | Log completion + duration | Logger instance |
+| **Recovery** | Panic recovery with stack trace | Logger instance |
+| **Timeout** | Request timeout enforcement | Duration (e.g., 30s) |
+| **BodyLimit** | Limit request body size | Bytes (e.g., 10MB) |
+| **RateLimit** | Multiple strategies | Config (requests, window) |
+| **FixedWindowRateLimit** | Simple rate limiting | Requests, window |
+| **SlidingWindowRateLimit** | Accurate rate limiting | Requests, window |
+| **TokenBucketRateLimit** | Burst handling | Capacity, refill rate |
+| **Auth** | JWT validation | ValidateToken func, skip paths |
+| **CORS** | Cross-origin support | Origins, methods, headers |
+| **SecurityHeaders** | Security headers | Header config |
+| **CacheControl** | Cache headers | Max-age, public/private |
+| **Compression** | Gzip compression | Level, min size, types |
+| **InterceptUserId** | Extract user ID to context | - |
+| **InterceptSessionId** | Extract session ID to context | - |
+| **InterceptSessionToken** | Extract session token to context | - |
 
-**Middleware Chain**:
-```go
-router.NewBuilder().
-    // Early middleware (before route matching)
-    WithEarlyMiddleware(
-        middleware.RequestID(),
-        middleware.CorrelationID(),
-        middleware.RequestReceivedLogger(logger),
-        middleware.RateLimit(limiter),
-    ).
-    // Late middleware (after route matching)
-    WithLateMiddleware(
-        middleware.Recovery(logger),
-        middleware.Auth(tokenService),
-        middleware.RequestCompletedLogger(logger),
-    ).
-    Build()
+**Middleware Execution Order**:
 ```
+1. Early Middleware (before route matching)
+2. Route Matching
+3. Late Middleware (after route matching)
+4. Handler Execution
+5. Late Middleware Response Phase
+6. Early Middleware Response Phase
+```
+
+---
 
 ## Database Design
 
 ### Multi-Schema Architecture
 
-Each service has a dedicated schema for data isolation:
+Single PostgreSQL database with 7 domain schemas:
 
 ```
-PostgreSQL Database: echo
-├── auth schema            # Auth Service
-├── users schema           # User Service
-├── messages schema        # Message Service
-├── media schema           # Media Service
-├── notifications schema   # Notification Service
-├── analytics schema       # Analytics Service
-└── location schema        # Location Service
+PostgreSQL Database: echo_db
+├── auth schema           # Auth Service (10 tables)
+├── users schema          # User Service (13 tables)
+├── messages schema       # Message Service (20 tables)
+├── media schema          # Media Service (planned)
+├── notifications schema  # Notification Service (planned)
+├── analytics schema      # Analytics Service (planned)
+└── location schema       # Location Service (minimal)
 ```
 
-### Schema: auth
+### Schema: auth (10 tables)
 
-**Tables**:
-- `users` - User accounts (phone, password_hash, verified, locked)
-- `sessions` - Active user sessions with device info
-- `otp_verifications` - OTP codes for verification
-- `refresh_tokens` - Refresh token storage
-- `oauth_providers` - OAuth integration data
-- `login_history` - Login attempts and history
+**Core Tables**:
+- `users` - User accounts (email PRIMARY, phone optional, password_hash, email_verified)
+- `sessions` - Active sessions with device metadata (device_id, ip_address, user_agent, location)
+- `login_history` - Login attempts and audit trail
+
+**Verification & Security**:
+- `otp_verifications` - OTP codes (not used yet)
+- `email_verification_tokens` - Email verification
+- `password_reset_tokens` - Password reset flow
+
+**Advanced Auth**:
+- `oauth_providers` - OAuth integration (schema only)
+- `security_events` - Security audit log
+- `rate_limits` - Rate limiting data
+- `api_keys` - API key management (future)
 
 **Key Features**:
-- UUID primary keys
-- Phone number uniqueness
-- Password history tracking
-- Account lockout after failed attempts
-- Device fingerprinting (OS, browser, model, location)
-- Session expiration via TTL
+- **Email-based authentication** (NOT phone-first)
+- Phone number is optional secondary field
+- Account lockout after failed attempts (`failed_login_attempts`, `locked_until`)
+- Device fingerprinting (OS, browser, model, IP, geolocation)
+- Session expiration via `expires_at` timestamp
 
-### Schema: users
+### Schema: users (13 tables)
 
-**Tables**:
-- `profiles` - User profiles (name, bio, avatar, status)
-- `contacts` - User contact relationships
+**Profile Management**:
+- `profiles` - User profiles (username, display_name, bio, avatar_url, status)
+- `contact_groups` - User-defined contact groups
+- `contacts` - Contact relationships
+
+**Privacy & Blocking**:
 - `blocked_users` - Blocked user list
+- `settings` - Comprehensive user settings (privacy, notifications, theme, language)
 - `privacy_settings` - Privacy preferences
+- `notification_preferences` - Notification settings
 
-### Schema: messages
+**Additional**:
+- `user_devices` - Device tracking
+- `user_sessions` - User session data
+- `user_presence` - Online/offline status (linked to Presence Service)
 
-**Tables**:
-- `conversations` - Conversation metadata
-- `messages` - Individual messages
-- `delivery_tracking` - Message delivery status per recipient
+### Schema: messages (20 tables)
+
+**Core Messaging**:
+- `conversations` - Conversation metadata (type: direct, group, channel)
+- `conversation_participants` - Participant mapping
+- `messages` - Individual messages (content, type, metadata)
+- `delivery_status` - Per-recipient delivery tracking (sent → delivered → read)
+
+**Rich Features**:
 - `message_reactions` - Emoji reactions
-- `message_threads` - Threaded conversations
+- `message_mentions` - @mentions
+- `message_attachments` - File attachments
+- `message_links` - Link previews
+- `message_edits` - Edit history
+- `message_threads` - Threaded replies
 
-**Message Types**:
-- `text` - Plain text
-- `image` - Image with optional caption
-- `video` - Video with thumbnail
-- `audio` - Voice message
-- `document` - File attachment
-- `location` - GPS coordinates
-- `contact` - Shared contact
+**Real-Time Features**:
+- `typing_indicators` - Typing status (TTL-based)
+- `read_receipts` - Read confirmation tracking
 
-**Delivery Status Flow**:
-```
-sent → delivered → read
-```
+**Group & Channels**:
+- `conversation_settings` - Per-conversation settings
+- `conversation_roles` - User roles in groups/channels
+- `pinned_messages` - Pinned messages
 
-### Common Patterns
+**Advanced Features**:
+- `calls` - Voice/video call metadata
+- `call_participants` - Call participant tracking
+- `polls` - Poll messages
+- `poll_options` - Poll choices
+- `poll_votes` - Poll vote tracking
 
-**Soft Deletes**:
+### Common Database Patterns
+
+**1. Soft Deletes**:
 ```sql
 deleted_at TIMESTAMP NULL DEFAULT NULL
+
+-- Query only non-deleted:
+WHERE deleted_at IS NULL
 ```
 
-**Automatic Timestamps**:
+**2. Automatic Timestamps**:
 ```sql
 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+
 -- Trigger updates updated_at on every UPDATE
 ```
 
-**UUID Generation**:
+**3. UUID Primary Keys**:
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ```
 
-**JSONB Metadata**:
+**4. JSONB Metadata**:
 ```sql
 metadata JSONB DEFAULT '{}'::jsonb
+
+-- Allows flexible schema extension
 ```
+
+**5. Composite Indexes for Soft Deletes**:
+```sql
+CREATE INDEX idx_users_email ON auth.users(email) WHERE deleted_at IS NULL;
+```
+
+See [Database Schema](./DATABASE_SCHEMA.md) for complete table definitions.
+
+---
 
 ## Communication Patterns
 
-### Synchronous (HTTP/REST)
+### 1. Synchronous HTTP (REST)
 
-**When to Use**:
-- Client-to-service requests
-- Service-to-service for critical path
+**When Used**:
+- Client-to-service requests (all client interactions)
+- Service-to-service for critical path (Auth → Location)
 - Real-time responses required
 
-**Example**: User registration, login, message sending
+**Examples**:
+- User registration, login
+- Message sending
+- Profile updates
+- Health checks
 
-### Asynchronous (Kafka)
+### 2. Asynchronous Messaging (Kafka)
 
-**When to Use**:
-- Offline notifications
+**When Used**:
+- Offline message delivery
 - Event broadcasting
 - Analytics events
 - Non-critical path operations
 
-**Topics**:
-- `user.registered` - New user events
-- `message.sent` - Offline message delivery
-- `presence.updated` - Presence change events
-- `analytics.events` - Usage metrics
+**Kafka Topics**:
+- `notifications` - Offline message delivery queue
+- `user.registered` - User registration events (planned)
+- `presence.updated` - Presence change events (planned)
+- `analytics.events` - Usage metrics (planned)
 
-**Example Flow**:
+**Message Flow Example**:
 ```mermaid
 sequenceDiagram
-    participant M as Message Service
+    participant MS as Message Service
     participant K as Kafka
-    participant N as Notification Service
+    participant NS as Notification Service
     participant FCM as FCM/APNS
 
-    M->>K: Publish to message.sent topic
-    K->>N: Consume message.sent
-    N->>N: Check user notification preferences
-    N->>FCM: Send push notification
-    FCM-->>N: Delivery confirmed
+    MS->>MS: User offline, cannot deliver via WebSocket
+    MS->>K: Publish to "notifications" topic
+    Note over K: Message queued
+    NS->>K: Consume from "notifications"
+    NS->>NS: Check user preferences
+    NS->>FCM: Send push notification
+    FCM-->>NS: Delivery confirmed
+    NS->>K: Acknowledge message
 ```
 
-### Real-Time (WebSocket)
+### 3. Real-Time WebSocket
 
-**When to Use**:
-- Real-time messaging
+**When Used**:
+- Real-time message delivery
 - Typing indicators
-- Presence updates
-- Live notifications
+- Read receipts
+- Presence updates (planned)
 
-**Connection Flow**:
+**Connection Lifecycle**:
 ```
-1. Client opens WebSocket: ws://host/ws
-2. Client sends auth headers (X-User-ID, X-Device-ID)
-3. Hub registers client connection
-4. Hub sends welcome message
-5. Client receives real-time events
-6. Client sends heartbeat every 30s
-7. Hub removes stale connections after 60s
+1. Client opens WebSocket: ws://localhost:8083/ws
+2. Client sends headers: X-User-ID, X-Device-ID, X-Platform
+3. Hub registers connection in ClientsMap
+4. Hub sends connection_ack message
+5. Hub maintains connection with periodic pings (45s interval)
+6. Client sends pong or application pings
+7. Hub removes connection after 90s inactivity
+8. Client handles reconnection with exponential backoff
 ```
+
+**Event Types** (only 3 supported):
+- `read_receipt` - Mark message as read
+- `typing` - Typing indicator
+- `ping` - Connection keep-alive
+
+See [WebSocket Protocol](./WEBSOCKET_PROTOCOL.md) for complete details.
+
+---
 
 ## Design Patterns
 
 ### 1. Builder Pattern
 
-**Purpose**: Construct services with validated dependencies
+**Used For**: Service construction with validated dependencies
 
 **Implementation**:
 ```go
+// Service Builder
 type AuthServiceBuilder struct {
-    repo           AuthRepository
-    tokenService   TokenService
-    hashingService HashingService
-    cache          Cache
-    config         *Config
-    logger         Logger
-}
-
-func NewAuthServiceBuilder() *AuthServiceBuilder {
-    return &AuthServiceBuilder{}
+    repo            AuthRepository
+    loginHistoryRepo LoginHistoryRepository
+    tokenService    token.JWTTokenService
+    hashingService  hashing.HashingService
+    cache           cache.Cache
+    config          *AuthConfig
+    logger          logger.Logger
 }
 
 func (b *AuthServiceBuilder) WithRepo(repo AuthRepository) *AuthServiceBuilder {
@@ -615,60 +779,74 @@ func (b *AuthServiceBuilder) WithRepo(repo AuthRepository) *AuthServiceBuilder {
     return b
 }
 
-// ... other With methods ...
+// ... more With methods ...
 
 func (b *AuthServiceBuilder) Build() *AuthService {
     // Validate required dependencies
     if b.repo == nil {
-        panic("AuthRepository is required")
+        panic("AuthService requires a repository")
     }
-    if b.tokenService == nil {
-        panic("TokenService is required")
+    if b.logger == nil {
+        panic("AuthService requires a logger")
     }
+    // ... validate all required fields ...
 
     return &AuthService{
-        repo:           b.repo,
-        tokenService:   b.tokenService,
-        hashingService: b.hashingService,
-        cache:          b.cache,
-        config:         b.config,
-        logger:         b.logger,
+        repo:            b.repo,
+        tokenService:    b.tokenService,
+        hashingService:  b.hashingService,
+        cache:           b.cache,
+        config:          b.config,
+        logger:          b.logger,
     }
 }
 ```
 
 **Benefits**:
+- Compile-time dependency validation
 - Explicit dependency declaration
-- Compile-time safety
 - Clear initialization flow
-- Panic early on missing dependencies
+- Panic early if dependencies missing
+
+**Also Used For**:
+- Router construction (`router.NewBuilder()`)
+- Server construction (`server.New()`)
 
 ### 2. Repository Pattern
 
 **Purpose**: Abstract data access layer
 
-**Implementation**:
+**Interface**:
 ```go
 type AuthRepository interface {
     CreateUser(ctx context.Context, user *User) error
-    FindUserByPhone(ctx context.Context, phone string) (*User, error)
+    FindByEmail(ctx context.Context, email string) (*User, error)
+    FindByID(ctx context.Context, id uuid.UUID) (*User, error)
     UpdateUser(ctx context.Context, user *User) error
     DeleteUser(ctx context.Context, userID uuid.UUID) error
+    IsEmailTaken(ctx context.Context, email string) (bool, error)
 }
+```
 
+**Implementation**:
+```go
 type authRepository struct {
-    db Database
+    db     database.Database
+    logger logger.Logger
 }
 
-func (r *authRepository) CreateUser(ctx context.Context, user *User) error {
-    return r.db.Create(ctx, user)
+func (r *authRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
+    user := &User{}
+    query := "SELECT * FROM auth.users WHERE email = $1 AND deleted_at IS NULL"
+    err := r.db.FindOne(ctx, user, query, email)
+    return user, err
 }
 ```
 
 **Benefits**:
 - Testability via mocking
-- Swap implementations easily
-- Consistent data access patterns
+- Swap database implementations easily
+- Consistent data access patterns across services
 
 ### 3. Middleware Chain Pattern
 
@@ -676,13 +854,17 @@ func (r *authRepository) CreateUser(ctx context.Context, user *User) error {
 
 **Implementation**:
 ```go
-type Middleware func(http.Handler) http.Handler
+type Handler func(http.Handler) http.Handler
 
 type Chain struct {
-    middlewares []Middleware
+    middlewares []Handler
 }
 
-func (c *Chain) Append(m Middleware) *Chain {
+func NewChain() *Chain {
+    return &Chain{middlewares: make([]Handler, 0)}
+}
+
+func (c *Chain) Append(m Handler) *Chain {
     c.middlewares = append(c.middlewares, m)
     return c
 }
@@ -695,167 +877,261 @@ func (c *Chain) Then(h http.Handler) http.Handler {
 }
 ```
 
+**Usage**:
+```go
+commonChain := middleware.NewChain()
+commonChain.Append(middleware.Recovery(log))
+commonChain.Append(middleware.SecurityHeaders(cfg.Security.Headers))
+commonChain.Append(middleware.CORS(cfg.Security.AllowedOrigins, ...))
+
+router.WithMiddlewareChain(commonChain)
+```
+
 ### 4. Graceful Shutdown Pattern
 
-**Purpose**: Clean service termination
+**Purpose**: Priority-based clean service termination
+
+**Priority Levels**:
+```go
+const (
+    PriorityHigh   = 100  // HTTP server, WebSocket hub
+    PriorityNormal = 50   // Database, cache, Kafka connections
+    PriorityLow    = 10   // Logger sync, final cleanup
+)
+```
 
 **Implementation**:
 ```go
-type Hook struct {
-    priority int
-    name     string
-    fn       func(context.Context) error
-}
+shutdownMgr := shutdown.New(
+    shutdown.WithTimeout(30*time.Second),
+    shutdown.WithLogger(log),
+)
 
-func Register(priority int, name string, fn func(context.Context) error) {
-    hooks = append(hooks, Hook{priority, name, fn})
-}
+// High priority: Stop accepting requests
+shutdownMgr.RegisterWithPriority(
+    "http-server",
+    shutdown.ServerShutdownHook(srv),
+    shutdown.PriorityHigh,
+)
 
-func Shutdown(ctx context.Context) {
-    // Sort by priority (High → Low)
-    sort.Slice(hooks, func(i, j int) bool {
-        return hooks[i].priority > hooks[j].priority
-    })
+// High priority: Close WebSocket connections
+shutdownMgr.RegisterWithPriority(
+    "websocket-hub",
+    shutdown.Hook(func(ctx context.Context) error {
+        hub.Shutdown()
+        return nil
+    }),
+    shutdown.PriorityHigh,
+)
 
-    // Execute hooks
-    for _, hook := range hooks {
-        if err := hook.fn(ctx); err != nil {
-            logger.Error("Shutdown hook failed", hook.name, err)
-        }
-    }
-}
+// Normal priority: Close infrastructure
+shutdownMgr.RegisterWithPriority(
+    "database",
+    shutdown.Hook(func(ctx context.Context) error {
+        return dbClient.Close()
+    }),
+    shutdown.PriorityNormal,
+)
+
+// Low priority: Final cleanup
+shutdownMgr.RegisterWithPriority(
+    "logger-sync",
+    shutdown.Hook(func(ctx context.Context) error {
+        return log.Sync()
+    }),
+    shutdown.PriorityLow,
+)
 ```
 
-**Priority Levels**:
-- **High (100)**: Stop accepting requests, HTTP server shutdown
-- **Normal (50)**: Close database connections, cache cleanup
-- **Low (10)**: Flush logs, final cleanup
+**Execution Order on SIGTERM/SIGINT**:
+1. **High Priority** (100): HTTP server shutdown, WebSocket hub shutdown
+2. **Normal Priority** (50): Database close, Cache close, Kafka close
+3. **Low Priority** (10): Logger sync, buffer flush
+
+See [Server Architecture](./SERVER_ARCHITECTURE.md) for complete initialization patterns.
+
+---
 
 ## Security Architecture
 
 ### Authentication
 
-**Phone-First Model**:
-1. User registers with phone number + password
-2. OTP sent to phone (via SMS)
-3. User verifies OTP
-4. System generates JWT access token + refresh token
-5. Client stores tokens securely
+**Email-Based Model** (Actual Implementation):
+
+1. **Registration**:
+   - User provides email + password
+   - System validates email format and uniqueness
+   - Password hashed using Argon2id/bcrypt/scrypt
+   - User record created in `auth.users` (email_verified = false initially)
+   - IP address captured via Location Service
+
+2. **Login**:
+   - User provides email + password + optional device_id
+   - System verifies password hash
+   - Generates JWT access token (15 min) + refresh token (7 days)
+   - Creates session in `auth.sessions`
+   - Caches session in Redis (TTL: 15 minutes)
+   - Records login in `auth.login_history`
 
 **JWT Token Structure**:
 ```json
 {
-  "user_id": "uuid",
-  "device_id": "device-uuid",
-  "roles": ["user"],
+  "sub": "user_id_uuid",
   "iat": 1234567890,
-  "exp": 1234568790
+  "exp": 1234568790,
+  "iss": "echo-backend",
+  "aud": ["echo-backend"]
 }
 ```
-
-### Authorization
-
-**Middleware Chain**:
-```
-Request → RequestID → CorrelationID → RateLimit → Auth → Handler
-```
-
-**Auth Middleware**:
-1. Extract JWT from `Authorization: Bearer <token>` header
-2. Validate token signature
-3. Check token expiration
-4. Check token blacklist (Redis)
-5. Extract user_id and store in context
-6. Pass to handler
 
 ### Password Security
 
 **Hashing Algorithms** (in order of preference):
-1. **Argon2id** - Memory-hard, GPU-resistant (recommended)
-2. **bcrypt** - Industry standard
-3. **scrypt** - Alternative memory-hard
 
-**Configuration**:
-```yaml
-auth:
-  hashing:
-    algorithm: argon2id
-    argon2:
-      memory: 65536      # 64 MB
-      iterations: 3
-      parallelism: 2
-      salt_length: 16
-      key_length: 32
+1. **Argon2id** (Recommended) - Memory-hard, GPU-resistant
+   ```yaml
+   argon2:
+     memory: 65536      # 64 MB
+     time: 3            # Iterations
+     threads: 2
+     salt_length: 16
+     key_length: 32
+   ```
+
+2. **bcrypt** - Industry standard
+   ```yaml
+   bcrypt:
+     cost: 12
+   ```
+
+3. **scrypt** - Alternative memory-hard
+   ```yaml
+   scrypt:
+     salt_length: 16
+     N: 32768
+     r: 8
+     p: 1
+     key_length: 32
+   ```
+
+**Configuration**: `services/auth-service/configs/config.yaml`
+
+### Authorization
+
+**Middleware Flow**:
 ```
+Request → RequestID → CorrelationID → RateLimiting → Auth → Handler
+```
+
+**Auth Middleware** (`services/api-gateway/cmd/server/main.go:200`):
+1. Extract JWT from `Authorization: Bearer <token>` header
+2. Validate token signature using shared secret key
+3. Check token expiration
+4. Extract user_id from claims (subject field)
+5. Store user_id in request context
+6. Skip validation for paths in SkipPaths config
+
+**Skip Paths** (No auth required):
+- `/health`
+- `/api/v1/auth/register`
+- `/api/v1/auth/login`
 
 ### Rate Limiting
 
-**Strategies**:
+**Strategies Available**:
 
-1. **Fixed Window**: Simple, memory-efficient
-   - 100 requests per 1 minute window
+1. **Fixed Window**:
+   ```go
+   middleware.FixedWindowRateLimit(100, time.Minute)
+   // 100 requests per 1-minute window
+   ```
 
-2. **Sliding Window**: More accurate
-   - Smooth rate limiting across window boundaries
+2. **Sliding Window**:
+   ```go
+   middleware.SlidingWindowRateLimit(100, time.Minute)
+   // Smooth rate limiting across window boundaries
+   ```
 
-3. **Token Bucket**: Burst handling
-   - Bucket capacity: 100 tokens
-   - Refill rate: 10 tokens/second
+3. **Token Bucket**:
+   ```go
+   middleware.TokenBucketRateLimit(100, time.Minute)
+   // Bucket capacity: 100 tokens, refill over 1 minute
+   ```
 
-**Application**:
-```go
-middleware.RateLimit(middleware.RateLimitConfig{
-    Strategy:   middleware.TokenBucket,
-    Capacity:   100,
-    RefillRate: 10,
-    KeyFunc: func(r *http.Request) string {
-        return extractUserID(r)  // Per-user limiting
-    },
-})
-```
+**Applied At**:
+- **Global**: API Gateway (100 requests/minute per IP)
+- **Per-Service**: Message Service (100 requests/minute per connection)
 
 ### Security Headers
 
-**Applied by Middleware**:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `X-XSS-Protection: 1; mode=block`
-- `Strict-Transport-Security: max-age=31536000`
-- `Content-Security-Policy: default-src 'self'`
+**Applied by API Gateway Middleware**:
+```
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+X-XSS-Protection: 1; mode=block
+Strict-Transport-Security: max-age=31536000
+Content-Security-Policy: default-src 'self'
+```
+
+---
 
 ## Scalability & Performance
 
 ### Horizontal Scaling
 
-**Stateless Services**: All services can scale horizontally
-- No in-memory state (except WebSocket Hub)
-- Session data in Redis
-- Database connection pooling
+**Stateless Services**: All services except Message Service Hub can scale horizontally
 
-**Load Balancing**:
+**Current Architecture**:
 ```
-[Client] → [Load Balancer] → [API Gateway 1..N]
-                           → [Auth Service 1..N]
-                           → [Message Service 1..N]
+Client → API Gateway (1 instance) → Services (1 instance each)
+```
+
+**Scaled Architecture**:
+```
+[Load Balancer]
+    ├─> API Gateway Instance 1
+    ├─> API Gateway Instance 2
+    └─> API Gateway Instance 3
+            ├─> Auth Service Instance 1..N
+            ├─> Message Service Instance 1..N (needs Redis Pub/Sub)
+            └─> User Service Instance 1..N
+```
+
+### WebSocket Scaling Challenge
+
+**Problem**: WebSocket Hub is in-memory, connections are stateful
+
+**Current**: Single Hub instance managing all connections (~10K max)
+
+**Solution for >10K connections**: Redis Pub/Sub
+
+```mermaid
+graph LR
+    C1[Client 1] -->|WS| MS1[Message Service 1]
+    C2[Client 2] -->|WS| MS2[Message Service 2]
+    C3[Client 3] -->|WS| MS3[Message Service 3]
+
+    MS1 -->|Publish| Redis[Redis Pub/Sub]
+    MS2 -->|Subscribe| Redis
+    MS3 -->|Subscribe| Redis
+
+    Redis -->|Broadcast| MS1 & MS2 & MS3
 ```
 
 ### Caching Strategy
 
-**Cache Layers**:
-1. **Application Cache** (Redis):
-   - User sessions: `session:{session_id}`
-   - User profiles: `profile:{user_id}`
-   - Token blacklist: `token:blacklist:{token_id}`
+**Redis Cache Keys**:
+```
+session:{session_id}              TTL: 15 minutes
+profile:{user_id}                 TTL: 1 hour (not yet implemented)
+token:blacklist:{token_id}        TTL: until token expiry (not yet implemented)
+messages:{conversation_id}:recent TTL: 5 minutes (not yet implemented)
+```
 
-2. **Query Result Cache**:
-   - Recent messages: `messages:{conversation_id}:recent`
-   - User contacts: `contacts:{user_id}`
-
-**TTL Strategy**:
-- Sessions: 7 days
-- Profiles: 1 hour
-- Recent messages: 5 minutes
-- Token blacklist: Until token expiry
+**Cache Usage**:
+- Auth Service: Session caching
+- Message Service: Not currently using cache
+- User Service: Not currently using cache
 
 ### Database Optimization
 
@@ -869,120 +1145,91 @@ database:
 ```
 
 **Indexing Strategy**:
-- Primary keys: UUID with index
+- Primary keys: UUID with B-tree index
 - Foreign keys: Indexed automatically
-- Search columns: `phone`, `email`, `conversation_id`
-- Composite indexes: `(user_id, deleted_at)` for soft deletes
+- Search columns: email, phone_number (partial index WHERE deleted_at IS NULL)
+- Composite indexes: (user_id, deleted_at), (conversation_id, created_at DESC)
 
-**Query Optimization**:
-- Use prepared statements
-- Limit result sets with pagination
-- Avoid N+1 queries (use JOIN or batch loading)
+**Pagination**: Cursor-based for messages, offset-based for lists
 
-### WebSocket Scaling
-
-**Challenge**: WebSocket connections are stateful
-
-**Solution**: Sticky sessions or Redis Pub/Sub
-
-**Redis Pub/Sub Approach**:
-```mermaid
-graph LR
-    C1[Client 1] -->|WS| MS1[Message Service 1]
-    C2[Client 2] -->|WS| MS2[Message Service 2]
-
-    MS1 -->|Publish| Redis[Redis Pub/Sub]
-    MS2 -->|Subscribe| Redis
-
-    Redis -->|Message Event| MS2
-    MS2 -->|WebSocket| C2
-```
+---
 
 ## Observability
 
 ### Structured Logging
 
-**Format**: JSON in production, Console in development
+**Format**: JSON (production), Console (development)
 
-**Fields**:
-- `timestamp` - ISO 8601
-- `level` - debug, info, warn, error, fatal
-- `request_id` - Unique per request
-- `correlation_id` - Across services
-- `service` - Service name
-- `message` - Log message
-- `context` - Additional context
+**Log Levels**: debug, info, warn, error, fatal
 
-**Example**:
+**Standard Fields**:
 ```json
 {
-  "timestamp": "2024-01-15T10:30:45Z",
+  "timestamp": "2025-01-15T10:30:45Z",
   "level": "info",
   "request_id": "req_abc123",
   "correlation_id": "corr_xyz789",
   "service": "auth-service",
   "message": "User registered successfully",
-  "context": {
-    "user_id": "uuid",
-    "phone": "+1234567890",
-    "duration_ms": 45
-  }
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "duration_ms": 45
 }
 ```
+
+**Logger**: Zap (structured logging library)
 
 ### Health Checks
 
 **Endpoints**:
-- `/health` - Liveness probe (always returns 200)
+- `/health` - Liveness probe (always 200 OK if service running)
 - `/ready` - Readiness probe (checks dependencies)
 
-**Readiness Checks**:
+**Readiness Checks** (example from Message Service):
 ```go
-healthManager.RegisterChecker("database", func(ctx context.Context) CheckResult {
-    if err := db.Ping(ctx); err != nil {
-        return CheckResult{Status: StatusDown, Message: err.Error()}
-    }
-    return CheckResult{Status: StatusUp}
-})
-
-healthManager.RegisterChecker("cache", func(ctx context.Context) CheckResult {
-    if err := cache.Ping(ctx); err != nil {
-        return CheckResult{Status: StatusDegraded, Message: "Cache unavailable"}
-    }
-    return CheckResult{Status: StatusUp}
-})
+healthMgr.RegisterChecker(checkers.NewDatabaseChecker(dbClient))
+healthMgr.RegisterChecker(checkers.NewCacheChecker(cacheClient))
 ```
 
 **Response**:
 ```json
 {
-  "status": "up",
-  "timestamp": "2024-01-15T10:30:45Z",
+  "status": "healthy",
+  "timestamp": "2025-01-15T10:30:45Z",
+  "service": "message-service",
+  "version": "1.0.0",
   "checks": {
-    "database": {"status": "up", "duration_ms": 5},
-    "cache": {"status": "up", "duration_ms": 2}
+    "database": {
+      "status": "up",
+      "latency_ms": 5
+    },
+    "cache": {
+      "status": "up",
+      "latency_ms": 2
+    }
   }
 }
 ```
 
 ### Metrics
 
-**Key Metrics** (to be implemented):
+**Currently Tracked**:
+- Request duration (via RequestReceivedLogger + RequestCompletedLogger)
+- WebSocket connection count (Hub metrics)
+- Database connection pool stats
+
+**Planned**:
 - Request rate (requests/second)
-- Response time (p50, p95, p99)
-- Error rate (errors/second)
-- Active connections (WebSocket)
-- Database connection pool usage
+- Response time percentiles (p50, p95, p99)
+- Error rate
 - Cache hit/miss rate
 
-### Tracing
+### Distributed Tracing
 
-**Distributed Tracing** (planned):
-- Request → API Gateway → Auth Service → Database
-- Correlation ID propagation via headers
-- Integration with Jaeger/Zipkin
+**Current**: Correlation ID propagation via headers
+
+**Planned**: Integration with Jaeger/Zipkin for full distributed tracing
 
 ---
 
 **Last Updated**: January 2025
-**Version**: 1.0.0
+**Based On**: Actual implementation in `/services/`

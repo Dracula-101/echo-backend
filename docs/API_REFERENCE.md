@@ -1,407 +1,459 @@
 # API Reference
 
-Complete API reference for all Echo Backend endpoints.
+**IMPORTANT**: This documentation reflects ONLY the endpoints that are actually implemented in the codebase.
 
-## Table of Contents
+## Service Status
 
-- [Authentication](#authentication)
-- [User Management](#user-management)
-- [Messaging](#messaging)
-- [Presence](#presence)
-- [Location](#location)
-- [WebSocket API](#websocket-api)
-- [Error Responses](#error-responses)
-- [Rate Limiting](#rate-limiting)
+| Service | Status | Endpoints |
+|---------|--------|-----------|
+| Auth Service | ✅ IMPLEMENTED | 2 endpoints |
+| Message Service | ✅ IMPLEMENTED | 9 endpoints + WebSocket |
+| User Service | ⚠️ PARTIAL | 2 endpoints |
+| Location Service | ✅ IMPLEMENTED | 2 endpoints |
+| Presence Service | 🚧 STUBBED | Routes defined, no implementation |
+| Media Service | ✅ IMPLEMENTED | Multiple endpoints |
+| Notification Service | ❌ PLACEHOLDER | No implementation |
+| Analytics Service | ❌ PLACEHOLDER | No implementation |
 
-## Base URL
+## Base URLs
 
 ```
-Development: http://localhost:8080
-Production:  https://api.echo.app
+API Gateway:     http://localhost:8080
+Auth Service:    http://localhost:8081 (internal)
+Message Service: http://localhost:8083 (internal)
+User Service:    http://localhost:8082 (internal)
+Location Service: http://localhost:8090
 ```
 
-## Authentication
+## Authentication Service
 
-All authenticated endpoints require a JWT token in the `Authorization` header:
+### POST /register
 
-```http
-Authorization: Bearer <access_token>
-```
+Register a new user with email and password.
 
-### Register User
+**Endpoint**: `POST /api/v1/auth/register`
 
-Create a new user account with phone number verification.
-
-```http
-POST /api/v1/auth/register
-```
-
-**Request Body:**
+**Request Body**:
 ```json
 {
-  "phone": "+1234567890",
-  "password": "SecurePass123!",
-  "name": "John Doe",
-  "device_id": "device-uuid",
-  "device_name": "iPhone 14 Pro",
-  "platform": "ios"
+  "email": "user@example.com",
+  "password": "SecurePassword123!",
+  "phone_number": "+1234567890",
+  "phone_country_code": "+1",
+  "accept_terms": true
 }
 ```
 
-**Field Specifications:**
-- `phone` (required): E.164 format, unique
-- `password` (required): Min 8 chars, max 128 chars, must include uppercase, lowercase, number
-- `name` (required): Min 2 chars, max 100 chars
-- `device_id` (optional): Unique device identifier
-- `device_name` (optional): Human-readable device name
-- `platform` (required): One of `ios`, `android`, `web`
+**Request Fields**:
+- `email` (required, string): Valid email address
+- `password` (required, string): Min 8 characters
+- `phone_number` (optional, string): E.164 format
+- `phone_country_code` (optional, string): Country code
+- `accept_terms` (required, boolean): Must be true
 
-**Success Response (201 Created):**
+**Success Response (201 Created)**:
 ```json
 {
   "success": true,
   "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "phone": "+1234567890",
-    "verified": false,
-    "otp_sent": true,
-    "otp_expires_at": "2024-01-15T10:35:45Z"
-  },
-  "metadata": {
-    "request_id": "req_abc123",
-    "timestamp": "2024-01-15T10:30:45Z",
-    "duration": "45ms"
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "email_verified": false,
+    "created_at": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
-**Error Responses:**
+**Error Responses**:
 
-*400 Bad Request - Invalid Input*
+*400 Bad Request*:
 ```json
 {
   "success": false,
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Validation failed",
-    "type": "validation",
-    "fields": {
-      "phone": "Invalid phone number format",
-      "password": "Password must be at least 8 characters"
+    "message": "Email is already registered",
+    "code": "email_already_exists"
+  }
+}
+```
+
+**Implementation Details**:
+- Email uniqueness check before registration
+- Password hashed using bcrypt/Argon2
+- IP address and user agent captured
+- Email verification token generated (sent via email service if configured)
+
+---
+
+### POST /login
+
+Authenticate user and create session.
+
+**Endpoint**: `POST /api/v1/auth/login`
+
+**Request Body**:
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!",
+  "device_id": "device-12345",
+  "device_name": "iPhone 14 Pro",
+  "device_type": "mobile"
+}
+```
+
+**Request Fields**:
+- `email` (required, string): User's email
+- `password` (required, string): User's password
+- `device_id` (optional, string): Unique device identifier
+- `device_name` (optional, string): Human-readable device name
+- `device_type` (optional, string): mobile, tablet, desktop, web
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+    "expires_at": "2025-01-15T11:30:00Z"
+  }
+}
+```
+
+**Error Responses**:
+
+*401 Unauthorized*:
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Invalid email or password",
+    "code": "invalid_credentials"
+  }
+}
+```
+
+**Implementation Details**:
+- Failed login attempts tracked (account lockout after threshold)
+- Session created with device information
+- IP geolocation lookup performed (via location service)
+- Login history recorded for security audit
+
+---
+
+## Message Service
+
+### GET /ws
+
+Establish WebSocket connection for real-time messaging.
+
+**Endpoint**: `GET /ws`
+
+**Connection Headers**:
+```http
+X-User-ID: 550e8400-e29b-41d4-a716-446655440000
+X-Device-ID: device-12345
+X-Platform: ios
+X-App-Version: 1.0.0
+```
+
+**Connection Established**:
+```json
+{
+  "type": "connection_ack",
+  "payload": {
+    "status": "connected",
+    "timestamp": "2025-01-15T10:30:00Z",
+    "client_id": "conn_abc123"
+  }
+}
+```
+
+**Supported Events**:
+- `read_receipt` - Mark message as read
+- `typing` - Send typing indicator
+- `ping` - Connection keep-alive
+
+See [WebSocket Protocol](./WEBSOCKET_PROTOCOL.md) for complete details.
+
+---
+
+### POST /
+
+Send a new message to a conversation.
+
+**Endpoint**: `POST /`
+
+**Headers**:
+```http
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+  "content": "Hello, how are you?",
+  "message_type": "text",
+  "parent_message_id": null,
+  "mentions": [],
+  "metadata": {}
+}
+```
+
+**Request Fields**:
+- `conversation_id` (required, UUID): Conversation ID
+- `content` (required, string): Message text (max 10,000 chars for text)
+- `message_type` (required, string): text, image, video, audio, document, location, contact
+- `parent_message_id` (optional, UUID): For threading/replies
+- `mentions` (optional, array): Array of mentioned user IDs
+- `metadata` (optional, object): Additional data for media messages
+
+**Success Response (201 Created)**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+    "sender_user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "content": "Hello, how are you?",
+    "message_type": "text",
+    "status": "sent",
+    "created_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+### GET /
+
+Retrieve messages from a conversation with pagination.
+
+**Endpoint**: `GET /`
+
+**Query Parameters**:
+- `conversation_id` (required, UUID): Conversation ID
+- `limit` (optional, int): Messages per page (default: 50, max: 100)
+- `before` (optional, UUID): Get messages before this message ID
+- `after` (optional, UUID): Get messages after this message ID
+
+**Example**:
+```http
+GET /?conversation_id=660e8400-e29b-41d4-a716-446655440001&limit=20&before=msg123
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "messages": [
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440002",
+        "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+        "sender_user_id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": "Hello!",
+        "message_type": "text",
+        "created_at": "2025-01-15T10:30:00Z",
+        "is_edited": false,
+        "is_deleted": false
+      }
+    ],
+    "pagination": {
+      "has_more": true,
+      "next_cursor": "770e8400-e29b-41d4-a716-446655440002"
     }
   }
 }
 ```
 
-*409 Conflict - Phone Already Exists*
-```json
-{
-  "success": false,
-  "error": {
-    "code": "PHONE_EXISTS",
-    "message": "Phone number already registered",
-    "type": "conflict"
-  }
-}
-```
-
 ---
 
-### Verify OTP
+### PUT /{id}
 
-Verify the OTP sent during registration.
+Edit an existing message.
 
-```http
-POST /api/v1/auth/verify-otp
-```
+**Endpoint**: `PUT /{id}`
 
-**Request Body:**
+**Path Parameters**:
+- `id` (required, UUID): Message ID to edit
+
+**Request Body**:
 ```json
 {
-  "phone": "+1234567890",
-  "otp": "123456"
+  "content": "Updated message content"
 }
 ```
 
-**Success Response (200 OK):**
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "verified": true,
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "refresh_token": "rt_abc123...",
-    "token_type": "Bearer",
-    "expires_in": 900
-  }
-}
-```
-
-**Error Responses:**
-
-*400 Bad Request - Invalid OTP*
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_OTP",
-    "message": "OTP is invalid or expired",
-    "type": "validation"
-  }
-}
-```
-
-*429 Too Many Requests - Rate Limited*
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Too many OTP verification attempts",
-    "type": "rate_limit",
-    "retry_after": 300
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "content": "Updated message content",
+    "is_edited": true,
+    "edited_at": "2025-01-15T10:35:00Z"
   }
 }
 ```
 
 ---
 
-### Login
+### DELETE /{id}
 
-Authenticate user with phone and password.
+Delete a message.
 
-```http
-POST /api/v1/auth/login
-```
+**Endpoint**: `DELETE /{id}`
 
-**Request Body:**
-```json
-{
-  "phone": "+1234567890",
-  "password": "SecurePass123!",
-  "device_id": "device-uuid",
-  "device_name": "iPhone 14 Pro",
-  "platform": "ios"
-}
-```
+**Path Parameters**:
+- `id` (required, UUID): Message ID to delete
 
-**Success Response (200 OK):**
+**Query Parameters**:
+- `for_everyone` (optional, boolean): Delete for all users (default: false)
+
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "refresh_token": "rt_abc123...",
-    "token_type": "Bearer",
-    "expires_in": 900,
-    "session_id": "sess_xyz789"
-  }
-}
-```
-
-**Error Responses:**
-
-*401 Unauthorized - Invalid Credentials*
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_CREDENTIALS",
-    "message": "Invalid phone or password",
-    "type": "unauthorized"
-  }
-}
-```
-
-*403 Forbidden - Account Locked*
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ACCOUNT_LOCKED",
-    "message": "Account locked due to too many failed login attempts",
-    "type": "forbidden",
-    "locked_until": "2024-01-15T11:30:45Z"
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "is_deleted": true,
+    "deleted_at": "2025-01-15T10:40:00Z"
   }
 }
 ```
 
 ---
 
-### Refresh Token
+### POST /read
 
-Refresh access token using refresh token.
+Mark message(s) as read.
 
-```http
-POST /api/v1/auth/refresh
-```
+**Endpoint**: `POST /read`
 
-**Request Body:**
+**Request Body**:
 ```json
 {
-  "refresh_token": "rt_abc123..."
+  "message_ids": [
+    "770e8400-e29b-41d4-a716-446655440002",
+    "880e8400-e29b-41d4-a716-446655440003"
+  ]
 }
 ```
 
-**Success Response (200 OK):**
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "token_type": "Bearer",
-    "expires_in": 900
+    "marked_count": 2,
+    "read_at": "2025-01-15T10:45:00Z"
   }
 }
 ```
 
 ---
 
-### Logout
+### POST /typing
 
-Invalidate current session.
+Send typing indicator.
 
-```http
-POST /api/v1/auth/logout
-Authorization: Bearer <access_token>
+**Endpoint**: `POST /typing`
+
+**Request Body**:
+```json
+{
+  "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+  "is_typing": true
+}
 ```
 
-**Success Response (204 No Content)**
-
----
-
-### Get Current User
-
-Get authenticated user's information.
-
-```http
-GET /api/v1/auth/me
-Authorization: Bearer <access_token>
-```
-
-**Success Response (200 OK):**
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "phone": "+1234567890",
-    "verified": true,
-    "created_at": "2024-01-15T10:30:45Z"
+    "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+    "is_typing": true,
+    "timestamp": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
 ---
 
-## User Management
+### POST /conversations
 
-### Get User Profile
+Create a new conversation.
 
-Get user's profile information.
+**Endpoint**: `POST /conversations`
 
-```http
-GET /api/v1/users/:user_id/profile
-Authorization: Bearer <access_token>
+**Request Body**:
+```json
+{
+  "conversation_type": "direct",
+  "participant_ids": ["user-id-1", "user-id-2"],
+  "title": "Optional group name",
+  "description": "Optional description"
+}
 ```
 
-**Path Parameters:**
-- `user_id` (required): User's UUID
+**Request Fields**:
+- `conversation_type` (required, string): direct, group, channel
+- `participant_ids` (required, array): Array of user IDs
+- `title` (optional, string): For groups/channels
+- `description` (optional, string): For groups/channels
 
-**Success Response (200 OK):**
+**Success Response (201 Created)**:
 ```json
 {
   "success": true,
   "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "phone": "+1234567890",
-    "display_name": "John Doe",
-    "bio": "Software Engineer",
-    "avatar_url": "https://cdn.echo.app/avatars/abc123.jpg",
-    "status": "online",
-    "last_seen": "2024-01-15T10:30:45Z",
-    "created_at": "2024-01-15T10:30:45Z"
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "conversation_type": "direct",
+    "participant_count": 2,
+    "created_at": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
 ---
 
-### Update Profile
+### GET /conversations
 
-Update user's profile.
+Get user's conversations with pagination.
 
-```http
-PUT /api/v1/users/profile
-Authorization: Bearer <access_token>
-```
+**Endpoint**: `GET /conversations`
 
-**Request Body:**
-```json
-{
-  "display_name": "John Doe",
-  "bio": "Software Engineer",
-  "avatar_url": "https://cdn.echo.app/avatars/abc123.jpg",
-  "status": "away"
-}
-```
+**Query Parameters**:
+- `limit` (optional, int): Conversations per page (default: 20, max: 100)
+- `offset` (optional, int): Pagination offset (default: 0)
+- `type` (optional, string): Filter by type (direct, group, channel)
 
-**Field Specifications:**
-- `display_name` (optional): Min 2 chars, max 100 chars
-- `bio` (optional): Max 500 chars
-- `avatar_url` (optional): Valid URL
-- `status` (optional): One of `online`, `away`, `busy`, `offline`
-
-**Success Response (200 OK):**
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "display_name": "John Doe",
-    "bio": "Software Engineer",
-    "avatar_url": "https://cdn.echo.app/avatars/abc123.jpg",
-    "status": "away",
-    "updated_at": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
----
-
-### Get Contacts
-
-Get user's contact list.
-
-```http
-GET /api/v1/users/contacts
-Authorization: Bearer <access_token>
-```
-
-**Query Parameters:**
-- `limit` (optional): Max results per page (default: 20, max: 100)
-- `offset` (optional): Pagination offset (default: 0)
-- `search` (optional): Search by name or phone
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "contacts": [
+    "conversations": [
       {
-        "user_id": "123e4567-e89b-12d3-a456-426614174000",
-        "display_name": "John Doe",
-        "phone": "+1234567890",
-        "avatar_url": "https://cdn.echo.app/avatars/abc123.jpg",
-        "status": "online",
-        "added_at": "2024-01-15T10:30:45Z"
+        "id": "660e8400-e29b-41d4-a716-446655440001",
+        "conversation_type": "direct",
+        "title": null,
+        "last_message_at": "2025-01-15T10:30:00Z",
+        "unread_count": 3,
+        "participant_count": 2
       }
     ],
     "pagination": {
-      "total": 150,
+      "total": 45,
       "limit": 20,
       "offset": 0,
       "has_more": true
@@ -412,97 +464,119 @@ Authorization: Bearer <access_token>
 
 ---
 
-## Messaging
+## User Service
 
-### Send Message
+### POST /
 
-Send a message to a user.
+Create or update user profile.
 
-```http
-POST /api/v1/messages
-Authorization: Bearer <access_token>
-```
+**Endpoint**: `POST /`
 
-**Request Body:**
+**Request Body**:
 ```json
 {
-  "to_user_id": "123e4567-e89b-12d3-a456-426614174000",
-  "content": "Hello! How are you?",
-  "type": "text",
-  "reply_to_id": null,
-  "metadata": {
-    "client_id": "msg_client_123"
-  }
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "john_doe",
+  "display_name": "John Doe",
+  "bio": "Software engineer",
+  "avatar_url": "https://example.com/avatar.jpg"
 }
 ```
 
-**Field Specifications:**
-- `to_user_id` (required): Recipient's UUID
-- `content` (required): Message content (max 10,000 chars for text)
-- `type` (required): One of `text`, `image`, `video`, `audio`, `document`, `location`, `contact`
-- `reply_to_id` (optional): Message ID being replied to
-- `metadata` (optional): Client-specific metadata
-
-**Success Response (201 Created):**
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "message_id": "msg_abc123",
-    "conversation_id": "conv_xyz789",
-    "from_user_id": "sender-uuid",
-    "to_user_id": "recipient-uuid",
-    "content": "Hello! How are you?",
-    "type": "text",
-    "status": "sent",
-    "created_at": "2024-01-15T10:30:45Z",
-    "delivered_at": null,
-    "read_at": null
+    "id": "profile-id",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "john_doe",
+    "display_name": "John Doe",
+    "created_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+**Implementation Notes**:
+- Automatically generates username if not provided
+- Updates existing profile if one exists for the user
+
+---
+
+### GET /{user_id}
+
+Get user profile by ID.
+
+**Endpoint**: `GET /{user_id}`
+
+**Path Parameters**:
+- `user_id` (required, UUID): User's ID
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "profile-id",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "john_doe",
+    "display_name": "John Doe",
+    "bio": "Software engineer",
+    "avatar_url": "https://example.com/avatar.jpg",
+    "created_at": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
 ---
 
-### Get Messages
+## Location Service
 
-Get messages in a conversation.
+### GET /health
 
-```http
-GET /api/v1/messages
-Authorization: Bearer <access_token>
+Health check endpoint.
+
+**Endpoint**: `GET /health`
+
+**Success Response (200 OK)**:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-15T10:30:00Z"
+}
 ```
 
-**Query Parameters:**
-- `conversation_id` (required): Conversation UUID
-- `limit` (optional): Max results (default: 50, max: 100)
-- `before` (optional): Get messages before this message ID
-- `after` (optional): Get messages after this message ID
+---
 
-**Success Response (200 OK):**
+### GET /lookup
+
+IP geolocation lookup.
+
+**Endpoint**: `GET /lookup`
+
+**Query Parameters**:
+- `ip` (required, string): IP address to lookup
+
+**Example**:
+```http
+GET /lookup?ip=8.8.8.8
+```
+
+**Success Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "messages": [
-      {
-        "message_id": "msg_abc123",
-        "conversation_id": "conv_xyz789",
-        "from_user_id": "sender-uuid",
-        "to_user_id": "recipient-uuid",
-        "content": "Hello!",
-        "type": "text",
-        "status": "read",
-        "created_at": "2024-01-15T10:30:45Z",
-        "delivered_at": "2024-01-15T10:30:46Z",
-        "read_at": "2024-01-15T10:31:00Z",
-        "edited": false,
-        "deleted": false
-      }
-    ],
-    "pagination": {
-      "has_more": true,
-      "next_cursor": "msg_xyz789"
+    "ip": "8.8.8.8",
+    "country": "United States",
+    "country_code": "US",
+    "region": "California",
+    "city": "Mountain View",
+    "timezone": "America/Los_Angeles",
+    "isp": "Google LLC",
+    "coordinates": {
+      "latitude": 37.386,
+      "longitude": -122.084
     }
   }
 }
@@ -510,380 +584,57 @@ Authorization: Bearer <access_token>
 
 ---
 
-### Edit Message
+## Error Response Format
 
-Edit a sent message.
-
-```http
-PUT /api/v1/messages/:message_id
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "content": "Updated message content"
-}
-```
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "message_id": "msg_abc123",
-    "content": "Updated message content",
-    "edited": true,
-    "edited_at": "2024-01-15T10:35:45Z"
-  }
-}
-```
-
----
-
-### Delete Message
-
-Delete a message.
-
-```http
-DELETE /api/v1/messages/:message_id
-Authorization: Bearer <access_token>
-```
-
-**Query Parameters:**
-- `for_everyone` (optional): Delete for all users (default: false)
-
-**Success Response (204 No Content)**
-
----
-
-### Mark as Read
-
-Mark messages as read.
-
-```http
-POST /api/v1/messages/read
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "message_ids": ["msg_abc123", "msg_xyz789"]
-}
-```
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "marked_count": 2
-  }
-}
-```
-
----
-
-## Presence
-
-### Update Presence
-
-Update user's online status.
-
-```http
-POST /api/v1/presence
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "status": "online",
-  "activity": "typing"
-}
-```
-
-**Field Specifications:**
-- `status` (required): One of `online`, `away`, `busy`, `offline`
-- `activity` (optional): One of `typing`, `recording`, `uploading`
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "status": "online",
-    "activity": "typing",
-    "last_seen": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
----
-
-### Get User Presence
-
-Get presence information for a user.
-
-```http
-GET /api/v1/presence/:user_id
-Authorization: Bearer <access_token>
-```
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "status": "online",
-    "activity": null,
-    "last_seen": "2024-01-15T10:30:45Z",
-    "devices": [
-      {
-        "device_id": "device-1",
-        "platform": "ios",
-        "last_active": "2024-01-15T10:30:45Z"
-      }
-    ]
-  }
-}
-```
-
----
-
-## Location
-
-### Lookup Phone Number
-
-Get location information for a phone number.
-
-```http
-GET /api/v1/location/lookup
-```
-
-**Query Parameters:**
-- `phone` (required): Phone number in E.164 format
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "phone": "+1234567890",
-    "country": "US",
-    "country_code": "+1",
-    "country_name": "United States",
-    "region": "California",
-    "timezone": "America/Los_Angeles",
-    "carrier": "AT&T"
-  }
-}
-```
-
----
-
-## WebSocket API
-
-### Connection
-
-Connect to WebSocket for real-time updates.
-
-```
-ws://localhost:8083/ws
-```
-
-**Connection Headers:**
-```
-X-User-ID: <user_uuid>
-X-Device-ID: <device_id>
-X-Platform: ios|android|web
-X-Access-Token: <access_token>
-```
-
-**Connection Established:**
-```json
-{
-  "type": "connection.established",
-  "data": {
-    "connection_id": "conn_abc123",
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "connected_at": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
-### Events
-
-**Message Received:**
-```json
-{
-  "type": "message.received",
-  "data": {
-    "message_id": "msg_abc123",
-    "conversation_id": "conv_xyz789",
-    "from_user_id": "sender-uuid",
-    "content": "Hello!",
-    "type": "text",
-    "created_at": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
-**Message Delivered:**
-```json
-{
-  "type": "message.delivered",
-  "data": {
-    "message_id": "msg_abc123",
-    "delivered_at": "2024-01-15T10:30:46Z"
-  }
-}
-```
-
-**Message Read:**
-```json
-{
-  "type": "message.read",
-  "data": {
-    "message_id": "msg_abc123",
-    "read_by": "recipient-uuid",
-    "read_at": "2024-01-15T10:31:00Z"
-  }
-}
-```
-
-**Typing Indicator:**
-```json
-{
-  "type": "presence.typing",
-  "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "conversation_id": "conv_xyz789",
-    "is_typing": true
-  }
-}
-```
-
-**Presence Update:**
-```json
-{
-  "type": "presence.updated",
-  "data": {
-    "user_id": "123e4567-e89b-12d3-a456-426614174000",
-    "status": "online",
-    "last_seen": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
-**Heartbeat:**
-
-Send every 30 seconds to keep connection alive:
-```json
-{
-  "type": "ping"
-}
-```
-
-Response:
-```json
-{
-  "type": "pong",
-  "timestamp": "2024-01-15T10:30:45Z"
-}
-```
-
----
-
-## Error Responses
-
-All error responses follow this format:
+All errors follow this standard format:
 
 ```json
 {
   "success": false,
   "error": {
-    "code": "ERROR_CODE",
     "message": "Human-readable error message",
-    "type": "error_type",
-    "fields": {},
-    "context": {}
+    "code": "ERROR_CODE",
+    "details": {}
   },
   "metadata": {
     "request_id": "req_abc123",
-    "correlation_id": "corr_xyz789",
-    "timestamp": "2024-01-15T10:30:45Z"
+    "timestamp": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
-### Error Types
+### HTTP Status Codes
 
-| Type | Description | HTTP Status |
-|------|-------------|-------------|
-| `validation` | Input validation failed | 400 |
-| `not_found` | Resource not found | 404 |
-| `unauthorized` | Authentication required | 401 |
-| `forbidden` | Permission denied | 403 |
-| `conflict` | Resource conflict | 409 |
-| `rate_limit` | Rate limit exceeded | 429 |
-| `internal` | Internal server error | 500 |
-| `service_unavailable` | Service unavailable | 503 |
-
-### Common Error Codes
-
-| Code | Message | Type |
-|------|---------|------|
-| `VALIDATION_ERROR` | Validation failed | validation |
-| `INVALID_CREDENTIALS` | Invalid credentials | unauthorized |
-| `TOKEN_EXPIRED` | Token expired | unauthorized |
-| `TOKEN_INVALID` | Invalid token | unauthorized |
-| `USER_NOT_FOUND` | User not found | not_found |
-| `MESSAGE_NOT_FOUND` | Message not found | not_found |
-| `PHONE_EXISTS` | Phone already exists | conflict |
-| `RATE_LIMIT_EXCEEDED` | Rate limit exceeded | rate_limit |
-| `INTERNAL_ERROR` | Internal server error | internal |
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request (validation error) |
+| 401 | Unauthorized (authentication required) |
+| 403 | Forbidden (insufficient permissions) |
+| 404 | Not Found |
+| 409 | Conflict (duplicate resource) |
+| 429 | Too Many Requests (rate limited) |
+| 500 | Internal Server Error |
 
 ---
 
 ## Rate Limiting
 
-All endpoints are rate limited to prevent abuse.
+Rate limits are enforced at multiple levels:
 
-**Rate Limit Headers:**
+- **Global**: 1000 requests/minute per IP
+- **Auth endpoints**: 5 requests/minute per IP
+- **WebSocket**: 100 messages/minute per connection
+
+Rate limit headers:
 ```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1610704845
-```
-
-**Default Limits:**
-
-| Endpoint Pattern | Limit | Window |
-|-----------------|-------|--------|
-| `/api/v1/auth/login` | 5 requests | 1 minute |
-| `/api/v1/auth/register` | 3 requests | 5 minutes |
-| `/api/v1/auth/verify-otp` | 5 requests | 1 minute |
-| `/api/v1/messages` | 100 requests | 1 minute |
-| `/api/v1/*` (default) | 1000 requests | 1 minute |
-
-**Rate Limit Exceeded Response:**
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Rate limit exceeded",
-    "type": "rate_limit",
-    "retry_after": 45
-  }
-}
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 995
+X-RateLimit-Reset: 1610000000
 ```
 
 ---
 
 **Last Updated**: January 2025
-**Version**: 1.0.0
+**Version**: Based on actual implementation

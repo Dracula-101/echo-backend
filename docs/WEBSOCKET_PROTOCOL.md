@@ -1,93 +1,60 @@
 # WebSocket Protocol
 
-Complete WebSocket protocol documentation for real-time messaging in Echo Backend.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Connection](#connection)
-- [Message Format](#message-format)
-- [Client Events](#client-events)
-- [Server Events](#server-events)
-- [Heartbeat](#heartbeat)
-- [Error Handling](#error-handling)
-- [Client Libraries](#client-libraries)
+Real-time WebSocket communication protocol for Echo Backend - based on ACTUAL implementation.
 
 ## Overview
 
-Echo Backend uses WebSocket for real-time bidirectional communication between clients and the Message Service. The WebSocket connection enables instant message delivery, typing indicators, read receipts, and presence updates.
+The Message Service provides WebSocket support for real-time bidirectional communication. The implementation uses the Gorilla WebSocket library with a Hub-based architecture for managing multiple client connections per user.
 
-**WebSocket Endpoint:**
-```
-ws://localhost:8083/ws          # Development
-wss://api.echo.app/ws           # Production
-```
+**WebSocket Endpoint**: `ws://localhost:8083/ws`
 
-**Supported Platforms:**
-- iOS (native WebSocket)
-- Android (native WebSocket)
-- Web (browser WebSocket API)
-- Desktop (Electron, native apps)
+**Connection Limits**:
+- Max message size: 1 MB
+- Client send buffer: 256 messages
+- Hub broadcast buffer: 1024 messages
+- Ping interval: 45 seconds
+- Connection timeout: 90 seconds
 
 ## Connection
 
 ### Establishing Connection
 
-**WebSocket URL:**
-```
-ws://localhost:8083/ws
-```
+**Endpoint**: `GET /ws`
 
-**Connection Headers:**
+**Required Headers**:
 ```http
-X-User-ID: <user_uuid>
-X-Device-ID: <device_id>
-X-Platform: ios|android|web
-X-Access-Token: <jwt_token>
+X-User-ID: 550e8400-e29b-41d4-a716-446655440000
 ```
 
-**JavaScript Example:**
+**Optional Headers**:
+```http
+X-Device-ID: device-12345
+X-Platform: ios
+X-App-Version: 1.0.0
+```
+
+**JavaScript Example**:
 ```javascript
-const socket = new WebSocket('ws://localhost:8083/ws');
+// Note: Browser WebSocket doesn't support custom headers
+// Use query parameters or authenticate via token endpoint first
 
-// Note: WebSocket in browsers doesn't support custom headers
-// Use query parameters instead:
-const userId = 'user-uuid';
-const deviceId = 'device-123';
-const platform = 'web';
-const token = 'jwt-token';
+const userId = '550e8400-e29b-41d4-a716-446655440000';
+const socket = new WebSocket(`ws://localhost:8083/ws`);
 
-const socket = new WebSocket(
-  `ws://localhost:8083/ws?user_id=${userId}&device_id=${deviceId}&platform=${platform}&token=${token}`
-);
-
-socket.onopen = () => {
-  console.log('Connected to WebSocket');
-};
-
-socket.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received:', data);
-};
-
-socket.onerror = (error) => {
-  console.error('WebSocket error:', error);
-};
-
-socket.onclose = () => {
-  console.log('Disconnected from WebSocket');
-};
+// Server extracts user_id from context (set by auth middleware)
 ```
 
-**Go Example:**
+**Go Example**:
 ```go
-import "github.com/gorilla/websocket"
+import (
+    "github.com/gorilla/websocket"
+    "net/http"
+)
 
 headers := http.Header{}
 headers.Add("X-User-ID", userID)
 headers.Add("X-Device-ID", deviceID)
 headers.Add("X-Platform", "ios")
-headers.Add("X-Access-Token", accessToken)
 
 conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:8083/ws", headers)
 if err != nil {
@@ -96,777 +63,383 @@ if err != nil {
 defer conn.Close()
 ```
 
-**Swift Example (iOS):**
-```swift
-import Foundation
-
-var request = URLRequest(url: URL(string: "ws://localhost:8083/ws")!)
-request.setValue(userID, forHTTPHeaderField: "X-User-ID")
-request.setValue(deviceID, forHTTPHeaderField: "X-Device-ID")
-request.setValue("ios", forHTTPHeaderField: "X-Platform")
-request.setValue(accessToken, forHTTPHeaderField: "X-Access-Token")
-
-let socket = URLSessionWebSocketTask(session: URLSession.shared, url: request.url!)
-socket.resume()
-```
-
 ### Connection Established
 
-Once connected, the server sends a connection confirmation:
+Server sends acknowledgment when connection is established:
 
 ```json
 {
-  "type": "connection.established",
-  "data": {
-    "connection_id": "conn_abc123",
-    "user_id": "user-uuid",
-    "device_id": "device-123",
-    "connected_at": "2024-01-15T10:30:45Z",
-    "server_time": "2024-01-15T10:30:45Z"
-  },
-  "metadata": {
-    "timestamp": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
-### Connection States
-
-```mermaid
-stateDiagram-v2
-    [*] --> Connecting
-    Connecting --> Connected: Connection established
-    Connecting --> Failed: Connection error
-    Connected --> Disconnecting: Client close
-    Connected --> Disconnected: Network error
-    Connected --> Reconnecting: Connection lost
-    Disconnecting --> Disconnected: Close complete
-    Reconnecting --> Connected: Reconnection success
-    Reconnecting --> Failed: Reconnection failed
-    Failed --> [*]
-    Disconnected --> [*]
-```
-
-## Message Format
-
-All messages follow a standard JSON format:
-
-```json
-{
-  "type": "event.name",
-  "data": {
-    // Event-specific data
-  },
-  "metadata": {
-    "timestamp": "2024-01-15T10:30:45Z",
-    "correlation_id": "corr_xyz789"
-  }
-}
-```
-
-**Fields:**
-- `type` (required): Event type identifier
-- `data` (required): Event payload
-- `metadata` (optional): Additional metadata
-
-## Client Events
-
-Events sent from client to server.
-
-### 1. Send Message
-
-Send a new message to another user.
-
-**Event Type:** `message.send`
-
-**Payload:**
-```json
-{
-  "type": "message.send",
-  "data": {
-    "to_user_id": "recipient-uuid",
-    "content": "Hello! How are you?",
-    "message_type": "text",
-    "reply_to_id": null,
-    "client_message_id": "client_msg_123"
-  }
-}
-```
-
-**Fields:**
-- `to_user_id` (required): Recipient's user ID
-- `content` (required): Message content
-- `message_type` (required): `text`, `image`, `video`, `audio`, `document`, `location`, `contact`
-- `reply_to_id` (optional): ID of message being replied to
-- `client_message_id` (required): Client-generated ID for deduplication
-
-**Server Response:**
-```json
-{
-  "type": "message.sent",
-  "data": {
-    "message_id": "msg_abc123",
-    "conversation_id": "conv_xyz789",
-    "client_message_id": "client_msg_123",
-    "from_user_id": "sender-uuid",
-    "to_user_id": "recipient-uuid",
-    "content": "Hello! How are you?",
-    "message_type": "text",
-    "status": "sent",
-    "created_at": "2024-01-15T10:30:45Z"
+  "type": "connection_ack",
+  "payload": {
+    "status": "connected",
+    "timestamp": "2025-01-15T10:30:00Z",
+    "client_id": "conn_abc123xyz"
   }
 }
 ```
 
 ---
 
-### 2. Typing Indicator
+## Message Format
 
-Notify that user is typing.
+All WebSocket messages follow this format:
 
-**Event Type:** `presence.typing`
-
-**Payload:**
 ```json
 {
-  "type": "presence.typing",
-  "data": {
-    "conversation_id": "conv_xyz789",
+  "type": "event_name",
+  "payload": {
+    // Event-specific data
+  }
+}
+```
+
+**Fields**:
+- `type` (required, string): Event type identifier
+- `payload` (required, object): Event data
+
+---
+
+## Client → Server Events
+
+Events sent from client to server.
+
+### 1. read_receipt
+
+Mark a message as read.
+
+**Type**: `read_receipt`
+
+**Payload**:
+```json
+{
+  "type": "read_receipt",
+  "payload": {
+    "message_id": "770e8400-e29b-41d4-a716-446655440002"
+  }
+}
+```
+
+**Handler**: `handleReadReceipt()`
+
+**Server Action**:
+- Updates message delivery_status to 'read'
+- Broadcasts read receipt to message sender
+
+---
+
+### 2. typing
+
+Send typing indicator.
+
+**Type**: `typing`
+
+**Payload**:
+```json
+{
+  "type": "typing",
+  "payload": {
+    "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
     "is_typing": true
   }
 }
 ```
 
-**Fields:**
-- `conversation_id` (required): Conversation ID
-- `is_typing` (required): true when typing starts, false when stops
+**Handler**: `handleTypingIndicator()`
 
-**Server Broadcast:**
-Server broadcasts to other participants in the conversation:
-```json
-{
-  "type": "presence.typing",
-  "data": {
-    "user_id": "sender-uuid",
-    "conversation_id": "conv_xyz789",
-    "is_typing": true,
-    "timestamp": "2024-01-15T10:30:45Z"
-  }
-}
-```
+**Server Action**:
+- Updates typing_indicators table with TTL
+- Broadcasts typing status to conversation participants
+
+**Client Behavior**:
+- Send `is_typing: true` when user starts typing
+- Send `is_typing: false` when user stops or sends message
+- Auto-expire after 3 seconds if no update
 
 ---
 
-### 3. Mark as Read
+### 3. ping
 
-Mark message(s) as read.
+Connection keep-alive.
 
-**Event Type:** `message.read`
+**Type**: `ping`
 
-**Payload:**
+**Payload**:
 ```json
 {
-  "type": "message.read",
-  "data": {
-    "message_ids": ["msg_abc123", "msg_xyz789"]
-  }
+  "type": "ping",
+  "payload": {}
 }
 ```
 
-**Server Broadcast:**
-Server broadcasts to message sender:
-```json
-{
-  "type": "message.read",
-  "data": {
-    "message_id": "msg_abc123",
-    "read_by": "reader-uuid",
-    "read_at": "2024-01-15T10:31:00Z"
-  }
-}
-```
+**Handler**: `handlePing()`
 
----
-
-### 4. Update Presence
-
-Update user's presence status.
-
-**Event Type:** `presence.update`
-
-**Payload:**
-```json
-{
-  "type": "presence.update",
-  "data": {
-    "status": "online",
-    "activity": "typing"
-  }
-}
-```
-
-**Fields:**
-- `status` (required): `online`, `away`, `busy`, `offline`
-- `activity` (optional): `typing`, `recording`, `uploading`, `null`
-
-**Server Broadcast:**
-Server broadcasts to user's contacts:
-```json
-{
-  "type": "presence.updated",
-  "data": {
-    "user_id": "user-uuid",
-    "status": "online",
-    "activity": "typing",
-    "last_seen": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
----
-
-### 5. Heartbeat (Ping)
-
-Keep connection alive.
-
-**Event Type:** `ping`
-
-**Payload:**
-```json
-{
-  "type": "ping"
-}
-```
-
-**Server Response:**
+**Server Response**:
 ```json
 {
   "type": "pong",
-  "data": {
-    "timestamp": "2024-01-15T10:30:45Z"
+  "payload": {
+    "timestamp": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
-**Frequency:** Send every 30 seconds
+**Recommended Frequency**: Every 30 seconds
 
 ---
 
-## Server Events
+## Server → Client Events
 
 Events sent from server to client.
 
-### 1. Message Received
+### 1. connection_ack
 
-New message received.
+Connection acknowledgment (automatic on connect).
 
-**Event Type:** `message.received`
+**Type**: `connection_ack`
 
-**Payload:**
+**Payload**:
 ```json
 {
-  "type": "message.received",
-  "data": {
-    "message_id": "msg_abc123",
-    "conversation_id": "conv_xyz789",
-    "from_user_id": "sender-uuid",
-    "to_user_id": "recipient-uuid",
+  "type": "connection_ack",
+  "payload": {
+    "status": "connected",
+    "timestamp": "2025-01-15T10:30:00Z",
+    "client_id": "conn_abc123xyz"
+  }
+}
+```
+
+---
+
+### 2. pong
+
+Heartbeat response.
+
+**Type**: `pong`
+
+**Payload**:
+```json
+{
+  "type": "pong",
+  "payload": {
+    "timestamp": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+### 3. message (Broadcast)
+
+New message received (broadcasted by Hub).
+
+**Type**: `message`
+
+**Payload**:
+```json
+{
+  "type": "message",
+  "payload": {
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+    "sender_user_id": "550e8400-e29b-41d4-a716-446655440000",
     "content": "Hello!",
     "message_type": "text",
-    "reply_to": {
-      "message_id": "msg_parent",
-      "content": "Hi there!",
-      "from_user_id": "other-uuid"
-    },
-    "created_at": "2024-01-15T10:30:45Z",
-    "metadata": {
-      "client_id": "msg_client_123"
-    }
+    "created_at": "2025-01-15T10:30:00Z"
   }
 }
 ```
 
-**Client Action:**
-- Display message in UI
-- Send delivery acknowledgment automatically
-- Play notification sound (if app in background)
-
 ---
 
-### 2. Message Delivered
+### 4. error
 
-Message was delivered to recipient.
+Error occurred.
 
-**Event Type:** `message.delivered`
+**Type**: `error`
 
-**Payload:**
-```json
-{
-  "type": "message.delivered",
-  "data": {
-    "message_id": "msg_abc123",
-    "delivered_to": "recipient-uuid",
-    "delivered_at": "2024-01-15T10:30:46Z"
-  }
-}
-```
-
-**Client Action:**
-- Update message status in UI (single checkmark → double checkmark)
-
----
-
-### 3. Message Read
-
-Message was read by recipient.
-
-**Event Type:** `message.read`
-
-**Payload:**
-```json
-{
-  "type": "message.read",
-  "data": {
-    "message_id": "msg_abc123",
-    "read_by": "recipient-uuid",
-    "read_at": "2024-01-15T10:31:00Z"
-  }
-}
-```
-
-**Client Action:**
-- Update message status in UI (double checkmark → blue double checkmark)
-
----
-
-### 4. Typing Indicator
-
-User is typing.
-
-**Event Type:** `presence.typing`
-
-**Payload:**
-```json
-{
-  "type": "presence.typing",
-  "data": {
-    "user_id": "typing-user-uuid",
-    "conversation_id": "conv_xyz789",
-    "is_typing": true,
-    "timestamp": "2024-01-15T10:30:45Z"
-  }
-}
-```
-
-**Client Action:**
-- Show "User is typing..." indicator
-- Auto-hide after 3 seconds if no update received
-
----
-
-### 5. Presence Updated
-
-User presence changed.
-
-**Event Type:** `presence.updated`
-
-**Payload:**
-```json
-{
-  "type": "presence.updated",
-  "data": {
-    "user_id": "user-uuid",
-    "status": "online",
-    "activity": null,
-    "last_seen": "2024-01-15T10:30:45Z",
-    "devices": ["device-1", "device-2"]
-  }
-}
-```
-
-**Status Values:**
-- `online` - User is active
-- `away` - User is idle (no activity for 5+ minutes)
-- `busy` - Do not disturb mode
-- `offline` - User disconnected
-
-**Client Action:**
-- Update user status indicator in UI
-- Update last seen timestamp
-
----
-
-### 6. Message Edited
-
-Message was edited.
-
-**Event Type:** `message.edited`
-
-**Payload:**
-```json
-{
-  "type": "message.edited",
-  "data": {
-    "message_id": "msg_abc123",
-    "conversation_id": "conv_xyz789",
-    "new_content": "Updated message content",
-    "edited_at": "2024-01-15T10:35:45Z",
-    "edit_history_count": 1
-  }
-}
-```
-
-**Client Action:**
-- Update message content in UI
-- Show "edited" indicator
-
----
-
-### 7. Message Deleted
-
-Message was deleted.
-
-**Event Type:** `message.deleted`
-
-**Payload:**
-```json
-{
-  "type": "message.deleted",
-  "data": {
-    "message_id": "msg_abc123",
-    "conversation_id": "conv_xyz789",
-    "deleted_for": "everyone",
-    "deleted_at": "2024-01-15T10:40:45Z"
-  }
-}
-```
-
-**Fields:**
-- `deleted_for`: `sender_only` or `everyone`
-
-**Client Action:**
-- Remove message from UI (if `everyone`)
-- Replace with "Message deleted" placeholder
-
----
-
-### 8. Connection Error
-
-Connection error occurred.
-
-**Event Type:** `error`
-
-**Payload:**
+**Payload**:
 ```json
 {
   "type": "error",
-  "data": {
-    "code": "AUTH_FAILED",
-    "message": "Invalid access token",
-    "fatal": true
+  "payload": {
+    "code": "INVALID_MESSAGE_FORMAT",
+    "message": "Failed to parse message"
   }
 }
 ```
 
-**Error Codes:**
-- `AUTH_FAILED` - Authentication failed (fatal)
-- `INVALID_MESSAGE` - Malformed message (non-fatal)
-- `RATE_LIMIT_EXCEEDED` - Too many messages (non-fatal)
-- `INTERNAL_ERROR` - Server error (non-fatal)
-
-**Fatal Errors:**
-- Connection will be closed by server
-- Client should not attempt automatic reconnection
-- User intervention required (e.g., re-login)
-
-**Non-Fatal Errors:**
-- Connection remains open
-- Client can retry operation
-- May trigger temporary rate limiting
+**Error Codes**:
+- `INVALID_MESSAGE_FORMAT` - Malformed JSON
+- `UNKNOWN_EVENT_TYPE` - Unrecognized type
+- `HANDLER_ERROR` - Event handler failed
 
 ---
 
-## Heartbeat
+## Hub Architecture
 
-### Purpose
+### Overview
 
-Heartbeat messages keep the WebSocket connection alive and detect disconnections.
+The WebSocket Hub manages all active connections with multi-device support.
 
-### Client Behavior
-
-**Send Ping:**
-```javascript
-setInterval(() => {
-  if (socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'ping' }));
-  }
-}, 30000); // Every 30 seconds
+```
+Hub
+├── clients: map[UserID]map[*Client]bool
+├── connections: map[ClientID]*Client
+├── register: chan *Client (buffer: 256)
+├── unregister: chan *Client (buffer: 256)
+└── broadcast: chan *BroadcastMessage (buffer: 1024)
 ```
 
-**Handle Pong:**
-```javascript
-socket.onmessage = (event) => {
-  const message = JSON.parse(event.data);
+### Multi-Device Support
 
-  if (message.type === 'pong') {
-    lastPongTime = Date.now();
-    // Connection is alive
-  }
-};
+Each user can have multiple connected devices:
+
+```
+User A (UUID)
+  ├── Client 1 (iPhone)
+  ├── Client 2 (Web Browser)
+  └── Client 3 (iPad)
+
+User B (UUID)
+  └── Client 4 (Android)
 ```
 
-### Server Behavior
+**Hub Methods**:
 
-**Heartbeat Timeout:**
-- Server tracks last received message from each client
-- If no message received for 60 seconds, server closes connection
-- Client should detect close and attempt reconnection
-
-**Stale Connection Cleanup:**
 ```go
-// Server-side cleanup goroutine
-ticker := time.NewTicker(30 * time.Second)
-defer ticker.Stop()
+// Send to all user's devices
+SendToUser(userID, message)
 
-for range ticker.C {
-    now := time.Now()
-    for client := range hub.clients {
-        if now.Sub(client.lastSeen) > 60*time.Second {
-            // Close stale connection
-            hub.unregister <- client
-        }
-    }
-}
+// Send to multiple users (exclude some)
+SendToUsers(userIDs, message, excludeUsers)
+
+// Check if user is online
+IsUserOnline(userID) bool
+
+// Get user's device count
+GetUserDeviceCount(userID) int
+
+// Get statistics
+GetStats() HubStats
 ```
 
-## Error Handling
+### Connection Lifecycle
 
-### Connection Errors
-
-**Connection Refused:**
 ```
-Error: WebSocket connection failed
-Cause: Server unavailable or network issue
-Action: Retry with exponential backoff
+1. Client connects → 2. Register with Hub → 3. Receive connection_ack
+4. Send/receive messages → 5. Heartbeat (ping/pong)
+6. Client disconnects → 7. Unregister from Hub
 ```
 
-**Authentication Failed:**
-```json
-{
-  "type": "error",
-  "data": {
-    "code": "AUTH_FAILED",
-    "message": "Invalid or expired access token",
-    "fatal": true
-  }
-}
-```
-**Action:** Close connection, refresh token, reconnect
+### Automatic Cleanup
 
-**Rate Limited:**
-```json
-{
-  "type": "error",
-  "data": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Too many messages sent",
-    "retry_after": 30,
-    "fatal": false
-  }
-}
-```
-**Action:** Wait `retry_after` seconds before sending next message
+Hub runs periodic cleanup:
+- **Interval**: Every 30 seconds
+- **Timeout**: 90 seconds of inactivity
+- **Action**: Stale connections automatically removed
 
-### Reconnection Strategy
+---
 
-**Exponential Backoff:**
-```javascript
-let reconnectDelay = 1000; // Start with 1 second
-const maxDelay = 30000;    // Max 30 seconds
-
-function reconnect() {
-  setTimeout(() => {
-    console.log(`Reconnecting in ${reconnectDelay}ms...`);
-
-    const socket = new WebSocket(wsUrl);
-
-    socket.onopen = () => {
-      console.log('Reconnected!');
-      reconnectDelay = 1000; // Reset delay
-    };
-
-    socket.onerror = () => {
-      reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
-      reconnect();
-    };
-  }, reconnectDelay);
-}
-```
-
-**Backoff Sequence:**
-```
-1st attempt: 1 second
-2nd attempt: 2 seconds
-3rd attempt: 4 seconds
-4th attempt: 8 seconds
-5th attempt: 16 seconds
-6th attempt: 30 seconds (max)
-7th+ attempts: 30 seconds
-```
-
-### Message Queuing
-
-**Offline Message Queue:**
-```javascript
-class MessageQueue {
-  constructor() {
-    this.queue = [];
-    this.sending = false;
-  }
-
-  enqueue(message) {
-    this.queue.push(message);
-    this.flush();
-  }
-
-  flush() {
-    if (this.sending || socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    this.sending = true;
-
-    while (this.queue.length > 0 && socket.readyState === WebSocket.OPEN) {
-      const message = this.queue.shift();
-      socket.send(JSON.stringify(message));
-    }
-
-    this.sending = false;
-  }
-}
-
-const messageQueue = new MessageQueue();
-
-// When connection opens
-socket.onopen = () => {
-  messageQueue.flush(); // Send queued messages
-};
-
-// When sending message
-messageQueue.enqueue({
-  type: 'message.send',
-  data: { ... }
-});
-```
-
-## Client Libraries
+## Client Implementation
 
 ### JavaScript/TypeScript
 
-**Basic Implementation:**
 ```javascript
 class EchoWebSocket {
-  constructor(url, options) {
-    this.url = url;
-    this.options = options;
+  constructor(wsUrl, userId) {
+    this.wsUrl = wsUrl;
+    this.userId = userId;
     this.socket = null;
-    this.messageQueue = [];
+    this.messageHandlers = new Map();
     this.reconnectDelay = 1000;
     this.maxReconnectDelay = 30000;
   }
 
   connect() {
-    this.socket = new WebSocket(
-      `${this.url}?user_id=${this.options.userId}&device_id=${this.options.deviceId}&platform=${this.options.platform}&token=${this.options.accessToken}`
-    );
+    this.socket = new WebSocket(this.wsUrl);
 
     this.socket.onopen = () => {
-      console.log('Connected');
+      console.log('WebSocket connected');
       this.reconnectDelay = 1000;
-      this.flushQueue();
-      this.options.onConnect?.();
+      this.startHeartbeat();
     };
 
     this.socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      this.handleMessage(message);
+      try {
+        const message = JSON.parse(event.data);
+        this.handleMessage(message);
+      } catch (err) {
+        console.error('Failed to parse message:', err);
+      }
     };
 
     this.socket.onerror = (error) => {
       console.error('WebSocket error:', error);
-      this.options.onError?.(error);
     };
 
     this.socket.onclose = () => {
-      console.log('Disconnected');
-      this.options.onDisconnect?.();
+      console.log('WebSocket disconnected');
+      this.stopHeartbeat();
       this.reconnect();
     };
-
-    this.startHeartbeat();
   }
 
-  send(message) {
-    if (this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(message));
+  send(type, payload) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type, payload }));
     } else {
-      this.messageQueue.push(message);
+      console.error('WebSocket not connected');
     }
   }
 
   handleMessage(message) {
-    switch (message.type) {
-      case 'message.received':
-        this.options.onMessageReceived?.(message.data);
-        break;
-      case 'message.delivered':
-        this.options.onMessageDelivered?.(message.data);
-        break;
-      case 'message.read':
-        this.options.onMessageRead?.(message.data);
-        break;
-      case 'presence.typing':
-        this.options.onTyping?.(message.data);
-        break;
-      case 'presence.updated':
-        this.options.onPresenceUpdated?.(message.data);
-        break;
-      case 'pong':
-        this.lastPongTime = Date.now();
-        break;
-      default:
-        console.warn('Unknown message type:', message.type);
+    const handler = this.messageHandlers.get(message.type);
+    if (handler) {
+      handler(message.payload);
+    } else {
+      console.warn('No handler for message type:', message.type);
     }
   }
 
-  startHeartbeat() {
-    this.heartbeatInterval = setInterval(() => {
-      if (this.socket.readyState === WebSocket.OPEN) {
-        this.send({ type: 'ping' });
-      }
-    }, 30000);
+  on(type, handler) {
+    this.messageHandlers.set(type, handler);
   }
 
+  // Send read receipt
+  sendReadReceipt(messageId) {
+    this.send('read_receipt', { message_id: messageId });
+  }
+
+  // Send typing indicator
+  setTyping(conversationId, isTyping) {
+    this.send('typing', { conversation_id: conversationId, is_typing: isTyping });
+  }
+
+  // Heartbeat
+  startHeartbeat() {
+    this.heartbeatInterval = setInterval(() => {
+      this.send('ping', {});
+    }, 30000); // 30 seconds
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+  }
+
+  // Reconnection with exponential backoff
   reconnect() {
     setTimeout(() => {
       console.log(`Reconnecting in ${this.reconnectDelay}ms...`);
       this.connect();
-      this.reconnectDelay = Math.min(
-        this.reconnectDelay * 2,
-        this.maxReconnectDelay
-      );
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
     }, this.reconnectDelay);
   }
 
-  flushQueue() {
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift();
-      this.send(message);
-    }
-  }
-
   disconnect() {
-    clearInterval(this.heartbeatInterval);
+    this.stopHeartbeat();
     if (this.socket) {
       this.socket.close();
     }
@@ -874,25 +447,145 @@ class EchoWebSocket {
 }
 
 // Usage
-const ws = new EchoWebSocket('ws://localhost:8083/ws', {
-  userId: 'user-uuid',
-  deviceId: 'device-123',
-  platform: 'web',
-  accessToken: 'jwt-token',
+const ws = new EchoWebSocket('ws://localhost:8083/ws', userId);
 
-  onConnect: () => console.log('Connected!'),
-  onDisconnect: () => console.log('Disconnected!'),
-  onMessageReceived: (message) => console.log('New message:', message),
-  onMessageDelivered: (data) => console.log('Delivered:', data.message_id),
-  onMessageRead: (data) => console.log('Read:', data.message_id),
-  onTyping: (data) => console.log('Typing:', data.user_id),
-  onPresenceUpdated: (data) => console.log('Presence:', data),
+ws.on('connection_ack', (payload) => {
+  console.log('Connected:', payload);
+});
+
+ws.on('message', (payload) => {
+  console.log('New message:', payload);
+  // Display message in UI
+});
+
+ws.on('pong', (payload) => {
+  console.log('Pong received:', payload.timestamp);
 });
 
 ws.connect();
+
+// Send typing indicator
+ws.setTyping(conversationId, true);
+
+// Send read receipt
+ws.sendReadReceipt(messageId);
 ```
 
 ---
 
+## Connection Management
+
+### Heartbeat
+
+**Client Side**:
+- Send `ping` every 30 seconds
+- Expect `pong` response
+- If no `pong` after 3 attempts, reconnect
+
+**Server Side**:
+- Automatically sends `pong` in response to `ping`
+- Sends ping to clients every 45 seconds
+- Closes connection if no activity for 90 seconds
+
+### Reconnection Strategy
+
+**Exponential Backoff**:
+```
+1st attempt: 1 second
+2nd attempt: 2 seconds
+3rd attempt: 4 seconds
+4th attempt: 8 seconds
+5th attempt: 16 seconds
+6th+ attempts: 30 seconds (max)
+```
+
+**Reconnection Flow**:
+1. Detect disconnection
+2. Wait backoff duration
+3. Attempt reconnection
+4. On success: reset backoff
+5. On failure: increase backoff, retry
+
+---
+
+## Buffer Management
+
+**Message Size Limits**:
+- **Read buffer**: 1024 bytes (configurable)
+- **Write buffer**: 1024 bytes (configurable)
+- **Max message size**: 1 MB
+
+**Queue Limits**:
+- **Client send buffer**: 256 messages
+- **Hub register channel**: 256 clients
+- **Hub unregister channel**: 256 clients
+- **Hub broadcast channel**: 1024 messages
+
+**Buffer Full Behavior**:
+- If client send buffer full → connection closed
+- Prevents memory exhaustion from slow clients
+
+---
+
+## Error Handling
+
+### Connection Errors
+
+**Upgrade Failed**:
+```
+HTTP 400 Bad Request - Invalid WebSocket upgrade request
+```
+
+**Authentication Failed**:
+```
+HTTP 401 Unauthorized - Missing or invalid X-User-ID header
+```
+
+### Message Errors
+
+**Invalid JSON**:
+```json
+{
+  "type": "error",
+  "payload": {
+    "code": "INVALID_MESSAGE_FORMAT",
+    "message": "Failed to parse JSON"
+  }
+}
+```
+
+**Unknown Event Type**:
+```json
+{
+  "type": "error",
+  "payload": {
+    "code": "UNKNOWN_EVENT_TYPE",
+    "message": "Unknown event: custom_event"
+  }
+}
+```
+
+---
+
+## Performance & Scalability
+
+**Current Implementation**:
+- Single Hub instance (in-memory)
+- All connections in one process
+- Suitable for: ~10,000 concurrent connections
+
+**Scaling Considerations**:
+- For >10K connections: Add Redis Pub/Sub for multi-instance support
+- For >100K connections: Consider horizontal scaling with sticky sessions
+
+**Metrics Tracked**:
+- Total active connections
+- Total messages sent
+- Total broadcasts
+- Connections per user
+- Average message latency
+
+---
+
 **Last Updated**: January 2025
-**Version**: 1.0.0
+**Based on actual WebSocket implementation in `/services/message-service/internal/websocket/`**

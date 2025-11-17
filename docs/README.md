@@ -98,7 +98,7 @@ When making changes to the codebase:
 
 **Need Help?**
 
-- Open an issue: [GitHub Issues](https://github.com/yourusername/echo-backend/issues)
-- Start a discussion: [GitHub Discussions](https://github.com/yourusername/echo-backend/discussions)
+- Open an issue: [GitHub Issues](https://github.com/Dracula-101/echo-backend/issues)
+- Start a discussion: [GitHub Discussions](https://github.com/Dracula-101/echo-backend/discussions)
 
 **Last Updated**: January 2025

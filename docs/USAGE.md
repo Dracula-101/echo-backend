@@ -1,6 +1,6 @@
 # Echo Backend Usage Guide
 
-Complete developer guide for working with the Echo Backend microservices platform.
+Complete developer guide for working with the Echo Backend microservices platform - based on **ACTUAL** implementation.
 
 ## Table of Contents
 
@@ -50,7 +50,7 @@ sudo apt-get install build-essential
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/echo-backend.git
+git clone https://github.com/Dracula-101/echo-backend.git
 cd echo-backend
 
 # Verify Go workspace
@@ -66,17 +66,13 @@ make health
 ### First Time Setup
 
 ```bash
-# Initialize database schemas
-make db-init
-
-# Run database migrations
-make db-migrate
-
-# Seed test data (optional)
-make db-seed
+# Database is automatically initialized on first run via db-init container
 
 # Check all services are healthy
 make status
+
+# View service logs
+make logs
 ```
 
 ## Development Environment
@@ -90,22 +86,37 @@ echo-backend/
 │   │   ├── cmd/server/main.go       # Entry point
 │   │   ├── internal/                # Service code
 │   │   │   ├── config/             # Configuration
-│   │   │   ├── handler/            # HTTP handlers
-│   │   │   ├── service/            # Business logic
+│   │   │   ├── proxy/              # Proxy manager
 │   │   │   └── health/             # Health checks
 │   │   ├── configs/                # YAML configs
 │   │   │   ├── config.yaml         # Base config
 │   │   │   ├── config.dev.yaml     # Dev overrides
-│   │   │   └── config.prod.yaml    # Prod overrides
+│   │   │   ├── config.prod.yaml    # Prod overrides
+│   │   │   └── routes.yaml         # Route configuration
 │   │   ├── Dockerfile              # Production build
-│   │   ├── Dockerfile.dev          # Development build
+│   │   ├── Dockerfile.dev          # Development build (hot reload)
 │   │   └── go.mod                  # Service module
-│   └── ... (other services)
+│   ├── auth-service/       # Authentication (2 endpoints)
+│   ├── message-service/    # Messaging + WebSocket (9 endpoints)
+│   ├── user-service/       # User profiles (2 endpoints)
+│   ├── location-service/   # IP geolocation (2 endpoints)
+│   ├── presence-service/   # Presence tracking (stubbed)
+│   ├── media-service/      # Media handling (placeholder)
+│   ├── notification-service/  # Push notifications (placeholder)
+│   └── analytics-service/  # Analytics (placeholder)
 ├── shared/                # Shared libraries
 │   ├── pkg/              # Infrastructure packages
+│   │   ├── database/    # PostgreSQL interface
+│   │   ├── cache/       # Redis interface
+│   │   ├── messaging/   # Kafka interface
+│   │   └── logger/      # Structured logging
 │   └── server/           # HTTP utilities
+│       ├── router/      # Router builder
+│       ├── middleware/  # 15+ middleware
+│       ├── response/    # Standard responses
+│       └── shutdown/    # Graceful shutdown
 ├── database/             # Database files
-│   └── schemas/          # SQL schemas
+│   └── schemas/          # SQL schemas (auth, users, messages, etc.)
 ├── infra/                # Infrastructure
 │   ├── docker/           # Docker Compose files
 │   └── scripts/          # Utility scripts
@@ -122,35 +133,25 @@ Create a `.env` file in the root directory:
 # Application
 APP_ENV=development
 
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=echo
-DB_USER=echo
-DB_PASSWORD=echo
-DB_SSL_MODE=disable
+# PostgreSQL
+POSTGRES_USER=echo
+POSTGRES_PASSWORD=echo_password
+POSTGRES_DB=echo_db
 
 # Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-REDIS_DB=0
+REDIS_PASSWORD=redis_password
 
-# Kafka
-KAFKA_BROKERS=localhost:9092
-KAFKA_GROUP_ID=echo-backend
+# JWT (configured in service config files)
+# See services/auth-service/configs/config.yaml
 
-# JWT
-JWT_SECRET=your-secret-key-change-in-production
-JWT_ACCESS_EXPIRY=15m
-JWT_REFRESH_EXPIRY=168h  # 7 days
-
-# Services
-API_GATEWAY_PORT=8080
-AUTH_SERVICE_PORT=8081
-USER_SERVICE_PORT=8082
-MESSAGE_SERVICE_PORT=8083
-PRESENCE_SERVICE_PORT=8084
+# Services auto-configure ports via docker-compose
+# API Gateway: 8080 (external)
+# Auth Service: 8081 (internal)
+# User Service: 8082 (internal)
+# Message Service: 8083 (internal)
+# Media Service: 8084 (internal)
+# Presence Service: 8085 (internal)
+# Location Service: 8090 (external)
 
 # Logging
 LOG_LEVEL=debug
@@ -159,14 +160,15 @@ LOG_FORMAT=console  # or json
 
 ### Hot Reload
 
-Services automatically reload when code changes (in dev mode):
+Services automatically reload when code changes (in dev mode using Air):
 
 ```bash
-# Start services with hot reload enabled
-ENV=dev make up
+# Services are started in dev mode by default
+make up
 
 # Watch logs to see reload events
 make auth-logs
+# You'll see: "Running..." when file changes are detected
 ```
 
 ## Make Commands Reference
@@ -177,9 +179,6 @@ make auth-logs
 # Start all services
 make up
 
-# Start in production mode
-ENV=prod make up
-
 # Stop all services
 make down
 
@@ -188,9 +187,6 @@ make rerun
 
 # View logs from all services
 make logs
-
-# Follow logs (tail -f)
-make logs-follow
 
 # Check service status
 make status
@@ -204,6 +200,15 @@ make health
 Pattern: `make <service>-<action>`
 
 ```bash
+# Available services:
+# - gateway (api-gateway)
+# - auth (auth-service)
+# - message (message-service)
+# - user (user-service)
+# - location (location-service)
+# - presence (presence-service)
+# - media (media-service)
+
 # Start specific service
 make auth-up
 make message-up
@@ -221,94 +226,47 @@ make message-rerun
 make auth-logs
 make message-logs
 
-# Follow service logs
-make auth-logs-follow
-
 # Rebuild service (no cache)
 make auth-rebuild
 make message-rebuild
-
-# Shell into service container
-make auth-shell
-make message-shell
 ```
 
 ### Database Commands
 
 ```bash
-# Initialize database schemas
-make db-init
-
-# Run all migrations
-make db-migrate
-
-# Rollback last migration
-make db-migrate-down
-
-# Show migration status
-make db-migrate-status
+# Database is auto-initialized via db-init container
 
 # Connect to PostgreSQL CLI
 make db-connect
 
-# Seed test data
-make db-seed
-
-# Reset database (DANGER: drops all data)
-make db-reset
-
-# Backup database
-make db-backup
-
-# Restore database from backup
-make db-restore
+# Manual operations (if needed)
+docker exec -it echo-postgres psql -U echo -d echo_db
 ```
 
 ### Infrastructure Commands
 
 ```bash
-# List Kafka topics
+# Kafka operations
 make kafka-topics
-
-# Create Kafka topics
-make kafka-create-topics
-
-# Connect to Kafka console consumer
-make kafka-console-consumer TOPIC=user.registered
 
 # Connect to Redis CLI
 make redis-connect
 
 # View Redis keys
-make redis-keys
-
-# Flush Redis (DANGER: deletes all cache)
-make redis-flush
+docker exec -it echo-redis redis-cli KEYS "*"
 ```
 
 ### Testing Commands
 
 ```bash
-# Run all tests
+# Run tests (when available)
 make test
-
-# Run tests with coverage
-make test-coverage
 
 # Test specific service
 cd services/auth-service && go test -v ./...
 
-# Integration tests
-make test-integration
-
 # Test auth endpoints
 make test-auth
-
-# Test message endpoints
-make test-message
-
-# Verify security
-make verify-security
 ```
 
 ### Development Tools
@@ -320,20 +278,8 @@ make fmt
 # Run linters
 make lint
 
-# Run security checks
-make security-check
-
-# Generate mocks
-make generate-mocks
-
-# Update dependencies
-make deps-update
-
 # Tidy dependencies
 make deps-tidy
-
-# View dependency tree
-make deps-tree
 ```
 
 ## Service Management
@@ -347,7 +293,7 @@ make auth-up
 
 **Option 2: Via Docker Compose**
 ```bash
-docker compose -f infra/docker/docker-compose.dev.yml up auth-service
+docker compose -f infra/docker/docker-compose.dev.yml up -d auth-service
 ```
 
 **Option 3: Via Go (without Docker)**
@@ -369,18 +315,19 @@ make auth-logs
 make message-logs
 ```
 
-**Follow Logs** (like tail -f):
+**Follow Logs** (real-time):
 ```bash
-make auth-logs-follow
+docker logs -f echo-auth-service
+docker logs -f echo-message-service
 ```
 
 **Filter Logs**:
 ```bash
 # Show only errors
-docker logs echo-auth-service 2>&1 | grep "ERROR"
+docker logs echo-auth-service 2>&1 | grep "error"
 
-# Show requests with slow response times
-docker logs echo-auth-service 2>&1 | grep "duration_ms" | awk '$NF > 100'
+# Show requests with slow response times (development console format)
+docker logs echo-auth-service 2>&1 | grep "duration"
 ```
 
 ### Service Health Checks
@@ -392,30 +339,34 @@ make health
 
 **Check Specific Service**:
 ```bash
-# Liveness check
+# API Gateway
+curl http://localhost:8080/health
+
+# Auth Service (via gateway or direct if exposed)
 curl http://localhost:8081/health
 
-# Readiness check
-curl http://localhost:8081/ready
+# Message Service
+curl http://localhost:8083/health
+
+# Location Service
+curl http://localhost:8090/health
 ```
 
 **Expected Response**:
 ```json
 {
-  "status": "up",
-  "timestamp": "2024-01-15T10:30:45Z",
+  "status": "healthy",
+  "timestamp": "2025-01-15T10:30:45Z",
   "service": "auth-service",
   "version": "1.0.0",
   "checks": {
     "database": {
       "status": "up",
-      "duration_ms": 5,
-      "message": "Connected"
+      "latency_ms": 5
     },
     "cache": {
       "status": "up",
-      "duration_ms": 2,
-      "message": "Connected"
+      "latency_ms": 2
     }
   }
 }
@@ -430,10 +381,10 @@ curl http://localhost:8081/ready
 make db-connect
 
 # Via psql directly
-psql -h localhost -p 5432 -U echo -d echo
+psql -h localhost -p 5432 -U echo -d echo_db
 
 # Via Docker
-docker exec -it echo-postgres psql -U echo -d echo
+docker exec -it echo-postgres psql -U echo -d echo_db
 ```
 
 ### Running Queries
@@ -445,115 +396,94 @@ docker exec -it echo-postgres psql -U echo -d echo
 -- Switch to auth schema
 SET search_path TO auth;
 
--- List tables
+-- List tables in current schema
 \dt
 
--- View users
-SELECT id, phone, verified, created_at FROM auth.users;
+-- List all tables across schemas
+SELECT schemaname, tablename
+FROM pg_tables
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY schemaname, tablename;
 
--- View sessions
-SELECT user_id, device_id, ip_address, created_at
+-- View users (EMAIL-BASED)
+SELECT id, email, phone_number, email_verified, created_at
+FROM auth.users
+WHERE deleted_at IS NULL;
+
+-- View active sessions
+SELECT user_id, device_id, ip_address, created_at, expires_at
 FROM auth.sessions
-WHERE expires_at > NOW();
+WHERE expires_at > NOW()
+ORDER BY created_at DESC;
 
--- View recent messages
-SELECT id, from_user_id, to_user_id, content, created_at
-FROM messages.messages
+-- View login history
+SELECT user_id, ip_address, success, created_at
+FROM auth.login_history
 ORDER BY created_at DESC
 LIMIT 10;
+
+-- View recent messages
+SELECT id, conversation_id, sender_user_id, content, message_type, created_at
+FROM messages.messages
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- View conversations
+SELECT id, conversation_type, created_at
+FROM messages.conversations
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC;
+
+-- View user profiles
+SELECT id, user_id, username, display_name, bio, created_at
+FROM users.profiles
+WHERE deleted_at IS NULL;
 ```
 
-### Database Migrations
+### Schema Information
 
-**Create New Migration**:
-```bash
-# Create migration files
-cd database/schemas/auth
-touch $(date +%Y%m%d)_add_user_roles.up.sql
-touch $(date +%Y%m%d)_add_user_roles.down.sql
-```
-
-**Up Migration** (`*_up.sql`):
 ```sql
--- Add new column
-ALTER TABLE auth.users ADD COLUMN role VARCHAR(50) DEFAULT 'user';
+-- View auth schema tables
+\dt auth.*
 
--- Create index
-CREATE INDEX idx_users_role ON auth.users(role) WHERE deleted_at IS NULL;
-```
+-- View users schema tables
+\dt users.*
 
-**Down Migration** (`*_down.sql`):
-```sql
--- Remove index
-DROP INDEX IF EXISTS auth.idx_users_role;
+-- View messages schema tables
+\dt messages.*
 
--- Remove column
-ALTER TABLE auth.users DROP COLUMN IF EXISTS role;
-```
-
-**Run Migration**:
-```bash
-make db-migrate
-```
-
-**Rollback Migration**:
-```bash
-make db-migrate-down
-```
-
-### Database Seeding
-
-**Edit Seed Script**:
-```bash
-vim infra/scripts/seed-db.sh
-```
-
-**Add Seed Data**:
-```sql
--- Insert test users
-INSERT INTO auth.users (id, phone, password_hash, verified)
-VALUES
-  (gen_random_uuid(), '+1234567890', '$argon2id$...', true),
-  (gen_random_uuid(), '+9876543210', '$argon2id$...', true);
-
--- Insert test profiles
-INSERT INTO users.profiles (user_id, display_name, bio)
-VALUES
-  ((SELECT id FROM auth.users WHERE phone = '+1234567890'), 'John Doe', 'Test user 1'),
-  ((SELECT id FROM auth.users WHERE phone = '+9876543210'), 'Jane Smith', 'Test user 2');
-```
-
-**Run Seed**:
-```bash
-make db-seed
+-- Describe specific table
+\d auth.users
+\d messages.messages
+\d users.profiles
 ```
 
 ## API Testing
 
 ### Using cURL
 
-**Register User**:
+**Register User** (EMAIL-BASED):
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "phone": "+1234567890",
+    "email": "user@example.com",
     "password": "SecurePass123!",
-    "name": "John Doe"
-  }'
-```
+    "phone_number": "+1234567890",
+    "accept_terms": true
+  }' | jq '.'
 
-**Verify OTP**:
-```bash
-# Get OTP from logs or database
-docker logs echo-auth-service 2>&1 | grep "OTP:"
-
-curl -X POST http://localhost:8080/api/v1/auth/verify-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "phone": "+1234567890",
-    "otp": "123456"
-  }'
+# Response:
+# {
+#   "success": true,
+#   "data": {
+#     "user_id": "550e8400-e29b-41d4-a716-446655440000",
+#     "email": "user@example.com",
+#     "email_verified": false,
+#     "created_at": "2025-01-15T10:30:00Z"
+#   }
+# }
 ```
 
 **Login**:
@@ -561,25 +491,53 @@ curl -X POST http://localhost:8080/api/v1/auth/verify-otp \
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "phone": "+1234567890",
-    "password": "SecurePass123!"
+    "email": "user@example.com",
+    "password": "SecurePass123!",
+    "device_id": "device-12345",
+    "device_name": "MacBook Pro"
   }' | jq '.'
+
+# Response:
+# {
+#   "success": true,
+#   "data": {
+#     "user_id": "550e8400-e29b-41d4-a716-446655440000",
+#     "session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+#     "access_token": "eyJhbGciOiJIUzI1NiIs...",
+#     "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+#     "expires_at": "2025-01-15T11:30:00Z"
+#   }
+# }
 ```
 
 **Store Token**:
 ```bash
-# Extract token
+# Extract access token
 TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"phone": "+1234567890", "password": "SecurePass123!"}' \
+  -d '{"email": "user@example.com", "password": "SecurePass123!"}' \
   | jq -r '.data.access_token')
 
-echo $TOKEN
+echo "Token: $TOKEN"
 ```
 
-**Authenticated Request**:
+**Create User Profile**:
 ```bash
-curl -X GET http://localhost:8080/api/v1/users/profile \
+curl -X POST http://localhost:8080/api/v1/users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "john_doe",
+    "display_name": "John Doe",
+    "bio": "Software engineer"
+  }' | jq '.'
+```
+
+**Get User Profile**:
+```bash
+USER_ID="550e8400-e29b-41d4-a716-446655440000"
+curl -X GET "http://localhost:8080/api/v1/users/$USER_ID" \
   -H "Authorization: Bearer $TOKEN" \
   | jq '.'
 ```
@@ -590,9 +548,28 @@ curl -X POST http://localhost:8080/api/v1/messages \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "to_user_id": "recipient-uuid",
-    "content": "Hello!",
-    "type": "text"
+    "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+    "content": "Hello, how are you?",
+    "message_type": "text"
+  }' | jq '.'
+```
+
+**Get Messages**:
+```bash
+CONVERSATION_ID="660e8400-e29b-41d4-a716-446655440001"
+curl -X GET "http://localhost:8080/api/v1/messages?conversation_id=$CONVERSATION_ID&limit=20" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.'
+```
+
+**Create Conversation**:
+```bash
+curl -X POST http://localhost:8080/api/v1/messages/conversations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_type": "direct",
+    "participant_ids": ["user-id-1", "user-id-2"]
   }' | jq '.'
 ```
 
@@ -603,30 +580,26 @@ curl -X POST http://localhost:8080/api/v1/messages \
 brew install httpie  # macOS
 apt install httpie   # Linux
 
-# Register
+# Register (email-based)
 http POST localhost:8080/api/v1/auth/register \
-  phone="+1234567890" \
+  email="user@example.com" \
   password="SecurePass123!" \
-  name="John Doe"
+  accept_terms:=true
 
 # Login
 http POST localhost:8080/api/v1/auth/login \
-  phone="+1234567890" \
+  email="user@example.com" \
   password="SecurePass123!"
 
+# Save token
+TOKEN=$(http POST localhost:8080/api/v1/auth/login \
+  email="user@example.com" password="SecurePass123!" \
+  | jq -r '.data.access_token')
+
 # Authenticated request
-http GET localhost:8080/api/v1/users/profile \
+http GET localhost:8080/api/v1/users/550e8400-e29b-41d4-a716-446655440000 \
   Authorization:"Bearer $TOKEN"
 ```
-
-### Using Postman
-
-1. Import collection: `docs/postman/echo-backend.json`
-2. Set environment variables:
-   - `base_url`: `http://localhost:8080`
-   - `token`: (will be set automatically after login)
-3. Run authentication flow
-4. Test endpoints
 
 ## WebSocket Testing
 
@@ -638,47 +611,108 @@ npm install -g wscat
 
 # Connect to WebSocket
 wscat -c "ws://localhost:8083/ws" \
-  -H "X-User-ID: your-user-uuid" \
-  -H "X-Device-ID: device-1" \
+  -H "X-User-ID: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "X-Device-ID: device-12345" \
   -H "X-Platform: web"
 
-# Send message
-> {"type": "message", "content": "Hello!"}
+# You'll receive connection acknowledgment:
+# < {"type":"connection_ack","payload":{"status":"connected","timestamp":"2025-01-15T10:30:00Z","client_id":"conn_abc123"}}
 
-# Receive messages
-< {"type": "message", "from": "uuid", "content": "Hi there!"}
+# Send ping (keep-alive)
+> {"type":"ping","payload":{}}
+# < {"type":"pong","payload":{"timestamp":"2025-01-15T10:30:00Z"}}
+
+# Send typing indicator
+> {"type":"typing","payload":{"conversation_id":"660e8400-e29b-41d4-a716-446655440001","is_typing":true}}
+
+# Send read receipt
+> {"type":"read_receipt","payload":{"message_id":"770e8400-e29b-41d4-a716-446655440002"}}
+
+# Receive messages (broadcasted by server)
+# < {"type":"message","payload":{"id":"770e8400...","conversation_id":"660e8400...","sender_user_id":"550e8400...","content":"Hello!","message_type":"text","created_at":"2025-01-15T10:30:00Z"}}
 ```
 
 ### Using Browser Console
 
 ```javascript
-// Connect
+// Connect to WebSocket
+const userId = '550e8400-e29b-41d4-a716-446655440000';
+const deviceId = 'device-12345';
+const platform = 'web';
+
 const ws = new WebSocket('ws://localhost:8083/ws');
 
-// Set headers (must be done before connection)
-// Note: WebSocket in browser doesn't support custom headers
-// Use query parameters instead:
-const userId = 'your-user-uuid';
-const deviceId = 'device-1';
-const platform = 'web';
-const ws = new WebSocket(`ws://localhost:8083/ws?user_id=${userId}&device_id=${deviceId}&platform=${platform}`);
+// Note: Browser WebSocket doesn't support custom headers
+// Server extracts user_id from JWT token or context
+// For testing, you may need to modify server to accept query params
 
 // Handle connection open
 ws.onopen = () => {
-  console.log('Connected');
+  console.log('WebSocket Connected');
 
-  // Send message
-  ws.send(JSON.stringify({
-    type: 'message',
-    content: 'Hello from browser!'
-  }));
+  // Server automatically sends connection_ack
 };
 
 // Handle incoming messages
 ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received:', data);
+  const message = JSON.parse(event.data);
+  console.log('Received:', message);
+
+  switch(message.type) {
+    case 'connection_ack':
+      console.log('Connection established:', message.payload);
+
+      // Send ping to keep connection alive
+      ws.send(JSON.stringify({
+        type: 'ping',
+        payload: {}
+      }));
+      break;
+
+    case 'pong':
+      console.log('Pong received');
+      break;
+
+    case 'message':
+      console.log('New message:', message.payload);
+      break;
+
+    case 'error':
+      console.error('Error:', message.payload);
+      break;
+  }
 };
+
+// Send typing indicator
+function sendTyping(conversationId, isTyping) {
+  ws.send(JSON.stringify({
+    type: 'typing',
+    payload: {
+      conversation_id: conversationId,
+      is_typing: isTyping
+    }
+  }));
+}
+
+// Send read receipt
+function sendReadReceipt(messageId) {
+  ws.send(JSON.stringify({
+    type: 'read_receipt',
+    payload: {
+      message_id: messageId
+    }
+  }));
+}
+
+// Heartbeat (send ping every 30 seconds)
+setInterval(() => {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'ping',
+      payload: {}
+    }));
+  }
+}, 30000);
 
 // Handle errors
 ws.onerror = (error) => {
@@ -687,69 +721,58 @@ ws.onerror = (error) => {
 
 // Handle close
 ws.onclose = () => {
-  console.log('Disconnected');
+  console.log('WebSocket disconnected');
+  // Implement reconnection logic with exponential backoff
 };
 ```
 
-### Using Python
+### Complete WebSocket Client Example
 
-```python
-#!/usr/bin/env python3
-import asyncio
-import websockets
-import json
+See [WEBSOCKET_PROTOCOL.md](./WEBSOCKET_PROTOCOL.md#client-implementation) for full JavaScript client implementation with reconnection logic.
 
-async def test_websocket():
-    uri = "ws://localhost:8083/ws"
-    headers = {
-        "X-User-ID": "your-user-uuid",
-        "X-Device-ID": "device-1",
-        "X-Platform": "web"
-    }
+### Supported WebSocket Events
 
-    async with websockets.connect(uri, extra_headers=headers) as websocket:
-        # Send message
-        await websocket.send(json.dumps({
-            "type": "message",
-            "content": "Hello from Python!"
-        }))
+**Client → Server:**
+1. `ping` - Keep-alive heartbeat
+2. `typing` - Typing indicator
+3. `read_receipt` - Mark message as read
 
-        # Receive messages
-        while True:
-            message = await websocket.recv()
-            data = json.loads(message)
-            print(f"Received: {data}")
-
-asyncio.run(test_websocket())
-```
+**Server → Client:**
+1. `connection_ack` - Connection established
+2. `pong` - Heartbeat response
+3. `message` - New message broadcast
+4. `error` - Error occurred
 
 ## Debugging
 
 ### Viewing Logs
 
-**Structured Logs** (JSON format in production):
+**Console Logs** (development):
+```bash
+docker logs echo-auth-service --tail 100 -f
+```
+
+**JSON Logs** (production):
 ```bash
 docker logs echo-auth-service --tail 100 -f | jq '.'
 ```
 
 **Filter by Log Level**:
 ```bash
-# Errors only
-docker logs echo-auth-service 2>&1 | jq 'select(.level == "error")'
+# Errors only (console format)
+docker logs echo-auth-service 2>&1 | grep "ERROR"
 
-# Warnings and errors
-docker logs echo-auth-service 2>&1 | jq 'select(.level == "warn" or .level == "error")'
+# JSON format
+docker logs echo-auth-service 2>&1 | jq 'select(.level == "error")'
 ```
 
 **Filter by Request ID**:
 ```bash
-docker logs echo-auth-service 2>&1 | jq 'select(.request_id == "req_abc123")'
-```
+# Console format
+docker logs echo-auth-service 2>&1 | grep "request_id=req_abc123"
 
-**Filter by Duration**:
-```bash
-# Requests taking > 100ms
-docker logs echo-auth-service 2>&1 | jq 'select(.duration_ms > 100)'
+# JSON format
+docker logs echo-auth-service 2>&1 | jq 'select(.request_id == "req_abc123")'
 ```
 
 ### Debugging with Delve
@@ -781,31 +804,34 @@ dlv debug cmd/server/main.go
 
 ### Database Debugging
 
-**Enable Query Logging**:
-```yaml
-# config.dev.yaml
-database:
-  log_queries: true
-  log_level: debug
-```
-
-**View Slow Queries**:
-```sql
--- Enable slow query logging
-ALTER DATABASE echo SET log_min_duration_statement = 100; -- 100ms
-
--- View slow queries
-SELECT query, calls, total_time, mean_time
-FROM pg_stat_statements
-ORDER BY total_time DESC
-LIMIT 10;
-```
-
 **View Active Connections**:
 ```sql
 SELECT pid, usename, application_name, client_addr, state, query
 FROM pg_stat_activity
-WHERE datname = 'echo';
+WHERE datname = 'echo_db';
+```
+
+**Check Table Sizes**:
+```sql
+SELECT
+  schemaname,
+  tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+```
+
+**View Indexes**:
+```sql
+SELECT
+  schemaname,
+  tablename,
+  indexname,
+  indexdef
+FROM pg_indexes
+WHERE schemaname = 'auth'
+ORDER BY tablename, indexname;
 ```
 
 ### Redis Debugging
@@ -814,160 +840,118 @@ WHERE datname = 'echo';
 # Connect to Redis
 make redis-connect
 
+# Or directly
+docker exec -it echo-redis redis-cli -a redis_password
+
 # Monitor all commands
-redis-cli MONITOR
+MONITOR
 
 # View all keys
-redis-cli KEYS "*"
+KEYS "*"
 
 # View session keys
-redis-cli KEYS "session:*"
+KEYS "session:*"
 
 # Get key value
-redis-cli GET "session:abc123"
+GET "session:7c9e6679-7425-40de-944b-e07fc1f90ae7"
 
 # View key TTL
-redis-cli TTL "session:abc123"
+TTL "session:7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
+# Get key type
+TYPE "session:abc123"
 ```
 
 ### Kafka Debugging
 
 ```bash
 # List topics
-make kafka-topics
+docker exec -it echo-kafka kafka-topics \
+  --bootstrap-server localhost:9092 \
+  --list
 
-# Consume messages from topic
+# Consume messages from notifications topic
 docker exec -it echo-kafka kafka-console-consumer \
   --bootstrap-server localhost:9092 \
-  --topic user.registered \
+  --topic notifications \
   --from-beginning
-
-# Produce test message
-docker exec -it echo-kafka kafka-console-producer \
-  --bootstrap-server localhost:9092 \
-  --topic user.registered
-> {"user_id": "uuid", "phone": "+1234567890"}
 
 # View consumer groups
 docker exec -it echo-kafka kafka-consumer-groups \
   --bootstrap-server localhost:9092 \
   --list
-
-# View consumer group lag
-docker exec -it echo-kafka kafka-consumer-groups \
-  --bootstrap-server localhost:9092 \
-  --group echo-backend \
-  --describe
 ```
 
 ## Common Workflows
 
+### Complete Registration and Login Flow
+
+```bash
+# 1. Register new user (email-based)
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newuser@example.com",
+    "password": "SecurePass123!",
+    "accept_terms": true
+  }' | jq '.'
+
+# 2. Login to get access token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newuser@example.com",
+    "password": "SecurePass123!",
+    "device_id": "my-device",
+    "device_name": "My Computer"
+  }' | jq -r '.data.access_token')
+
+echo "Access Token: $TOKEN"
+
+# 3. Create user profile
+curl -X POST http://localhost:8080/api/v1/users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "display_name": "New User",
+    "bio": "Just joined!"
+  }' | jq '.'
+```
+
+### Sending and Receiving Messages
+
+```bash
+# 1. Create a conversation
+CONVERSATION=$(curl -s -X POST http://localhost:8080/api/v1/messages/conversations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_type": "direct",
+    "participant_ids": ["user-id-1", "user-id-2"]
+  }' | jq -r '.data.id')
+
+echo "Conversation ID: $CONVERSATION"
+
+# 2. Send a message
+curl -X POST http://localhost:8080/api/v1/messages \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"conversation_id\": \"$CONVERSATION\",
+    \"content\": \"Hello from the API!\",
+    \"message_type\": \"text\"
+  }" | jq '.'
+
+# 3. Get messages from conversation
+curl -X GET "http://localhost:8080/api/v1/messages?conversation_id=$CONVERSATION&limit=50" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.'
+```
+
 ### Adding a New Endpoint
 
-1. **Define Route** in handler:
-```go
-// internal/handler/user.go
-func (h *UserHandler) SetupRoutes(r *router.Router) {
-    r.GET("/api/v1/users/:id", h.GetUser)
-    r.PUT("/api/v1/users/:id", h.UpdateUser)
-    r.DELETE("/api/v1/users/:id", h.DeleteUser)
-}
-```
-
-2. **Implement Handler**:
-```go
-func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-    userID := router.Param(r, "id")
-
-    user, err := h.service.GetUser(r.Context(), userID)
-    if err != nil {
-        response.Error(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
-        return
-    }
-
-    response.OK(w, user)
-}
-```
-
-3. **Implement Service Logic**:
-```go
-// internal/service/user.go
-func (s *UserService) GetUser(ctx context.Context, userID string) (*User, error) {
-    user, err := s.repo.FindByID(ctx, userID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to get user: %w", err)
-    }
-    return user, nil
-}
-```
-
-4. **Register Route** in main.go:
-```go
-userHandler := handler.NewUserHandler(userService, log)
-
-router := router.NewBuilder().
-    WithRoutes(func(r *router.Router) {
-        userHandler.SetupRoutes(r)
-    }).
-    Build()
-```
-
-5. **Test Endpoint**:
-```bash
-curl http://localhost:8080/api/v1/users/uuid | jq '.'
-```
-
-### Adding a New Service
-
-See [GUIDELINES.md](./GUIDELINES.md#adding-a-new-service) for detailed steps.
-
-### Updating Configuration
-
-1. **Update Config Struct**:
-```go
-// internal/config/config.go
-type Config struct {
-    // ... existing fields
-    NewFeature NewFeatureConfig `mapstructure:"new_feature"`
-}
-
-type NewFeatureConfig struct {
-    Enabled bool   `mapstructure:"enabled"`
-    Timeout int    `mapstructure:"timeout"`
-}
-```
-
-2. **Update YAML Config**:
-```yaml
-# configs/config.yaml
-new_feature:
-  enabled: ${NEW_FEATURE_ENABLED:false}
-  timeout: ${NEW_FEATURE_TIMEOUT:30}
-```
-
-3. **Add Validation**:
-```go
-// internal/config/validator.go
-func (c *Config) ValidateAndSetDefaults() error {
-    // ... existing validations
-    if c.NewFeature.Timeout <= 0 {
-        c.NewFeature.Timeout = 30
-    }
-    return nil
-}
-```
-
-4. **Update Environment**:
-```bash
-# .env
-NEW_FEATURE_ENABLED=true
-NEW_FEATURE_TIMEOUT=60
-```
-
-5. **Restart Service**:
-```bash
-make auth-rerun
-```
+See [SERVER_ARCHITECTURE.md](./SERVER_ARCHITECTURE.md#creating-a-new-service) for complete guide.
 
 ## Troubleshooting
 
@@ -982,6 +966,11 @@ docker compose -f infra/docker/docker-compose.dev.yml ps
 **Check Logs**:
 ```bash
 make logs
+
+# Or specific service
+docker logs echo-auth-service
+docker logs echo-message-service
+docker logs echo-postgres
 ```
 
 **Common Issues**:
@@ -989,11 +978,17 @@ make logs
 - Docker daemon not running: `docker info`
 - Missing environment variables: check `.env` file
 
+**Restart Services**:
+```bash
+make down
+make up
+```
+
 ### Database Connection Errors
 
 **Test Connection**:
 ```bash
-psql -h localhost -p 5432 -U echo -d echo -c "SELECT 1"
+psql -h localhost -p 5432 -U echo -d echo_db -c "SELECT 1"
 ```
 
 **Check PostgreSQL Status**:
@@ -1002,16 +997,17 @@ docker ps | grep postgres
 docker logs echo-postgres
 ```
 
-**Reset Database**:
+**Check if database exists**:
 ```bash
-make db-reset
+docker exec -it echo-postgres psql -U echo -l
 ```
 
 ### Redis Connection Errors
 
 **Test Connection**:
 ```bash
-redis-cli -h localhost -p 6379 ping
+docker exec -it echo-redis redis-cli -a redis_password ping
+# Should return: PONG
 ```
 
 **Check Redis Status**:
@@ -1025,12 +1021,16 @@ docker logs echo-redis
 **Check Kafka Status**:
 ```bash
 docker ps | grep kafka
+docker ps | grep zookeeper
 docker logs echo-kafka
+docker logs echo-zookeeper
 ```
 
-**Recreate Topics**:
+**Test Kafka**:
 ```bash
-make kafka-create-topics
+docker exec -it echo-kafka kafka-topics \
+  --bootstrap-server localhost:9092 \
+  --list
 ```
 
 ### WebSocket Connection Refused
@@ -1043,13 +1043,14 @@ docker logs echo-message-service
 
 **Test WebSocket Endpoint**:
 ```bash
-curl -i -N \
-  -H "Connection: Upgrade" \
-  -H "Upgrade: websocket" \
-  -H "Sec-WebSocket-Version: 13" \
-  -H "Sec-WebSocket-Key: SGVsbG8sIHdvcmxkIQ==" \
-  http://localhost:8083/ws
+# Check if service is listening
+curl -i http://localhost:8083/health
 ```
+
+**Common Issues**:
+- Missing headers (X-User-ID required)
+- Service not running
+- Port 8083 not exposed
 
 ### High Memory Usage
 
@@ -1058,44 +1059,41 @@ curl -i -N \
 docker stats
 ```
 
-**Optimize Connection Pool**:
+**Optimize Connection Pool** (`services/auth-service/configs/config.yaml`):
 ```yaml
-# config.yaml
 database:
-  max_open_connections: 10  # Reduce from 25
-  max_idle_connections: 5   # Reduce from 10
+  postgres:
+    max_open_conns: 10  # Reduce from 25
+    max_idle_conns: 5   # Reduce from 10
 ```
 
-**Clear Cache**:
+**Restart Service**:
 ```bash
-make redis-flush
+make auth-rerun
 ```
 
 ### Slow Response Times
 
-**Enable Query Logging**:
-```yaml
-database:
-  log_queries: true
-  log_level: debug
-```
-
-**Check Slow Queries**:
+**Check Request Duration** (in logs):
 ```bash
-docker logs echo-auth-service 2>&1 | grep "duration_ms" | awk '$NF > 100'
+docker logs echo-auth-service 2>&1 | grep "duration"
 ```
 
 **Add Database Indexes**:
 ```sql
-CREATE INDEX idx_users_phone ON auth.users(phone) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_email ON auth.users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_messages_conversation ON messages.messages(conversation_id, created_at DESC);
+CREATE INDEX idx_sessions_user ON auth.sessions(user_id, expires_at DESC);
 ```
 
 ---
 
 For more information:
 - [Architecture Documentation](./ARCHITECTURE.md)
-- [Development Guidelines](./GUIDELINES.md)
-- [Contributing Guide](./CONTRIBUTING.md)
+- [Server Architecture](./SERVER_ARCHITECTURE.md)
+- [API Reference](./API_REFERENCE.md)
+- [WebSocket Protocol](./WEBSOCKET_PROTOCOL.md)
+- [Database Schema](./DATABASE_SCHEMA.md)
 
 **Last Updated**: January 2025
+**Based On**: Actual implementation

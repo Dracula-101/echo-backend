@@ -337,17 +337,16 @@ authService := service.NewAuthServiceBuilder().
 // Repository interface
 type AuthRepository interface {
     CreateUser(ctx context.Context, user *model.User) error
-    FindUserByPhone(ctx context.Context, phone string) (*model.User, error)
+    FindUserByEmail(ctx context.Context, email string) (*model.User, error)
     UpdateUser(ctx context.Context, user *model.User) error
     DeleteUser(ctx context.Context, userID string) error
 }
 
-// Service interface
+// Service interface (only implemented endpoints)
 type AuthService interface {
     Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error)
     Login(ctx context.Context, req LoginRequest) (*LoginResponse, error)
-    VerifyOTP(ctx context.Context, req VerifyOTPRequest) error
-    Logout(ctx context.Context, sessionID string) error
+    // Note: OTP verification, logout, and token refresh are not yet implemented
 }
 ```
 
@@ -521,12 +520,11 @@ func TestAuthService_Register(t *testing.T) {
         Build()
 
     req := RegisterRequest{
-        Phone:    "+1234567890",
+        Email:    "john@example.com",
         Password: "SecurePass123!",
-        Name:     "John Doe",
     }
 
-    mockRepo.On("FindUserByPhone", ctx, req.Phone).Return(nil, ErrUserNotFound)
+    mockRepo.On("FindUserByEmail", ctx, req.Email).Return(nil, ErrUserNotFound)
     mockRepo.On("CreateUser", ctx, mock.AnythingOfType("*model.User")).Return(nil)
 
     // Act
@@ -535,11 +533,11 @@ func TestAuthService_Register(t *testing.T) {
     // Assert
     assert.NoError(t, err)
     assert.NotNil(t, resp)
-    assert.Equal(t, req.Phone, resp.Phone)
+    assert.Equal(t, req.Email, resp.Email)
     mockRepo.AssertExpectations(t)
 }
 
-func TestAuthService_Register_DuplicatePhone(t *testing.T) {
+func TestAuthService_Register_DuplicateEmail(t *testing.T) {
     // Arrange
     ctx := context.Background()
     mockRepo := new(MockAuthRepository)
@@ -549,10 +547,10 @@ func TestAuthService_Register_DuplicatePhone(t *testing.T) {
         // ... other dependencies
         Build()
 
-    req := RegisterRequest{Phone: "+1234567890"}
+    req := RegisterRequest{Email: "john@example.com"}
 
-    existingUser := &model.User{Phone: req.Phone}
-    mockRepo.On("FindUserByPhone", ctx, req.Phone).Return(existingUser, nil)
+    existingUser := &model.User{Email: req.Email}
+    mockRepo.On("FindUserByEmail", ctx, req.Email).Return(existingUser, nil)
 
     // Act
     resp, err := service.Register(ctx, req)
@@ -560,7 +558,7 @@ func TestAuthService_Register_DuplicatePhone(t *testing.T) {
     // Assert
     assert.Error(t, err)
     assert.Nil(t, resp)
-    assert.Contains(t, err.Error(), "phone already exists")
+    assert.Contains(t, err.Error(), "email already exists")
 }
 ```
 
@@ -607,8 +605,8 @@ func (m *MockAuthRepository) CreateUser(ctx context.Context, user *model.User) e
     return args.Error(0)
 }
 
-func (m *MockAuthRepository) FindUserByPhone(ctx context.Context, phone string) (*model.User, error) {
-    args := m.Called(ctx, phone)
+func (m *MockAuthRepository) FindUserByEmail(ctx context.Context, email string) (*model.User, error) {
+    args := m.Called(ctx, email)
     if args.Get(0) == nil {
         return nil, args.Error(1)
     }
@@ -697,14 +695,16 @@ func (c *Config) ValidateAndSetDefaults() error {
 ```go
 // internal/model/user.go
 type User struct {
-    ID           uuid.UUID  `db:"id" json:"id"`
-    Phone        string     `db:"phone" json:"phone"`
-    PasswordHash string     `db:"password_hash" json:"-"`
-    Verified     bool       `db:"verified" json:"verified"`
-    Locked       bool       `db:"locked" json:"locked"`
-    CreatedAt    time.Time  `db:"created_at" json:"created_at"`
-    UpdatedAt    time.Time  `db:"updated_at" json:"updated_at"`
-    DeletedAt    *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
+    ID              uuid.UUID  `db:"id" json:"id"`
+    Email           string     `db:"email" json:"email"`
+    PhoneNumber     *string    `db:"phone_number" json:"phone_number,omitempty"` // Optional
+    PasswordHash    string     `db:"password_hash" json:"-"`
+    EmailVerified   bool       `db:"email_verified" json:"email_verified"`
+    PhoneVerified   bool       `db:"phone_verified" json:"phone_verified"`
+    AccountLocked   bool       `db:"account_locked" json:"account_locked"`
+    CreatedAt       time.Time  `db:"created_at" json:"created_at"`
+    UpdatedAt       time.Time  `db:"updated_at" json:"updated_at"`
+    DeletedAt       *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
 }
 
 // Implement Model interface
@@ -725,7 +725,8 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) error {
         // Create user
         user := &model.User{
             ID:           uuid.New(),
-            Phone:        req.Phone,
+            Email:        req.Email,
+            PhoneNumber:  req.PhoneNumber, // Optional
             PasswordHash: hashedPassword,
         }
         if err := tx.Create(ctx, user); err != nil {
@@ -735,7 +736,7 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) error {
         // Create profile
         profile := &model.Profile{
             UserID:      user.ID,
-            DisplayName: req.Name,
+            DisplayName: req.DisplayName,
         }
         if err := tx.Create(ctx, profile); err != nil {
             return fmt.Errorf("failed to create profile: %w", err)
@@ -819,9 +820,11 @@ func AuthMiddleware(tokenService TokenService) Middleware {
 ```go
 // Validate all user input
 type RegisterRequest struct {
-    Phone    string `json:"phone" validate:"required,phone"`
-    Password string `json:"password" validate:"required,min=8,max=128"`
-    Name     string `json:"name" validate:"required,min=2,max=100"`
+    Email           string  `json:"email" validate:"required,email"`
+    Password        string  `json:"password" validate:"required,min=8,max=128"`
+    PhoneNumber     *string `json:"phone_number,omitempty" validate:"omitempty,phone"`
+    PhoneCountryCode *string `json:"phone_country_code,omitempty"`
+    AcceptTerms     bool    `json:"accept_terms" validate:"required,eq=true"`
 }
 
 func (r *RegisterRequest) Validate() error {
@@ -843,11 +846,11 @@ func (r *RegisterRequest) Validate() error {
 ```go
 // ALWAYS use parameterized queries
 // Good
-query := "SELECT * FROM users WHERE phone = $1 AND deleted_at IS NULL"
-err := db.FindOne(ctx, &user, query, phone)
+query := "SELECT * FROM auth.users WHERE email = $1 AND deleted_at IS NULL"
+err := db.FindOne(ctx, &user, query, email)
 
 // Bad - SQL injection vulnerable
-query := fmt.Sprintf("SELECT * FROM users WHERE phone = '%s'", phone)
+query := fmt.Sprintf("SELECT * FROM auth.users WHERE email = '%s'", email)
 err := db.FindOne(ctx, &user, query)
 ```
 
@@ -864,7 +867,7 @@ database:
   connection_idle_timeout: 10m
 
 // Use indexes for frequent queries
-CREATE INDEX idx_users_phone ON auth.users(phone) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_email ON auth.users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_messages_conversation ON messages.messages(conversation_id, created_at DESC);
 
 // Use pagination
@@ -930,7 +933,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 
 ```go
 // @Summary      Register new user
-// @Description  Register a new user with phone number and password
+// @Description  Register a new user with email and password (phone is optional)
 // @Tags         authentication
 // @Accept       json
 // @Produce      json
@@ -950,14 +953,19 @@ Each service should have a README:
 ```markdown
 # Auth Service
 
-Authentication and authorization service.
+Authentication and authorization service using email-based authentication.
 
-## Endpoints
+## Implemented Endpoints
 
-- `POST /register` - Register new user
-- `POST /login` - User login
-- `POST /verify-otp` - Verify OTP
+- `POST /register` - Register new user with email and password
+- `POST /login` - User login with email and password
+
+## Planned Endpoints (Not Yet Implemented)
+
+- `POST /verify-email` - Email verification
 - `POST /logout` - User logout
+- `POST /refresh` - Refresh access token
+- `POST /forgot-password` - Password reset request
 
 ## Configuration
 
@@ -999,7 +1007,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```bash
 # Feature
-git commit -m "feat(auth): add phone-first authentication"
+git commit -m "feat(auth): add email-based authentication with optional phone"
 
 # Bug fix
 git commit -m "fix(message): resolve WebSocket connection leak"

@@ -44,7 +44,8 @@ A production-ready, scalable microservices architecture for a real-time messagin
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/echo-backend.git
+git clone https://github.com/Dracula-101/echo-backend.git
+git clone https://github.com/Dracula-101/echo-backend.git
 cd echo-backend
 
 # Start all services (infrastructure + microservices)
@@ -558,8 +559,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 - **Documentation**: [Complete Documentation](./docs/) | [Architecture](./docs/ARCHITECTURE.md) | [Usage Guide](./docs/USAGE.md) | [API Reference](./docs/API_REFERENCE.md)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/echo-backend/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/echo-backend/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Dracula-101/echo-backend/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Dracula-101/echo-backend/discussions)
 
 ## Acknowledgments
 

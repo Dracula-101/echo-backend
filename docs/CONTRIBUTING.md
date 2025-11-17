@@ -247,11 +247,11 @@ git checkout -b docs/api-documentation
 
 **Examples:**
 ```bash
-git commit -m "feat(auth): add phone-first authentication flow"
+git commit -m "feat(auth): add email-based authentication with optional phone"
 git commit -m "fix(message): resolve WebSocket connection leak"
 git commit -m "docs(readme): add quick start guide"
 git commit -m "refactor(user): extract profile service to separate file"
-git commit -m "test(auth): add unit tests for OTP verification"
+git commit -m "test(auth): add unit tests for registration flow"
 git commit -m "perf(database): add index on messages.conversation_id"
 ```
 
@@ -486,23 +486,24 @@ go tool cover -html=coverage.out
 **Package comments:**
 ```go
 // Package handler provides HTTP handlers for authentication.
-// It handles user registration, login, OTP verification, and session management.
+// It handles user registration and login with email-based authentication.
+// Session management and token generation are handled via JWT tokens.
 package handler
 ```
 
 **Function comments:**
 ```go
-// Register handles user registration with phone number and password.
-// It validates input, checks for duplicate phones, hashes the password,
-// creates the user record, and generates an OTP for verification.
+// Register handles user registration with email and password (phone is optional).
+// It validates input, checks for duplicate emails, hashes the password using Argon2id,
+// and creates the user record in the database.
 //
 // Parameters:
 //   - ctx: Request context
-//   - req: Registration request containing phone, password, and name
+//   - req: Registration request containing email, password, optional phone, and terms acceptance
 //
 // Returns:
-//   - *RegisterResponse: Contains user_id and OTP sent status
-//   - error: Validation errors, duplicate phone, or internal errors
+//   - *RegisterResponse: Contains user_id, email, and email verification status
+//   - error: Validation errors, duplicate email, or internal errors
 func (h *AuthHandler) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error)
 ```
 
