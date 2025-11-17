@@ -184,9 +184,9 @@ func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid
 		LIMIT $` + fmt.Sprintf("%d", argIdx)
 	args = append(args, params.Limit)
 
-	rows, err := tx.Query(ctx, query, args...)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query messages").
+	rows, dbErr := tx.Query(ctx, query, args...)
+	if dbErr != nil {
+		return nil, pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to query messages").
 			WithDetail("conversation_id", conversationID.String()).
 			WithDetail("limit", params.Limit)
 	}
@@ -243,9 +243,9 @@ func (r *messageRepository) UpdateMessage(ctx context.Context, messageID uuid.UU
 			WithDetail("message_id", messageID.String())
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get affected rows").
+	rows, dbErr := result.RowsAffected()
+	if dbErr != nil {
+		return pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to get affected rows").
 			WithDetail("message_id", messageID.String())
 	}
 
@@ -272,9 +272,9 @@ func (r *messageRepository) DeleteMessage(ctx context.Context, messageID uuid.UU
 			WithDetail("user_id", userID.String())
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get affected rows").
+	rows, dbErr := result.RowsAffected()
+	if dbErr != nil {
+		return pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to get affected rows").
 			WithDetail("message_id", messageID.String())
 	}
 

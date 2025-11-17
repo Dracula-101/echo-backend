@@ -21,7 +21,7 @@ func NewFileRepository(db database.Database, log logger.Logger) *FileRepository 
 }
 
 func (r *FileRepository) CreateFile(ctx context.Context, model models.MediaFile) (string, pkgErrors.AppError) {
-	id, err := r.db.Create(ctx, &model)
+	id, err := r.db.Insert(ctx, &model)
 	if err != nil {
 		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create file").
 			WithDetail("file_name", model.FileName).
@@ -271,7 +271,7 @@ func (r *FileRepository) CreateAccessLog(ctx context.Context, fileID, userID, ac
 }
 
 func (r *FileRepository) CreateAlbum(ctx context.Context, album *models.Album) (string, pkgErrors.AppError) {
-	id, err := r.db.Create(ctx, album)
+	id, err := r.db.Insert(ctx, album)
 	if err != nil {
 		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create album").
 			WithDetail("user_id", album.UserID).
@@ -351,7 +351,7 @@ func (r *FileRepository) DeleteAlbum(ctx context.Context, albumID string) pkgErr
 }
 
 func (r *FileRepository) AddFileToAlbum(ctx context.Context, albumFile *models.AlbumFile) pkgErrors.AppError {
-	_, err := r.db.Create(ctx, albumFile)
+	_, err := r.db.Insert(ctx, albumFile)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to add file to album").
 			WithDetail("album_id", albumFile.AlbumID).
@@ -410,7 +410,7 @@ func (r *FileRepository) ListAlbumFiles(ctx context.Context, albumID string, lim
 }
 
 func (r *FileRepository) CreateShare(ctx context.Context, share *models.Share) (string, pkgErrors.AppError) {
-	id, err := r.db.Create(ctx, share)
+	id, err := r.db.Insert(ctx, share)
 	if err != nil {
 		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create share").
 			WithDetail("file_id", share.FileID).

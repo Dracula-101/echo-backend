@@ -48,5 +48,5 @@ func (h *PresenceHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Heartbeat received successfully", nil)
 }

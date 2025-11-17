@@ -114,7 +114,7 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams
 		logger.String("email", params.Email),
 	)
 
-	id, err := r.db.Create(ctx, &models.AuthUser{
+	id, err := r.db.Insert(ctx, &models.AuthUser{
 		Email:                  params.Email,
 		PhoneNumber:            &params.PhoneNumber,
 		PhoneCountryCode:       &params.PhoneCountryCode,

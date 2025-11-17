@@ -241,7 +241,7 @@ func (s *LocationService) Lookup(ipStr string) (*model.LocationResult, error) {
 	)
 
 	m := generateModelFromLocationResult(ipStr, result.City, result.Country, result.ASN)
-	_, dbErr := s.db.Create(context.Background(), m)
+	_, dbErr := s.db.Insert(context.Background(), m)
 	if dbErr != nil {
 		s.log.Warn("Failed to store IP address lookup in database",
 			logger.String("service", locErrors.ServiceName),

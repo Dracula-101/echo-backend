@@ -63,7 +63,7 @@ func New(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (c *client) Create(ctx context.Context, model database.Model) (*string, error) {
+func (c *client) Insert(ctx context.Context, model database.Model) (*string, *database.DBError) {
 	fields, values := getFieldsAndValues(model)
 	if len(fields) == 0 {
 		return nil, database.NewDBError(database.CodeDBInternal, "no db tags found in model").
@@ -122,6 +122,77 @@ func (c *client) Create(ctx context.Context, model database.Model) (*string, err
 	}
 	formattedID := formatPrimaryKey(returnedID)
 	return &formattedID, nil
+}
+
+func (c *client) Upsert(ctx context.Context, model database.Model) *database.DBError {
+	fields, values := getFieldsAndValues(model)
+	if len(fields) == 0 {
+		return database.NewDBError(database.CodeDBInternal, "no db tags found in model").
+			WithDetail("table", model.TableName())
+	}
+
+	pkField := getPrimaryKeyField(model)
+	filteredFields := []string{}
+	filteredValues := []interface{}{}
+
+	for i, field := range fields {
+		if field == pkField {
+			val := values[i]
+			if str, ok := val.(string); ok && str == "" {
+				continue
+			}
+		}
+		filteredFields = append(filteredFields, field)
+		filteredValues = append(filteredValues, values[i])
+	}
+
+	if len(filteredFields) == 0 {
+		return database.NewDBError(database.CodeDBInternal, "no fields to upsert").
+			WithDetail("table", model.TableName())
+	}
+
+	placeholders := make([]string, len(filteredFields))
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
+	// Build update clause excluding primary key and created_at
+	updateParts := make([]string, 0)
+	for _, field := range filteredFields {
+		if field != pkField && field != "created_at" {
+			updateParts = append(updateParts, fmt.Sprintf("%s = EXCLUDED.%s", field, field))
+		}
+	}
+
+	query := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s RETURNING %s",
+		model.TableName(),
+		strings.Join(filteredFields, ", "),
+		strings.Join(placeholders, ", "),
+		pkField,
+		strings.Join(updateParts, ", "),
+		pkField,
+	)
+
+	nargs := normalizeArgs(filteredValues)
+	c.logger.Debug("Upsert",
+		logger.String("query", query),
+		logger.String("table", model.TableName()),
+	)
+
+	var returnedID interface{}
+	if err := c.db.QueryRowContext(ctx, query, nargs...).Scan(&returnedID); err != nil {
+		c.logDatabaseError("Upsert", query, nargs, err)
+		return wrapDatabaseError(err, "Upsert", model.TableName(), query)
+	}
+
+	if err := setPrimaryKeyValue(model, pkField, returnedID); err != nil {
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to set primary key value").
+			WithDetail("table", model.TableName()).
+			WithDetail("pk_field", pkField)
+	}
+
+	return nil
 }
 
 func (c *client) FindByID(ctx context.Context, model database.Model, id interface{}) *database.DBError {
@@ -351,7 +422,7 @@ func (c *client) Count(ctx context.Context, model database.Model, query string, 
 	return count, nil
 }
 
-func (c *client) Query(ctx context.Context, query string, args ...interface{}) (database.Rows, error) {
+func (c *client) Query(ctx context.Context, query string, args ...interface{}) (database.Rows, *database.DBError) {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("Query", logger.String("query", query))
 
@@ -369,7 +440,7 @@ func (c *client) QueryRow(ctx context.Context, query string, args ...interface{}
 	return &rowWrapper{row: c.db.QueryRowContext(ctx, query, nargs...), log: c.logger}
 }
 
-func (c *client) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, error) {
+func (c *client) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, *database.DBError) {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("Exec", logger.String("query", query))
 
@@ -381,18 +452,17 @@ func (c *client) Exec(ctx context.Context, query string, args ...interface{}) (d
 	return &resultWrapper{result: result}, nil
 }
 
-func (c *client) Begin(ctx context.Context) (database.Transaction, error) {
+func (c *client) Begin(ctx context.Context) (database.Transaction, *database.DBError) {
 	c.logger.Debug("Begin transaction")
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		c.logger.Error("Failed to begin transaction", logger.Error(err))
 		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to begin transaction")
-
 	}
 	return &transactionWrapper{tx: tx, logger: c.logger}, nil
 }
 
-func (c *client) BeginTx(ctx context.Context, opts *database.TxOptions) (database.Transaction, error) {
+func (c *client) BeginTx(ctx context.Context, opts *database.TxOptions) (database.Transaction, *database.DBError) {
 	c.logger.Debug("Begin transaction with options")
 	sqlOpts := &sql.TxOptions{}
 	if opts != nil {
@@ -404,12 +474,11 @@ func (c *client) BeginTx(ctx context.Context, opts *database.TxOptions) (databas
 	if err != nil {
 		c.logger.Error("Failed to begin transaction with options", logger.Error(err))
 		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to begin transaction with options")
-
 	}
 	return &transactionWrapper{tx: tx, logger: c.logger}, nil
 }
 
-func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transaction) error) error {
+func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transaction) *database.DBError) *database.DBError {
 	tx, err := c.Begin(ctx)
 	if err != nil {
 		return err
@@ -427,7 +496,6 @@ func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transa
 		if rbErr := tx.Rollback(); rbErr != nil {
 			c.logger.Error("Failed to rollback transaction", logger.Error(rbErr))
 			return database.WrapDBError(rbErr, database.CodeDBInternal, "failed to rollback transaction")
-
 		}
 		c.logger.Debug("Transaction rolled back", logger.Error(err))
 		return err
@@ -442,11 +510,10 @@ func (c *client) WithTransaction(ctx context.Context, fn func(tx database.Transa
 	return nil
 }
 
-func (c *client) Close() error {
+func (c *client) Close() *database.DBError {
 	c.logger.Debug("Closing database")
 	if err := c.db.Close(); err != nil {
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to close database")
-
 	}
 	return nil
 }
@@ -454,7 +521,6 @@ func (c *client) Close() error {
 func (c *client) Ping(ctx context.Context) *database.DBError {
 	if err := c.db.PingContext(ctx); err != nil {
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to ping database")
-
 	}
 	return nil
 }
@@ -831,7 +897,6 @@ func (t *transactionWrapper) Commit() error {
 	if err != nil {
 		t.logger.Error("Failed to commit transaction", logger.Error(err))
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to commit transaction")
-
 	}
 	t.logger.Debug("Transaction committed")
 	return nil
@@ -842,7 +907,6 @@ func (t *transactionWrapper) Rollback() error {
 	if err != nil {
 		t.logger.Error("Failed to rollback transaction", logger.Error(err))
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to rollback transaction")
-
 	}
 	t.logger.Debug("Transaction rolled back")
 	return nil
@@ -870,7 +934,6 @@ func (r *rowsWrapper) ScanOne(model database.Model) *database.DBError {
 		if err := r.rows.Err(); err != nil {
 			r.log.Error("Failed to iterate rows", logger.Error(err))
 			return database.WrapDBError(err, database.CodeDBInternal, "failed to iterate rows")
-
 		}
 		return database.NewDBError(database.CodeDBNoRows, "no rows found")
 	}
@@ -878,7 +941,6 @@ func (r *rowsWrapper) ScanOne(model database.Model) *database.DBError {
 	if err := scanStructRows(r.rows, model); err != nil {
 		r.log.Error("Failed to scan row", logger.Error(err))
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan row")
-
 	}
 	return nil
 }
@@ -1084,7 +1146,6 @@ func scanStruct(row *sql.Row, dest interface{}) error {
 	v := reflect.ValueOf(dest)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to struct")
-
 	}
 	v = v.Elem()
 	t := v.Type()
@@ -1121,7 +1182,6 @@ func scanStructRows(rows *sql.Rows, dest interface{}) error {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Ptr || destValue.Elem().Kind() != reflect.Struct {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to struct")
-
 	}
 	destValue = destValue.Elem()
 	destType := destValue.Type()
@@ -1163,12 +1223,10 @@ func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) error {
 	log.Debug("Scanning multiple rows into slice", logger.String("dest_type", destValue.Type().String()))
 	if destValue.Kind() != reflect.Ptr {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to slice")
-
 	}
 	sliceValue := destValue.Elem()
 	if sliceValue.Kind() != reflect.Slice {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to slice")
-
 	}
 	elemType := sliceValue.Type().Elem()
 	isPtr := elemType.Kind() == reflect.Ptr
@@ -1177,7 +1235,6 @@ func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) error {
 	}
 	if elemType.Kind() != reflect.Struct {
 		return database.NewDBError(database.CodeDBInternal, "slice element must be a struct or pointer to struct")
-
 	}
 
 	for rows.Next() {

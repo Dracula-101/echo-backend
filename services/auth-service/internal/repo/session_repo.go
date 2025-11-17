@@ -35,7 +35,7 @@ func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSes
 		logger.String("device_id", *session.DeviceID),
 		logger.String("ip_address", session.IPAddress),
 	)
-	_, err := r.db.Create(ctx, session)
+	_, err := r.db.Insert(ctx, session)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create session").
 			WithDetail("user_id", session.UserID).

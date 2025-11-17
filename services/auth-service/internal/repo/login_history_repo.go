@@ -35,7 +35,7 @@ func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoMod
 		logger.String("status", safeDerefString(input.Status)),
 		logger.String("ip_address", safeDerefString(&input.IPInfo.IP)),
 	)
-	id, err := r.db.Create(ctx, &models.LoginHistory{
+	id, err := r.db.Insert(ctx, &models.LoginHistory{
 		UserID:          input.UserID,
 		SessionID:       input.SessionID,
 		LoginMethod:     input.LoginMethod,

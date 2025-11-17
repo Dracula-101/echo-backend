@@ -12,7 +12,8 @@ type Model interface {
 }
 
 type Database interface {
-	Create(ctx context.Context, model Model) (id *string, err error)
+	Insert(ctx context.Context, model Model) (id *string, err *DBError)
+	Upsert(ctx context.Context, model Model) *DBError
 	FindByID(ctx context.Context, model Model, id interface{}) *DBError
 	Update(ctx context.Context, model Model) *DBError
 	Delete(ctx context.Context, model Model) *DBError
@@ -24,15 +25,15 @@ type Database interface {
 	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, error)
 	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, error)
 
-	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (Rows, *DBError)
 	QueryRow(ctx context.Context, query string, args ...interface{}) Row
-	Exec(ctx context.Context, query string, args ...interface{}) (Result, error)
+	Exec(ctx context.Context, query string, args ...interface{}) (Result, *DBError)
 
-	Begin(ctx context.Context) (Transaction, error)
-	BeginTx(ctx context.Context, opts *TxOptions) (Transaction, error)
-	WithTransaction(ctx context.Context, fn func(tx Transaction) error) error
+	Begin(ctx context.Context) (Transaction, *DBError)
+	BeginTx(ctx context.Context, opts *TxOptions) (Transaction, *DBError)
+	WithTransaction(ctx context.Context, fn func(tx Transaction) *DBError) *DBError
 
-	Close() error
+	Close() *DBError
 	Ping(ctx context.Context) *DBError
 	Stats() Stats
 }

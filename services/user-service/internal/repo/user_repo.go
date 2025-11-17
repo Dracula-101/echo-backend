@@ -217,7 +217,7 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile models.Profi
 		logger.String("user_id", profile.UserID),
 	)
 
-	id, err := r.db.Create(ctx, &profile)
+	id, err := r.db.Insert(ctx, &profile)
 	if err != nil {
 		r.log.Error("Failed to create profile",
 			logger.String("service", userErrors.ServiceName),
@@ -227,15 +227,15 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile models.Profi
 		return nil, err
 	}
 
-	createdProfile, err := r.GetProfileByUserID(ctx, profile.UserID)
-	if err != nil {
+	createdProfile, dbErr := r.GetProfileByUserID(ctx, profile.UserID)
+	if dbErr != nil {
 		r.log.Error("Failed to retrieve created profile",
 			logger.String("service", userErrors.ServiceName),
 			logger.String("user_id", profile.UserID),
 			logger.String("profile_id", *id),
-			logger.Error(err),
+			logger.Error(dbErr),
 		)
-		return nil, err
+		return nil, dbErr
 	}
 	if createdProfile == nil {
 		r.log.Error("Created profile not found",
