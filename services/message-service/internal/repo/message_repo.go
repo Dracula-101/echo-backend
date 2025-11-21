@@ -16,8 +16,8 @@ import (
 type MessageRepository interface {
 	// Core message operations
 	CreateMessage(ctx context.Context, msg *models.Message) pkgErrors.AppError
-	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, error)
-	GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) ([]models.Message, error)
+	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, pkgErrors.AppError)
+	GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) ([]models.Message, pkgErrors.AppError)
 	UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) pkgErrors.AppError
 	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
 
@@ -26,19 +26,19 @@ type MessageRepository interface {
 	UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) pkgErrors.AppError
 	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError
 	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError
-	GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]models.DeliveryStatus, error)
+	GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]models.DeliveryStatus, pkgErrors.AppError)
 
 	// Conversation operations
-	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationParticipant, error)
-	GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error)
-	ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, error)
+	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationParticipant, pkgErrors.AppError)
+	GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, pkgErrors.AppError)
+	ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, pkgErrors.AppError)
 	UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) pkgErrors.AppError
 	UpdateParticipantUnreadCount(ctx context.Context, conversationID, userID uuid.UUID, increment bool) pkgErrors.AppError
 	ResetUnreadCount(ctx context.Context, conversationID, userID uuid.UUID) pkgErrors.AppError
 
 	// Typing indicators
 	SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) pkgErrors.AppError
-	GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error)
+	GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, pkgErrors.AppError)
 }
 
 type messageRepository struct {
@@ -85,7 +85,7 @@ func (r *messageRepository) CreateMessage(ctx context.Context, msg *models.Messa
 }
 
 // GetMessageByID retrieves a single message by ID
-func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
+func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, pkgErrors.AppError) {
 	query := `
 		SELECT id, conversation_id, sender_user_id, parent_message_id,
 		       content, message_type, status, is_edited, is_deleted,
@@ -126,7 +126,7 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.U
 }
 
 // GetMessages retrieves messages for a conversation with pagination
-func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) ([]models.Message, error) {
+func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) ([]models.Message, pkgErrors.AppError) {
 	if params.Limit == 0 {
 		params.Limit = 50
 	}
@@ -341,7 +341,7 @@ func (r *messageRepository) MarkAsRead(ctx context.Context, messageID, userID uu
 }
 
 // GetDeliveryStatus gets all delivery statuses for a message
-func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]models.DeliveryStatus, error) {
+func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]models.DeliveryStatus, pkgErrors.AppError) {
 	query := `
 		SELECT id, message_id, user_id, status, delivered_at, read_at, created_at
 		FROM messages.delivery_status
@@ -379,7 +379,7 @@ func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uui
 }
 
 // GetConversationParticipants gets all participants in a conversation
-func (r *messageRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationParticipant, error) {
+func (r *messageRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationParticipant, pkgErrors.AppError) {
 	query := `
 		SELECT id, conversation_id, user_id, role, can_send_messages,
 		       last_read_message_id, last_read_at, unread_count, joined_at, left_at
@@ -421,7 +421,7 @@ func (r *messageRepository) GetConversationParticipants(ctx context.Context, con
 }
 
 // GetParticipantUserIDs gets all user IDs in a conversation
-func (r *messageRepository) GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error) {
+func (r *messageRepository) GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, pkgErrors.AppError) {
 	query := `
 		SELECT user_id FROM messages.conversation_participants
 		WHERE conversation_id = $1 AND left_at IS NULL
@@ -448,7 +448,7 @@ func (r *messageRepository) GetParticipantUserIDs(ctx context.Context, conversat
 }
 
 // ValidateParticipant checks if a user is a participant in a conversation
-func (r *messageRepository) ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, error) {
+func (r *messageRepository) ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, pkgErrors.AppError) {
 	query := `
 		SELECT EXISTS(
 			SELECT 1 FROM messages.conversation_participants
@@ -564,7 +564,7 @@ func (r *messageRepository) SetTypingIndicator(ctx context.Context, conversation
 }
 
 // GetTypingUsers gets all users currently typing in a conversation
-func (r *messageRepository) GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, error) {
+func (r *messageRepository) GetTypingUsers(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, pkgErrors.AppError) {
 	query := `
 		SELECT user_id FROM messages.typing_indicators
 		WHERE conversation_id = $1 AND expires_at > NOW()

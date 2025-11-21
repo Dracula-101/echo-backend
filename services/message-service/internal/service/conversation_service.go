@@ -4,14 +4,15 @@ import (
 	"context"
 	"echo-backend/services/message-service/api/v1/dto"
 	"echo-backend/services/message-service/internal/repo"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 
 	"github.com/google/uuid"
 )
 
 type ConversationService interface {
-	CreateConversation(userID uuid.UUID, conversationType string, participantIDs []uuid.UUID, title, description string, isEncrypted, isPublic bool) (uuid.UUID, []uuid.UUID, int64, error)
-	GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, error)
+	CreateConversation(userID uuid.UUID, conversationType string, participantIDs []uuid.UUID, title, description string, isEncrypted, isPublic bool) (uuid.UUID, []uuid.UUID, int64, pkgErrors.AppError)
+	GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError)
 }
 
 type conversationService struct {
@@ -33,7 +34,7 @@ func (s *conversationService) CreateConversation(
 	participantIDs []uuid.UUID,
 	title, description string,
 	isEncrypted, isPublic bool,
-) (uuid.UUID, []uuid.UUID, int64, error) {
+) (uuid.UUID, []uuid.UUID, int64, pkgErrors.AppError) {
 	ctx := context.Background()
 
 	s.logger.Info("Creating conversation",
@@ -112,7 +113,7 @@ func (s *conversationService) CreateConversation(
 }
 
 // GetConversations retrieves conversations for a user
-func (s *conversationService) GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, error) {
+func (s *conversationService) GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError) {
 	ctx := context.Background()
 
 	s.logger.Debug("Getting conversations",

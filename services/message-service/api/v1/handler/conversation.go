@@ -7,6 +7,8 @@ import (
 	req "shared/server/request"
 	"shared/server/response"
 
+	pkgErrors "shared/pkg/errors"
+
 	"github.com/google/uuid"
 )
 
@@ -18,8 +20,8 @@ type ConversationHandler struct {
 
 // ConversationService interface for conversation operations
 type ConversationService interface {
-	CreateConversation(userID uuid.UUID, conversationType string, participantIDs []uuid.UUID, title, description string, isEncrypted, isPublic bool) (uuid.UUID, []uuid.UUID, int64, error)
-	GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, error)
+	CreateConversation(userID uuid.UUID, conversationType string, participantIDs []uuid.UUID, title, description string, isEncrypted, isPublic bool) (uuid.UUID, []uuid.UUID, int64, pkgErrors.AppError)
+	GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError)
 }
 
 func NewConversationHandler(service ConversationService, log logger.Logger) *ConversationHandler {

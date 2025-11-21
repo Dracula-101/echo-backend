@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"database/sql"
 	"echo-backend/services/message-service/api/v1/dto"
 	"echo-backend/services/message-service/internal/models"
 	"time"
@@ -15,10 +16,10 @@ import (
 
 type ConversationRepository interface {
 	// Conversation operations
-	CreateConversation(ctx context.Context, conversationType, title, description string, creatorUserID uuid.UUID, isEncrypted, isPublic bool) (uuid.UUID, error)
-	AddParticipants(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, role string, canSendMessages bool) error
-	GetConversationsByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, error)
-	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*models.Conversation, error)
+	CreateConversation(ctx context.Context, conversationType, title, description string, creatorUserID uuid.UUID, isEncrypted, isPublic bool) (uuid.UUID, pkgErrors.AppError)
+	AddParticipants(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, role string, canSendMessages bool) pkgErrors.AppError
+	GetConversationsByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError)
+	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*models.Conversation, pkgErrors.AppError)
 }
 
 type conversationRepository struct {
@@ -30,7 +31,7 @@ func NewConversationRepository(db database.Database) ConversationRepository {
 }
 
 // CreateConversation creates a new conversation
-func (r *conversationRepository) CreateConversation(ctx context.Context, conversationType, title, description string, creatorUserID uuid.UUID, isEncrypted, isPublic bool) (uuid.UUID, error) {
+func (r *conversationRepository) CreateConversation(ctx context.Context, conversationType, title, description string, creatorUserID uuid.UUID, isEncrypted, isPublic bool) (uuid.UUID, pkgErrors.AppError) {
 	query := `
 		INSERT INTO messages.conversations (
 			id, conversation_type, title, description, creator_user_id,
@@ -64,7 +65,7 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, convers
 }
 
 // AddParticipants adds participants to a conversation
-func (r *conversationRepository) AddParticipants(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, role string, canSendMessages bool) error {
+func (r *conversationRepository) AddParticipants(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, role string, canSendMessages bool) pkgErrors.AppError {
 	if len(userIDs) == 0 {
 		return nil
 	}
@@ -104,7 +105,7 @@ func (r *conversationRepository) AddParticipants(ctx context.Context, conversati
 }
 
 // GetConversationsByUserID retrieves all conversations for a user
-func (r *conversationRepository) GetConversationsByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, error) {
+func (r *conversationRepository) GetConversationsByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError) {
 	// First get total count
 	countQuery := `
 		SELECT COUNT(DISTINCT c.id)
@@ -140,9 +141,9 @@ func (r *conversationRepository) GetConversationsByUserID(ctx context.Context, u
 		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := r.db.Query(ctx, query, userID, limit, offset)
-	if err != nil {
-		return nil, 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query conversations").
+	rows, dbErr := r.db.Query(ctx, query, userID, limit, offset)
+	if dbErr != nil {
+		return nil, 0, pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to query conversations").
 			WithDetail("user_id", userID.String())
 	}
 	defer rows.Close()
@@ -183,7 +184,7 @@ func (r *conversationRepository) GetConversationsByUserID(ctx context.Context, u
 }
 
 // GetConversationByID retrieves a conversation by ID
-func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*models.Conversation, error) {
+func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*models.Conversation, pkgErrors.AppError) {
 	query := `
 		SELECT
 			id, conversation_type, title, description, avatar_url,
@@ -209,7 +210,12 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 	)
 
 	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeNotFound, "conversation not found").
+		if err == sql.ErrNoRows {
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeNotFound, "conversation not found").
+				WithDetail("conversation_id", conversationID.String())
+		}
+
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get conversation").
 			WithDetail("conversation_id", conversationID.String())
 	}
 
