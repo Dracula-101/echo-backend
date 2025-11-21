@@ -1,7 +1,5 @@
 package errors
 
-import pkgErrors "shared/pkg/errors"
-
 // ============================================================================
 // Auth Service Error Codes
 // ============================================================================
@@ -48,62 +46,3 @@ const (
 // ============================================================================
 
 const ServiceName = "auth-service"
-
-// ============================================================================
-// HTTP Status Code Mapping
-// ============================================================================
-
-var HTTPStatusMap = map[string]int{
-	// Authentication Errors
-	CodeInvalidCredentials:      401,
-	CodeUserNotFound:            404,
-	CodeEmailAlreadyExists:      409,
-	CodePasswordHashingFailed:   500,
-	CodeTokenGenerationFailed:   500,
-	CodeTokenValidationFailed:   401,
-	CodeSessionNotFound:         404,
-	CodeSessionExpired:          401,
-	CodeAccountLocked:           423,
-	CodeAccountDisabled:         403,
-	CodePasswordExpired:         401,
-	CodeTwoFactorRequired:       401,
-	CodeInvalidTwoFactorCode:    401,
-	CodeEmailVerificationFailed: 400,
-	CodePhoneVerificationFailed: 400,
-
-	// Registration Errors
-	CodeInvalidEmail:       400,
-	CodeInvalidPhoneNumber: 400,
-	CodePasswordTooWeak:    400,
-	CodeTermsNotAccepted:   400,
-
-	// Session Errors
-	CodeSessionCreationFailed: 500,
-	CodeSessionUpdateFailed:   500,
-	CodeInvalidRefreshToken:   401,
-	CodeRefreshTokenExpired:   401,
-
-	// Security Errors
-	CodeTooManyFailedAttempts: 429,
-	CodeSuspiciousActivity:    403,
-	CodeIPBlocked:             403,
-	CodeDeviceNotTrusted:      403,
-}
-
-// HTTPStatus returns the HTTP status code for an auth service error code
-func HTTPStatus(code string) int {
-	if status, ok := HTTPStatusMap[code]; ok {
-		return status
-	}
-	// Fallback to shared error codes
-	return pkgErrors.HTTPStatus(code)
-}
-
-// ============================================================================
-// Error Constructor Helpers
-// ============================================================================
-
-// NewAuthError creates a new auth service error with service context
-func NewAuthError(code, message string) pkgErrors.AppError {
-	return pkgErrors.New(code, message).WithService(ServiceName)
-}

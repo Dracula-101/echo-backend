@@ -33,7 +33,7 @@ func NewLocationService(endpoint string, log logger.Logger) *LocationService {
 	}
 }
 
-func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
+func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, pkgErrors.AppError) {
 	if ip == "" {
 		return nil, pkgErrors.New(pkgErrors.CodeInvalidArgument, "ip address is required")
 	}

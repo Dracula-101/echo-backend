@@ -47,7 +47,7 @@ func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSes
 	return nil
 }
 
-func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, error) {
+func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError) {
 	r.log.Debug("Fetching session by user ID",
 		logger.String("user_id", userID),
 	)

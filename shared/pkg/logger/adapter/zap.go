@@ -901,6 +901,7 @@ func (l *zapLogger) Error(msg string, fields ...logger.Field) {
 		return
 	}
 	zfs := l.makeZapFields(fields)
+
 	zfs = append(zfs, zap.String("stack", customStackTrace(callerSkipError, 0)))
 	l.logger.Error(msg, zfs...)
 }

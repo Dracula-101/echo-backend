@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
 	"shared/server/request"
@@ -19,12 +20,12 @@ import (
 // AuthServiceInterface defines the contract for authentication service operations
 type AuthServiceInterface interface {
 	// Email validation
-	IsEmailTaken(ctx context.Context, email string) (bool, error)
+	IsEmailTaken(ctx context.Context, email string) (bool, pkgErrors.AppError)
 
 	// User operations
-	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
-	RegisterUser(ctx context.Context, input serviceModels.RegisterUserInput) (*serviceModels.RegisterUserOutput, error)
-	Login(ctx context.Context, email, password string) (*dto.LoginResponse, error)
+	GetUserByEmail(ctx context.Context, email string) (*model.User, pkgErrors.AppError)
+	RegisterUser(ctx context.Context, input serviceModels.RegisterUserInput) (*serviceModels.RegisterUserOutput, pkgErrors.AppError)
+	Login(ctx context.Context, email, password string) (*dto.LoginResponse, pkgErrors.AppError)
 
 	// Service accessors
 	TokenService() token.JWTTokenService
@@ -34,15 +35,15 @@ type AuthServiceInterface interface {
 // SessionServiceInterface defines the contract for session service operations
 type SessionServiceInterface interface {
 	// Session management
-	CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, error)
-	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, error)
-	DeleteSessionByID(ctx context.Context, sessionID string) error
+	CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, pkgErrors.AppError)
+	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError)
+	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
 // LocationServiceInterface defines the contract for location service operations
 type LocationServiceInterface interface {
 	// IP lookup
-	Lookup(ip string) (*request.IpAddressInfo, error)
+	Lookup(ip string) (*request.IpAddressInfo, pkgErrors.AppError)
 }
 
 // Compile-time interface compliance checks

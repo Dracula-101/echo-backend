@@ -2,8 +2,11 @@ package logger
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
+
+	pkgErrors "shared/pkg/errors"
 )
 
 type Logger interface {
@@ -68,7 +71,19 @@ func Duration(key string, val time.Duration) Field {
 }
 
 func Error(err error) Field {
-	return &field{key: "error", value: err.Error()}
+	var appErr pkgErrors.AppError
+	if errors.As(err, &appErr) {
+		return &field{key: "error", value: map[string]interface{}{
+			"code":          appErr.Code(),
+			"service":       appErr.Service(),
+			"message":       appErr.Message(),
+			"correlationId": appErr.CorrelationID(),
+			"details":       appErr.Details(),
+			"stackTrace":    appErr.StackTrace(),
+		}}
+	} else {
+		return &field{key: "error", value: err.Error()}
+	}
 }
 
 type Config struct {

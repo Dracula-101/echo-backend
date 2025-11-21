@@ -40,19 +40,7 @@ func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceI
 		IsNewLocation: utils.PtrBool(false),
 	})
 	if err != nil {
-		var appErr pkgErrors.AppError
-		if errors.As(err, &appErr) {
-			h.log.Error("Failed to create login history record",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
-		} else {
-			h.log.Error("Failed to create login history record", logger.Error(err))
-		}
+		h.log.Error("Failed to create login history record", logger.Error(err))
 	}
 }
 
@@ -100,19 +88,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, authErr := h.service.GetUserByEmail(r.Context(), loginRequest.Email)
 	if authErr != nil {
-		var appErr pkgErrors.AppError
-		if errors.As(authErr, &appErr) {
-			h.log.Error("Failed to fetch user during login",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
-		} else {
-			h.log.Error("Failed to fetch user during login", logger.Error(authErr))
-		}
+		h.log.Error("Failed to fetch user during login", logger.Error(authErr))
 		response.InternalServerError(r.Context(), r, w, "Failed to process login", authErr)
 		return
 	}
@@ -126,18 +102,40 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	switch user.AccountStatus {
+	case dbModels.AccountStatusDeactivated:
+		response.BadRequestError(r.Context(), r, w, "Account is deactivated. Please contact support.", nil)
+		return
+	case dbModels.AccountStatusSuspended:
+		response.BadRequestError(r.Context(), r, w, "Account is suspended. Please contact support.", nil)
+		return
+	case dbModels.AccountStatusLocked:
+		response.BadRequestError(r.Context(), r, w, "Account is locked due to multiple failed login attempts. Please reset your password or contact support.", nil)
+		return
+	case dbModels.AccountStatusPending:
+		response.BadRequestError(r.Context(), r, w, "Account is pending verification. Please verify your account before logging in.", nil)
+		return
+	case dbModels.AccountStatusDeleted:
+		response.BadRequestError(r.Context(), r, w, "Account has been deleted. Please contact support for further assistance.", nil)
+		return
+	case dbModels.AccountStatusActive:
+		// Proceed with login
+	default:
+		h.log.Error("Unknown account status during login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", user.ID),
+			logger.String("account_status", string(user.AccountStatus)),
+		)
+		response.InternalServerError(r.Context(), r, w, "Failed to process login due to unknown account status", nil)
+		return
+	}
+
 	userResult, authErr := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
 	if authErr != nil {
 		var appErr pkgErrors.AppError
+		h.log.Error("Login failed", logger.Error(authErr))
 		if errors.As(authErr, &appErr) {
-			h.log.Error("Login failed",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
 			if appErr.Code() == authErrors.CodeInvalidCredentials {
 				h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, appErr.Message())
 				response.BadRequestError(r.Context(), r, w, appErr.Message(), nil)
@@ -145,7 +143,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				response.InternalServerError(r.Context(), r, w, appErr.Message(), authErr)
 			}
 		} else {
-			h.log.Error("Login failed", logger.Error(authErr))
 			response.InternalServerError(r.Context(), r, w, "Failed to process login", authErr)
 		}
 		return
@@ -158,19 +155,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	session := &serviceModels.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(r.Context(), user.ID)
 	if sessErr != nil {
-		var appErr pkgErrors.AppError
-		if errors.As(sessErr, &appErr) {
-			h.log.Error("Failed to fetch active session during login",
-				logger.String("error_code", appErr.Code()),
-				logger.String("service", appErr.Service()),
-				logger.String("correlation_id", appErr.CorrelationID()),
-				logger.Any("error_details", appErr.Details()),
-				logger.Any("stack_trace", appErr.StackTrace()),
-				logger.Error(appErr),
-			)
-		} else {
-			h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
-		}
+		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
 		response.InternalServerError(r.Context(), r, w, "Failed to process login", sessErr)
 		return
 	}
@@ -203,19 +188,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		if err != nil {
-			var appErr pkgErrors.AppError
-			if errors.As(err, &appErr) {
-				h.log.Error("Failed to create session after login",
-					logger.String("error_code", appErr.Code()),
-					logger.String("service", appErr.Service()),
-					logger.String("correlation_id", appErr.CorrelationID()),
-					logger.Any("error_details", appErr.Details()),
-					logger.Any("stack_trace", appErr.StackTrace()),
-					logger.Error(appErr),
-				)
-			} else {
-				h.log.Error("Failed to create session after login", logger.Error(err))
-			}
+			h.log.Error("Failed to create session after login", logger.Error(err))
 			response.InternalServerError(r.Context(), r, w, "Failed to create session", err)
 			return
 		}

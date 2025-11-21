@@ -49,7 +49,7 @@ func NewSessionService(repo *repository.SessionRepo, cache cache.Cache, token to
 	}
 }
 
-func (s *SessionService) generateSessionToken(userID string) (string, error) {
+func (s *SessionService) generateSessionToken(userID string) (string, pkgErrors.AppError) {
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		return "", pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to generate session nonce").
@@ -71,7 +71,7 @@ func (s *SessionService) generateSessionToken(userID string) (string, error) {
 	return token, nil
 }
 
-func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, error) {
+func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, pkgErrors.AppError) {
 	s.log.Info("Creating session",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", input.UserID),
@@ -82,9 +82,6 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 
 	sessionToken, err := s.generateSessionToken(input.UserID)
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
-			return nil, appErr.WithService(authErrors.ServiceName)
-		}
 		return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to generate session token").
 			WithService(authErrors.ServiceName).
 			WithDetail("user_id", input.UserID)
@@ -149,9 +146,6 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		Metadata:           metadata,
 	})
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
-			return nil, appErr.WithService(authErrors.ServiceName)
-		}
 		return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to store session in database").
 			WithService(authErrors.ServiceName).
 			WithDetail("session_id", sessionID).
@@ -190,7 +184,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 	}, nil
 }
 
-func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, error) {
+func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by user ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -198,9 +192,6 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 
 	session, err := s.repo.GetSessionByUserId(ctx, userID)
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
-			return nil, appErr.WithService(authErrors.ServiceName)
-		}
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by user ID").
 			WithService(authErrors.ServiceName).
 			WithDetail("user_id", userID)
@@ -223,7 +214,7 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 	return session, nil
 }
 
-func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string) error {
+func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {
 	s.log.Info("Deleting session",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),

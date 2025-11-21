@@ -62,7 +62,7 @@ func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoMod
 	return nil
 }
 
-func (r *LoginHistoryRepo) GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, error) {
+func (r *LoginHistoryRepo) GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, pkgErrors.AppError) {
 	r.log.Debug("Fetching login history by user ID",
 		logger.String("user_id", userID),
 		logger.Int("limit", limit),
@@ -88,7 +88,7 @@ func (r *LoginHistoryRepo) GetLoginHistoryByUserID(ctx context.Context, userID s
 	return histories, nil
 }
 
-func (r *LoginHistoryRepo) GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, error) {
+func (r *LoginHistoryRepo) GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, pkgErrors.AppError) {
 	r.log.Debug("Fetching login history by ID",
 		logger.String("login_history_id", id),
 	)
@@ -110,7 +110,7 @@ func (r *LoginHistoryRepo) GetLoginHistoryByID(ctx context.Context, id string) (
 	return &history, nil
 }
 
-func (r *LoginHistoryRepo) GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, error) {
+func (r *LoginHistoryRepo) GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, pkgErrors.AppError) {
 	r.log.Debug("Counting failed login attempts",
 		logger.String("user_id", userID),
 		logger.String("duration", duration),

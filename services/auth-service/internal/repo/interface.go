@@ -26,9 +26,9 @@ type AuthRepositoryInterface interface {
 type LoginHistoryRepositoryInterface interface {
 	// Login history management
 	CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) pkgErrors.AppError
-	GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, error)
-	GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, error)
-	GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, error)
+	GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, pkgErrors.AppError)
+	GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, pkgErrors.AppError)
+	GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, pkgErrors.AppError)
 	DeleteLoginHistoryByUserID(ctx context.Context, userID string) pkgErrors.AppError
 	DeleteLoginHistoryByID(ctx context.Context, id string) pkgErrors.AppError
 }
@@ -37,7 +37,7 @@ type LoginHistoryRepositoryInterface interface {
 type SessionRepositoryInterface interface {
 	// Session management
 	CreateSession(ctx context.Context, session *models.AuthSession) pkgErrors.AppError
-	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, error)
+	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
