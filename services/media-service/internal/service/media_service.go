@@ -241,7 +241,7 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 	}, nil
 }
 
-func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, processor *media.Processor) error {
+func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, processor *media.Processor) pkgErrors.AppError {
 	s.log.Info("Processing image file", logger.String("file_id", fileID))
 
 	if err := s.repo.UpdateFileProcessingStatus(ctx, fileID, "processing", ""); err != nil {
@@ -266,7 +266,9 @@ func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, proc
 	if downloadErr != nil {
 		s.log.Error("Failed to download file from storage", logger.Error(downloadErr))
 		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "failed to download from storage")
-		return downloadErr
+		return pkgErrors.FromError(downloadErr, pkgErrors.CodeInternal, "failed to download file from storage").
+			WithDetail("file_id", fileID).
+			WithService("media-service")
 	}
 	defer reader.Close()
 
@@ -274,14 +276,18 @@ func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, proc
 	if readErr != nil {
 		s.log.Error("Failed to read image data", logger.Error(readErr))
 		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "failed to read image data")
-		return readErr
+		return pkgErrors.FromError(readErr, pkgErrors.CodeInternal, "failed to read image data").
+			WithDetail("file_id", fileID).
+			WithService("media-service")
 	}
 
 	imgConfig, format, decodeErr := image.DecodeConfig(bytes.NewReader(imageData))
 	if decodeErr != nil {
 		s.log.Error("Failed to decode image", logger.Error(decodeErr))
 		_ = s.repo.UpdateFileProcessingStatus(ctx, fileID, "failed", "invalid image format")
-		return decodeErr
+		return pkgErrors.FromError(decodeErr, pkgErrors.CodeInternal, "failed to decode image").
+			WithDetail("file_id", fileID).
+			WithService("media-service")
 	}
 
 	aspectRatio := fmt.Sprintf("%.2f:1", float64(imgConfig.Width)/float64(imgConfig.Height))
@@ -400,7 +406,7 @@ func (s *MediaService) generateAndUploadThumbnails(ctx context.Context, imageDat
 	return thumbnailURLs, nil
 }
 
-func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (*models.GetFileOutput, error) {
+func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (*models.GetFileOutput, pkgErrors.AppError) {
 	s.log.Info("Getting file",
 		logger.String("file_id", input.FileID),
 		logger.String("user_id", input.UserID),
@@ -409,7 +415,9 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 	fileParam, err := s.repo.GetFileByID(ctx, input.FileID)
 	if err != nil {
 		s.log.Error("Failed to get file", logger.Error(err))
-		return nil, fmt.Errorf("failed to get file: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get file").
+			WithDetail("file_id", input.FileID).
+			WithService("media-service")
 	}
 
 	file := &model.File{
@@ -432,7 +440,10 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 			logger.String("file_id", input.FileID),
 			logger.String("user_id", input.UserID),
 		)
-		return nil, fmt.Errorf("access denied: %w", fmt.Errorf(mediaErrors.CodeAccessDenied))
+		return nil, pkgErrors.New(pkgErrors.CodeAccessDenied, "access denied").
+			WithDetail("file_id", input.FileID).
+			WithDetail("user_id", input.UserID).
+			WithService("media-service")
 	}
 
 	_ = s.repo.IncrementViewCount(ctx, input.FileID)
@@ -452,7 +463,7 @@ func (s *MediaService) GetFile(ctx context.Context, input models.GetFileInput) (
 	}, nil
 }
 
-func (s *MediaService) DeleteFile(ctx context.Context, input models.DeleteFileInput) error {
+func (s *MediaService) DeleteFile(ctx context.Context, input models.DeleteFileInput) pkgErrors.AppError {
 	s.log.Info("Deleting file",
 		logger.String("file_id", input.FileID),
 		logger.String("user_id", input.UserID),
@@ -461,11 +472,16 @@ func (s *MediaService) DeleteFile(ctx context.Context, input models.DeleteFileIn
 
 	f, getErr := s.repo.GetFileByID(ctx, input.FileID)
 	if getErr != nil || f == nil {
-		return fmt.Errorf("file not found: %w", fmt.Errorf(mediaErrors.CodeFileNotFound))
+		return pkgErrors.New(pkgErrors.CodeNotFound, "file not found").
+			WithDetail("file_id", input.FileID).
+			WithService("media-service")
 	}
 
 	if f.UploaderUserID != input.UserID {
-		return fmt.Errorf("access denied: %w", fmt.Errorf(mediaErrors.CodeAccessDenied))
+		return pkgErrors.New(pkgErrors.CodeAccessDenied, "access denied").
+			WithDetail("file_id", input.FileID).
+			WithDetail("user_id", input.UserID).
+			WithService("media-service")
 	}
 
 	var err error
@@ -481,7 +497,9 @@ func (s *MediaService) DeleteFile(ctx context.Context, input models.DeleteFileIn
 
 	if err != nil {
 		s.log.Error("Failed to delete file", logger.Error(err))
-		return fmt.Errorf("failed to delete file: %w", err)
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete file").
+			WithDetail("file_id", input.FileID).
+			WithService("media-service")
 	}
 
 	s.log.Info("File deleted successfully", logger.String("file_id", input.FileID))

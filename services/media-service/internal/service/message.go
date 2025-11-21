@@ -11,12 +11,14 @@ import (
 	"path/filepath"
 	"time"
 
+	"media-service/internal/errors"
 	"media-service/internal/service/models"
 	dbModels "shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
-func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.UploadMessageMediaInput) (*models.UploadMessageMediaOutput, error) {
+func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.UploadMessageMediaInput) (*models.UploadMessageMediaOutput, pkgErrors.AppError) {
 	s.log.Info("Uploading message media",
 		logger.String("user_id", input.UserID),
 		logger.String("conversation_id", input.ConversationID),
@@ -25,14 +27,21 @@ func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.Uplo
 
 	exists, err := s.repo.ConversationExists(ctx, input.ConversationID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate conversation: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to verify conversation existence").
+			WithDetail("conversation_id", input.ConversationID).
+			WithService("media_service")
 	}
 	if !exists {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, pkgErrors.New(errors.CodeConversationNotFound, "conversation does not exist").
+			WithDetail("conversation_id", input.ConversationID).
+			WithService("media_service")
 	}
 
 	if input.FileSize > s.cfg.Storage.MaxFileSize {
-		return nil, fmt.Errorf("file size exceeds maximum allowed")
+		return nil, pkgErrors.New(errors.CodeFileTooLarge, "file size exceeds maximum limit").
+			WithDetail("file_size", fmt.Sprintf("%d", input.FileSize)).
+			WithDetail("max_file_size", fmt.Sprintf("%d", s.cfg.Storage.MaxFileSize)).
+			WithService("media_service")
 	}
 
 	var buf bytes.Buffer
@@ -41,7 +50,8 @@ func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.Uplo
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, teeReader); err != nil {
 		s.log.Error("Failed to read file", logger.Error(err))
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to read file").
+			WithService("media_service")
 	}
 	contentHash := hex.EncodeToString(hasher.Sum(nil))
 
@@ -54,10 +64,11 @@ func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.Uplo
 		Context:        dbModels.FileContextMessageMedia,
 	})
 
-	storageURL, err := s.storageProvider.Upload(ctx, storageKey, &buf, input.ContentType)
-	if err != nil {
-		s.log.Error("Failed to upload to storage", logger.Error(err))
-		return nil, fmt.Errorf("failed to upload file: %w", err)
+	storageURL, storageErr := s.storageProvider.Upload(ctx, storageKey, &buf, input.ContentType)
+	if storageErr != nil {
+		s.log.Error("Failed to upload to storage", logger.Error(storageErr))
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to upload file").
+			WithService("media_service")
 	}
 
 	fileCategory := determineFileCategory(input.ContentType)
@@ -109,7 +120,9 @@ func (s *MediaService) UploadMessageMedia(ctx context.Context, input models.Uplo
 	if err != nil {
 		s.log.Error("Failed to create file record", logger.Error(err))
 		_ = s.storageProvider.Delete(ctx, storageKey)
-		return nil, fmt.Errorf("failed to create file record: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create file record").WithDetail("user_id", input.UserID).
+			WithDetail("conversation_id", input.ConversationID).
+			WithService("media_service")
 	}
 
 	s.log.Info("Message media uploaded successfully", logger.String("file_id", fileID))

@@ -76,14 +76,19 @@ func (s *MediaService) CreateShare(ctx context.Context, input models.CreateShare
 	}, nil
 }
 
-func (s *MediaService) RevokeShare(ctx context.Context, input models.RevokeShareInput) error {
+func (s *MediaService) RevokeShare(ctx context.Context, input models.RevokeShareInput) pkgErrors.AppError {
 	share, err := s.repo.GetShareByID(ctx, input.ShareID)
 	if err != nil || share == nil {
-		return fmt.Errorf("share not found")
+		return pkgErrors.New(pkgErrors.CodeNotFound, "share not found").
+			WithDetail("share_id", input.ShareID).
+			WithService("media-service")
 	}
 
 	if share.SharedByUserID != input.UserID {
-		return fmt.Errorf("access denied")
+		return pkgErrors.New(pkgErrors.CodePermissionDenied, "access denied").
+			WithDetail("share_id", input.ShareID).
+			WithDetail("user_id", input.UserID).
+			WithService("media-service")
 	}
 
 	return s.repo.RevokeShare(ctx, input.ShareID)

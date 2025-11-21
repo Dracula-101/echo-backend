@@ -43,10 +43,10 @@ type FileRepositoryInterface interface {
 	CreateShare(ctx context.Context, share *dbModels.Share) (string, pkgErrors.AppError)
 
 	// Validation operations
-	ConversationExists(ctx context.Context, conversationID string) (bool, error)
-	UserExists(ctx context.Context, userID string) (bool, error)
-	AlbumExistsAndOwned(ctx context.Context, albumID, userID string) (bool, error)
-	FileExistsAndOwned(ctx context.Context, fileID, userID string) (bool, error)
+	ConversationExists(ctx context.Context, conversationID string) (bool, pkgErrors.AppError)
+	UserExists(ctx context.Context, userID string) (bool, pkgErrors.AppError)
+	AlbumExistsAndOwned(ctx context.Context, albumID, userID string) (bool, pkgErrors.AppError)
+	FileExistsAndOwned(ctx context.Context, fileID, userID string) (bool, pkgErrors.AppError)
 }
 
 // Ensure FileRepository implements FileRepositoryInterface

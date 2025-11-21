@@ -13,6 +13,7 @@ const (
 	CodeInvalidFileName      = "MEDIA_INVALID_FILE_NAME"
 	CodeUploadTimeout        = "MEDIA_UPLOAD_TIMEOUT"
 	CodeStorageQuotaExceeded = "MEDIA_STORAGE_QUOTA_EXCEEDED"
+	CodeConversationNotFound = "MEDIA_CONVERSATION_NOT_FOUND"
 
 	// Download errors
 	CodeDownloadFailed     = "MEDIA_DOWNLOAD_FAILED"

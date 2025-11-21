@@ -2,13 +2,13 @@ package repo
 
 import (
 	"context"
-	"fmt"
 
 	"shared/pkg/database/postgres"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
-func (r *FileRepository) ConversationExists(ctx context.Context, conversationID string) (bool, error) {
+func (r *FileRepository) ConversationExists(ctx context.Context, conversationID string) (bool, pkgErrors.AppError) {
 	query := `SELECT EXISTS(SELECT 1 FROM messages.conversations WHERE id = $1 AND deleted_at IS NULL)`
 
 	var exists bool
@@ -17,13 +17,15 @@ func (r *FileRepository) ConversationExists(ctx context.Context, conversationID 
 		r.log.Error("Failed to check conversation existence",
 			logger.String("conversation_id", conversationID),
 			logger.Error(err))
-		return false, fmt.Errorf("failed to check conversation: %w", err)
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check conversation existence").
+			WithDetail("conversation_id", conversationID).
+			WithService("media_service")
 	}
 
 	return exists, nil
 }
 
-func (r *FileRepository) UserExists(ctx context.Context, userID string) (bool, error) {
+func (r *FileRepository) UserExists(ctx context.Context, userID string) (bool, pkgErrors.AppError) {
 	query := `SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1 AND deleted_at IS NULL)`
 
 	var exists bool
@@ -32,13 +34,15 @@ func (r *FileRepository) UserExists(ctx context.Context, userID string) (bool, e
 		r.log.Error("Failed to check user existence",
 			logger.String("user_id", userID),
 			logger.Error(err))
-		return false, fmt.Errorf("failed to check user: %w", err)
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check user existence").
+			WithDetail("user_id", userID).
+			WithService("media_service")
 	}
 
 	return exists, nil
 }
 
-func (r *FileRepository) AlbumExistsAndOwned(ctx context.Context, albumID, userID string) (bool, error) {
+func (r *FileRepository) AlbumExistsAndOwned(ctx context.Context, albumID, userID string) (bool, pkgErrors.AppError) {
 	query := `SELECT EXISTS(SELECT 1 FROM media.albums WHERE id = $1 AND user_id = $2)`
 
 	var exists bool
@@ -51,13 +55,16 @@ func (r *FileRepository) AlbumExistsAndOwned(ctx context.Context, albumID, userI
 			logger.String("album_id", albumID),
 			logger.String("user_id", userID),
 			logger.Error(err))
-		return false, fmt.Errorf("failed to check album: %w", err)
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check album ownership").
+			WithDetail("album_id", albumID).
+			WithDetail("user_id", userID).
+			WithService("media_service")
 	}
 
 	return exists, nil
 }
 
-func (r *FileRepository) FileExistsAndOwned(ctx context.Context, fileID, userID string) (bool, error) {
+func (r *FileRepository) FileExistsAndOwned(ctx context.Context, fileID, userID string) (bool, pkgErrors.AppError) {
 	query := `SELECT EXISTS(SELECT 1 FROM media.files WHERE id = $1 AND uploader_user_id = $2 AND deleted_at IS NULL)`
 
 	var exists bool
@@ -70,7 +77,10 @@ func (r *FileRepository) FileExistsAndOwned(ctx context.Context, fileID, userID 
 			logger.String("file_id", fileID),
 			logger.String("user_id", userID),
 			logger.Error(err))
-		return false, fmt.Errorf("failed to check file: %w", err)
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check file ownership").
+			WithDetail("file_id", fileID).
+			WithDetail("user_id", userID).
+			WithService("media_service")
 	}
 
 	return exists, nil

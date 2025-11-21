@@ -6,11 +6,9 @@ import (
 	repositoryModels "auth-service/internal/repo/models"
 	serviceModels "auth-service/internal/service/models"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	dbModels "shared/pkg/database/postgres/models"
-	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 	"shared/server/request"
@@ -133,17 +131,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	userResult, authErr := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
 	if authErr != nil {
-		var appErr pkgErrors.AppError
-		h.log.Error("Login failed", logger.Error(authErr))
-		if errors.As(authErr, &appErr) {
-			if appErr.Code() == authErrors.CodeInvalidCredentials {
-				h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, appErr.Message())
-				response.BadRequestError(r.Context(), r, w, appErr.Message(), appErr)
-			} else {
-				response.BadRequestError(r.Context(), r, w, appErr.Message(), authErr)
-			}
+		if authErr.Code() == authErrors.CodeInvalidCredentials {
+			h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, authErr.Message())
+			response.BadRequestError(r.Context(), r, w, authErr.Message(), authErr)
 		} else {
-			response.InternalServerError(r.Context(), r, w, "Failed to process login", authErr)
+			response.BadRequestError(r.Context(), r, w, authErr.Message(), authErr)
 		}
 		return
 	}

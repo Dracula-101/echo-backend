@@ -2,14 +2,15 @@ package service
 
 import (
 	"context"
-	"fmt"
 
+	"media-service/internal/errors"
 	"media-service/internal/service/models"
 	dbModels "shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
 
-func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbumInput) (*models.CreateAlbumOutput, error) {
+func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbumInput) (*models.CreateAlbumOutput, pkgErrors.AppError) {
 	s.log.Info("Creating album",
 		logger.String("user_id", input.UserID),
 		logger.String("title", input.Title),
@@ -26,7 +27,10 @@ func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbum
 
 	if err != nil {
 		s.log.Error("Failed to create album", logger.Error(err))
-		return nil, fmt.Errorf("failed to create album: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create album").
+			WithDetail("user_id", input.UserID).
+			WithDetail("title", input.Title).
+			WithService("media_service")
 	}
 
 	return &models.CreateAlbumOutput{
@@ -36,14 +40,19 @@ func (s *MediaService) CreateAlbum(ctx context.Context, input models.CreateAlbum
 	}, nil
 }
 
-func (s *MediaService) GetAlbum(ctx context.Context, input models.GetAlbumInput) (*models.GetAlbumOutput, error) {
+func (s *MediaService) GetAlbum(ctx context.Context, input models.GetAlbumInput) (*models.GetAlbumOutput, pkgErrors.AppError) {
 	album, err := s.repo.GetAlbumByID(ctx, input.AlbumID)
 	if err != nil || album == nil {
-		return nil, fmt.Errorf("album not found")
+		return nil, pkgErrors.New(errors.CodeAlbumNotFound, "album not found").
+			WithDetail("album_id", input.AlbumID).
+			WithService("media_service")
 	}
 
 	if album.UserID != input.UserID {
-		return nil, fmt.Errorf("access denied")
+		return nil, pkgErrors.New(pkgErrors.CodeNotAcceptable, "access denied").
+			WithDetail("album_id", input.AlbumID).
+			WithDetail("user_id", input.UserID).
+			WithService("media_service")
 	}
 
 	description := ""
@@ -69,10 +78,12 @@ func (s *MediaService) GetAlbum(ctx context.Context, input models.GetAlbumInput)
 	}, nil
 }
 
-func (s *MediaService) ListAlbums(ctx context.Context, input models.ListAlbumsInput) ([]*models.GetAlbumOutput, error) {
+func (s *MediaService) ListAlbums(ctx context.Context, input models.ListAlbumsInput) ([]*models.GetAlbumOutput, pkgErrors.AppError) {
 	albums, err := s.repo.ListAlbumsByUser(ctx, input.UserID, input.Limit, input.Offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list albums: %w", err)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to list albums").
+			WithDetail("user_id", input.UserID).
+			WithService("media_service")
 	}
 
 	var result []*models.GetAlbumOutput
@@ -103,14 +114,19 @@ func (s *MediaService) ListAlbums(ctx context.Context, input models.ListAlbumsIn
 	return result, nil
 }
 
-func (s *MediaService) AddFileToAlbum(ctx context.Context, input models.AddFileToAlbumInput) error {
+func (s *MediaService) AddFileToAlbum(ctx context.Context, input models.AddFileToAlbumInput) pkgErrors.AppError {
 	album, err := s.repo.GetAlbumByID(ctx, input.AlbumID)
 	if err != nil || album == nil {
-		return fmt.Errorf("album not found")
+		return pkgErrors.New(errors.CodeAlbumNotFound, "album not found").
+			WithDetail("album_id", input.AlbumID).
+			WithService("media_service")
 	}
 
 	if album.UserID != input.UserID {
-		return fmt.Errorf("access denied")
+		return pkgErrors.New(pkgErrors.CodeNotAcceptable, "access denied").
+			WithDetail("album_id", input.AlbumID).
+			WithDetail("user_id", input.UserID).
+			WithService("media_service")
 	}
 
 	albumFile := &dbModels.AlbumFile{
@@ -122,14 +138,19 @@ func (s *MediaService) AddFileToAlbum(ctx context.Context, input models.AddFileT
 	return s.repo.AddFileToAlbum(ctx, albumFile)
 }
 
-func (s *MediaService) RemoveFileFromAlbum(ctx context.Context, input models.RemoveFileFromAlbumInput) error {
+func (s *MediaService) RemoveFileFromAlbum(ctx context.Context, input models.RemoveFileFromAlbumInput) pkgErrors.AppError {
 	album, err := s.repo.GetAlbumByID(ctx, input.AlbumID)
 	if err != nil || album == nil {
-		return fmt.Errorf("album not found")
+		return pkgErrors.New(errors.CodeAlbumNotFound, "album not found").
+			WithDetail("album_id", input.AlbumID).
+			WithService("media_service")
 	}
 
 	if album.UserID != input.UserID {
-		return fmt.Errorf("access denied")
+		return pkgErrors.New(pkgErrors.CodeNotAcceptable, "access denied").
+			WithDetail("album_id", input.AlbumID).
+			WithDetail("user_id", input.UserID).
+			WithService("media_service")
 	}
 
 	return s.repo.RemoveFileFromAlbum(ctx, input.AlbumID, input.FileID)

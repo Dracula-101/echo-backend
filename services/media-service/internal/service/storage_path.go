@@ -22,7 +22,7 @@ type StoragePathConfig struct {
 // GenerateStoragePath generates a structured storage path based on file context
 func GenerateStoragePath(cfg StoragePathConfig) string {
 	now := time.Now()
-	datePrefix := now.Format("2006/01/02")
+	datePrefix := now.Format("2006-01-02")
 
 	switch cfg.Context {
 	case models.FileContextProfilePhoto:

@@ -224,18 +224,6 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		}
 	}
 
-	if user.FailedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS {
-		s.log.Warn("Login attempt for locked account due to max failed attempts",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("email", email),
-			logger.Int("failed_attempts", user.FailedLoginAttempts),
-		)
-		return nil, pkgErrors.New(authErrors.CodeAccountLocked, "account is locked due to multiple failed login attempts").
-			WithService(authErrors.ServiceName).
-			WithDetail("email", email).
-			WithDetail("failed_attempts", user.FailedLoginAttempts)
-	}
-
 	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, password, user.PasswordHash)
 	if verifyErr != nil {
 		return nil, pkgErrors.FromError(verifyErr, authErrors.CodeInvalidCredentials, "password verification failed").
@@ -248,6 +236,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
 		)
+		
 		return nil, pkgErrors.New(authErrors.CodeInvalidCredentials, "Wrong email or password").
 			WithService(authErrors.ServiceName).
 			WithDetail("email", email).

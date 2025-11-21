@@ -25,6 +25,7 @@ const (
 	CodeNotFound              = "NOT_FOUND"
 	CodeMethodNotAllowed      = "METHOD_NOT_ALLOWED"
 	CodeNotAcceptable         = "NOT_ACCEPTABLE"
+	CodeAccessDenied          = "ACCESS_DENIED"
 	CodeProxyAuthRequired     = "PROXY_AUTHENTICATION_REQUIRED"
 	CodeTimeout               = "TIMEOUT"
 	CodeRequestTimeout        = "REQUEST_TIMEOUT"
