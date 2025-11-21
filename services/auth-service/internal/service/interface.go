@@ -21,7 +21,6 @@ import (
 type AuthServiceInterface interface {
 	// Email validation
 	IsEmailTaken(ctx context.Context, email string) (bool, pkgErrors.AppError)
-
 	// User operations
 	GetUserByEmail(ctx context.Context, email string) (*model.User, pkgErrors.AppError)
 	RegisterUser(ctx context.Context, input serviceModels.RegisterUserInput) (*serviceModels.RegisterUserOutput, pkgErrors.AppError)

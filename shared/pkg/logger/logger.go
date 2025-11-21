@@ -66,6 +66,10 @@ func Any(key string, val interface{}) Field {
 	return &field{key: key, value: val}
 }
 
+func Time(key string, val time.Time) Field {
+	return &field{key: key, value: val}
+}
+
 func Duration(key string, val time.Duration) Field {
 	return &field{key: key, value: val}
 }

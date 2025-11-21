@@ -17,6 +17,10 @@ import (
 	"shared/server/common/token"
 )
 
+const (
+	MAX_FAILED_LOGIN_ATTEMPTS = 10
+)
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -192,6 +196,45 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
+
+	if user.AccountLockedUntil != nil {
+		if user.AccountLockedUntil.After(time.Now()) {
+			s.log.Warn("Login attempt for locked account",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("email", email),
+				logger.Time("locked_until", *user.AccountLockedUntil),
+			)
+			return nil, pkgErrors.New(authErrors.CodeAccountLocked, "account is locked").
+				WithService(authErrors.ServiceName).
+				WithDetail("email", email).
+				WithDetail("locked_until", user.AccountLockedUntil.String())
+		} else {
+			unlockErr := s.repo.UnlockUserAccount(ctx, user.ID)
+			if unlockErr != nil {
+				return nil, pkgErrors.FromError(unlockErr, pkgErrors.CodeDatabaseError, "failed to unlock user account").
+					WithService(authErrors.ServiceName).
+					WithDetail("email", email).
+					WithDetail("user_id", user.ID)
+			}
+			s.log.Info("User account unlocked after lock period expired",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("email", email),
+				logger.String("user_id", user.ID),
+			)
+		}
+	}
+
+	if user.FailedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS {
+		s.log.Warn("Login attempt for locked account due to max failed attempts",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", email),
+			logger.Int("failed_attempts", user.FailedLoginAttempts),
+		)
+		return nil, pkgErrors.New(authErrors.CodeAccountLocked, "account is locked due to multiple failed login attempts").
+			WithService(authErrors.ServiceName).
+			WithDetail("email", email).
+			WithDetail("failed_attempts", user.FailedLoginAttempts)
+	}
 
 	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, password, user.PasswordHash)
 	if verifyErr != nil {

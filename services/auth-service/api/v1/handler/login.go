@@ -138,9 +138,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if errors.As(authErr, &appErr) {
 			if appErr.Code() == authErrors.CodeInvalidCredentials {
 				h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, appErr.Message())
-				response.BadRequestError(r.Context(), r, w, appErr.Message(), nil)
+				response.BadRequestError(r.Context(), r, w, appErr.Message(), appErr)
 			} else {
-				response.InternalServerError(r.Context(), r, w, appErr.Message(), authErr)
+				response.BadRequestError(r.Context(), r, w, appErr.Message(), authErr)
 			}
 		} else {
 			response.InternalServerError(r.Context(), r, w, "Failed to process login", authErr)

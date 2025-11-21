@@ -152,6 +152,33 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams
 	return *id, nil
 }
 
+func (r *AuthRepository) UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Unlocking user account",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET account_locked_until = NULL,
+		    failed_login_attempts = 0,
+			last_failed_login_at = NULL,
+		    updated_at = NOW()
+		WHERE id = $1`
+	result, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to unlock user account").
+			WithDetail("user_id", userID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("User account unlocked successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
 // ============================================================================
 // User Retrieval
 // ============================================================================
