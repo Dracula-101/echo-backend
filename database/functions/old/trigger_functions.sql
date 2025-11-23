@@ -686,10 +686,6 @@ BEGIN
     DELETE FROM auth.password_reset_tokens
     WHERE expires_at < NOW() - INTERVAL '7 days';
     
-    -- Clean up old rate limit entries
-    DELETE FROM auth.rate_limits
-    WHERE window_start < NOW() - INTERVAL '24 hours';
-    
     -- Clean up expired conversation invites
     DELETE FROM messages.conversation_invites
     WHERE expires_at < NOW() AND status = 'pending';

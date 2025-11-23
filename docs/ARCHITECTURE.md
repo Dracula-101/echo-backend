@@ -580,7 +580,6 @@ PostgreSQL Database: echo_db
 **Advanced Auth**:
 - `oauth_providers` - OAuth integration (schema only)
 - `security_events` - Security audit log
-- `rate_limits` - Rate limiting data
 - `api_keys` - API key management (future)
 
 **Key Features**:

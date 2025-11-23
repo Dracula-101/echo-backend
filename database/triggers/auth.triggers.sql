@@ -46,12 +46,6 @@ CREATE TRIGGER trigger_auth_oauth_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION auth.update_updated_at_column();
 
--- Trigger to update updated_at on auth.rate_limits
-CREATE TRIGGER trigger_auth_rate_limits_updated_at
-    BEFORE UPDATE ON auth.rate_limits
-    FOR EACH ROW
-    EXECUTE FUNCTION auth.update_updated_at_column();
-
 -- Trigger to update updated_at on auth.api_keys
 CREATE TRIGGER trigger_auth_api_keys_updated_at
     BEFORE UPDATE ON auth.api_keys

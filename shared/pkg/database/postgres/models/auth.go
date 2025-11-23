@@ -248,28 +248,6 @@ func (l *LoginHistory) PrimaryKey() interface{} {
 	return l.ID
 }
 
-type RateLimit struct {
-	ID             string              `db:"id" json:"id" pk:"true"`
-	Identifier     string              `db:"identifier" json:"identifier"`
-	IdentifierType IdentifierType      `db:"identifier_type" json:"identifier_type"`
-	ActionType     RateLimitActionType `db:"action_type" json:"action_type"`
-	AttemptCount   int                 `db:"attempt_count" json:"attempt_count"`
-	WindowStart    time.Time           `db:"window_start" json:"window_start"`
-	WindowDuration string              `db:"window_duration" json:"window_duration"`
-	MaxAttempts    *int                `db:"max_attempts" json:"max_attempts,omitempty"`
-	BlockedUntil   *time.Time          `db:"blocked_until" json:"blocked_until,omitempty"`
-	CreatedAt      time.Time           `db:"created_at" json:"created_at"`
-	UpdatedAt      time.Time           `db:"updated_at" json:"updated_at"`
-}
-
-func (r *RateLimit) TableName() string {
-	return "auth.rate_limits"
-}
-
-func (r *RateLimit) PrimaryKey() interface{} {
-	return r.ID
-}
-
 type APIKey struct {
 	ID               string          `db:"id" json:"id" pk:"true"`
 	KeyName          string          `db:"key_name" json:"key_name"`

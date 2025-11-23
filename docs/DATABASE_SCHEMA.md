@@ -204,10 +204,6 @@ CREATE TABLE auth.oauth_providers (
 - Status: success, failed, blocked
 - New device/location detection
 
-**auth.rate_limits** - Rate limiting per user/IP:
-- Action types: login, register, password_reset, api_call
-- Configurable windows and thresholds
-
 **auth.api_keys** - Service-to-service authentication:
 - Scope-based permissions
 - Rate limiting per key

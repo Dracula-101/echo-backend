@@ -72,12 +72,6 @@ CREATE INDEX idx_auth_login_history_ip ON auth.login_history(ip_address);
 CREATE INDEX idx_auth_login_history_device ON auth.login_history(device_id);
 CREATE INDEX idx_auth_login_history_new_device ON auth.login_history(user_id, is_new_device) WHERE is_new_device = TRUE;
 
--- Rate limits indexes
-CREATE INDEX idx_auth_rate_limits_identifier ON auth.rate_limits(identifier, identifier_type, action_type);
-CREATE INDEX idx_auth_rate_limits_action ON auth.rate_limits(action_type);
-CREATE INDEX idx_auth_rate_limits_blocked ON auth.rate_limits(blocked_until) WHERE blocked_until IS NOT NULL;
-CREATE INDEX idx_auth_rate_limits_window ON auth.rate_limits(window_start);
-
 -- API keys indexes
 CREATE INDEX idx_auth_api_keys_user ON auth.api_keys(user_id);
 CREATE INDEX idx_auth_api_keys_hash ON auth.api_keys(key_hash);

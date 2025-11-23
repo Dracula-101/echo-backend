@@ -191,22 +191,6 @@ CREATE TABLE auth.login_history (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Rate Limiting Table
-CREATE TABLE auth.rate_limits (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    identifier VARCHAR(255) NOT NULL, -- user_id, ip_address, api_key
-    identifier_type VARCHAR(50) NOT NULL, -- user, ip, api_key, email
-    action_type VARCHAR(100) NOT NULL, -- login, register, password_reset, api_call
-    attempt_count INTEGER DEFAULT 1,
-    window_start TIMESTAMPTZ DEFAULT NOW(),
-    window_duration INTERVAL DEFAULT '1 hour',
-    max_attempts INTEGER,
-    blocked_until TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(identifier, identifier_type, action_type)
-);
-
 -- API Keys (for service-to-service authentication)
 CREATE TABLE auth.api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -244,5 +228,4 @@ COMMENT ON TABLE auth.otp_verifications IS 'One-time password verification for 2
 COMMENT ON TABLE auth.oauth_providers IS 'OAuth social login integrations';
 COMMENT ON TABLE auth.security_events IS 'Audit log for security-related events';
 COMMENT ON TABLE auth.login_history IS 'Historical record of all login attempts';
-COMMENT ON TABLE auth.rate_limits IS 'Rate limiting to prevent abuse';
 COMMENT ON TABLE auth.api_keys IS 'API keys for programmatic access';

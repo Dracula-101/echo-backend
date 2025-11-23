@@ -11,7 +11,6 @@ ALTER TABLE auth.password_reset_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.email_verification_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.security_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.login_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE auth.rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth.api_keys ENABLE ROW LEVEL SECURITY;
 
 -- Helper function to get current user ID from JWT or session
@@ -259,17 +258,6 @@ CREATE POLICY login_history_insert_service
     ON auth.login_history
     FOR INSERT
     WITH CHECK (TRUE);
-
--- =====================================================
--- RATE LIMITS POLICIES
--- =====================================================
-
--- Service role manages rate limits
-DROP POLICY IF EXISTS rate_limits_service_all ON auth.rate_limits;
-CREATE POLICY rate_limits_service_all
-    ON auth.rate_limits
-    FOR ALL
-    USING (TRUE);
 
 -- =====================================================
 -- API KEYS POLICIES
