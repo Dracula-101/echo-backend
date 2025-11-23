@@ -1,7 +1,13 @@
+# Echo Backend - Production Docker Compose Configuration
+# =============================================================================
+# This file contains production-ready configuration with security hardening
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# =============================================================================
+
 name: echo-backend-prod
 
 # =============================================================================
-# NETWORKS
+# PRODUCTION NETWORKS
 # =============================================================================
 networks:
   echo-network:
@@ -9,70 +15,103 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: br-echo
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+
+  echo-internal:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
 
 # =============================================================================
-# VOLUMES
+# PRODUCTION VOLUMES
 # =============================================================================
 volumes:
-  # Database volumes
-  postgres_data:
-    driver: local
-
-  # Cache volumes
-  redis_data:
-    driver: local
-
-  # Message broker volumes
-  zookeeper_data:
-    driver: local
-  zookeeper_logs:
-    driver: local
-  kafka_data:
-    driver: local
-
   # Application logs
   api-gateway-logs:
     driver: local
+    labels:
+      com.echo.description: "API Gateway logs"
+      com.echo.backup: "required"
+
   auth-service-logs:
     driver: local
-  location-service-logs:
-    driver: local
+    labels:
+      com.echo.description: "Auth Service logs"
+      com.echo.backup: "required"
+
   message-service-logs:
     driver: local
+    labels:
+      com.echo.description: "Message Service logs"
+      com.echo.backup: "required"
+
+  user-service-logs:
+    driver: local
+    labels:
+      com.echo.description: "User Service logs"
+      com.echo.backup: "required"
+
+  location-service-logs:
+    driver: local
+    labels:
+      com.echo.description: "Location Service logs"
+      com.echo.backup: "required"
+
+  media-service-logs:
+    driver: local
+    labels:
+      com.echo.description: "Media Service logs"
+      com.echo.backup: "required"
+
+  presence-service-logs:
+    driver: local
+    labels:
+      com.echo.description: "Presence Service logs"
+      com.echo.backup: "required"
+
+  # Media storage
+  media-storage:
+    driver: local
+    labels:
+      com.echo.description: "Media file storage"
+      com.echo.backup: "critical"
 
 # =============================================================================
-# SERVICES
+# SERVICES CONFIGURATION FOR PRODUCTION
 # =============================================================================
 services:
 
   # ===========================================================================
-  # INFRASTRUCTURE LAYER
+  # INFRASTRUCTURE LAYER - PRODUCTION CONFIGURATION
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # PostgreSQL Database
+  # PostgreSQL - Production Configuration
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
-    container_name: echo-postgres
+    container_name: echo-postgres-prod
+    restart: always
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5432:5432" # Only bind to localhost
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres -c max_connections=200 -c shared_buffers=256MB -c effective_cache_size=1GB -c maintenance_work_mem=128MB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200 -c work_mem=1310kB -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=8 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=8 -c max_parallel_maintenance_workers=4 -c ssl=on -c ssl_cert_file=/var/lib/postgresql/server.crt -c ssl_key_file=/var/lib/postgresql/server.key
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./certs/postgres:/var/lib/postgresql:ro
     networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: always
+      - echo-internal
     deploy:
       resources:
         limits:
@@ -84,61 +123,30 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "10"
+        labels: "service,tier"
+    labels:
+      com.echo.service: "postgres"
+      com.echo.tier: "database"
+      com.echo.critical: "true"
 
   # ---------------------------------------------------------------------------
-  # Database Initializer
-  # ---------------------------------------------------------------------------
-  db-init:
-    image: postgres:15-alpine
-    container_name: echo-db-init
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - ${PWD}/infra/scripts:/scripts:ro
-      - ${PWD}/database:/database:ro
-    networks:
-      - echo-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-    entrypoint: [ "/bin/sh" ]
-    command: >
-      -c "
-        apk add --no-cache bash &&
-        echo '[INFO] Waiting for postgres to be ready...' &&
-        sleep 2 &&
-        cd /scripts &&
-        bash init-db.sh
-      "
-    restart: "no"
-
-  # ---------------------------------------------------------------------------
-  # Redis Cache
+  # Redis - Production Configuration
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
-    container_name: echo-redis
+    container_name: echo-redis-prod
+    restart: always
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6379:6379" # Only bind to localhost
     command: >
-      redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 512mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000
+      redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 1gb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000 --tcp-backlog 511 --tcp-keepalive 300 --timeout 0 --databases 16 --stop-writes-on-bgsave-error yes --rdbcompression yes --rdbchecksum yes --dir /data --loglevel notice --protected-mode yes
     volumes:
       - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    restart: always
+      - echo-internal
     deploy:
       resources:
         limits:
@@ -150,68 +158,38 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "10"
+        labels: "service,tier"
+    labels:
+      com.echo.service: "redis"
+      com.echo.tier: "cache"
+      com.echo.critical: "true"
 
   # ---------------------------------------------------------------------------
-  # Zookeeper (Kafka Dependency)
-  # ---------------------------------------------------------------------------
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: echo-zookeeper
-    ports:
-      - "127.0.0.1:2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 5
-      ZOOKEEPER_SYNC_LIMIT: 2
-      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_logs:/var/lib/zookeeper/log
-    networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # ---------------------------------------------------------------------------
-  # Kafka Message Broker
+  # Kafka - Production Configuration
   # ---------------------------------------------------------------------------
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    container_name: echo-kafka
+    container_name: echo-kafka-prod
+    restart: always
     ports:
-      - "127.0.0.1:9092:9092"
-      - "127.0.0.1:9093:9093"
+      - "127.0.0.1:9092:9092" # Only bind to localhost
     environment:
+      # Basic Configuration
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Listeners
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      # Production Settings
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
       KAFKA_NUM_NETWORK_THREADS: 8
@@ -219,20 +197,16 @@ services:
       KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
       KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
       KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
-    volumes:
-      - kafka_data:/var/lib/kafka/data
+      KAFKA_COMPRESSION_TYPE: "lz4"
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
+      KAFKA_LOG_CLEANUP_POLICY: "delete"
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
     networks:
-      - echo-network
+      - echo-internal
     depends_on:
       zookeeper:
         condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
     deploy:
       resources:
         limits:
@@ -244,24 +218,32 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "10"
+        labels: "service,tier"
+    labels:
+      com.echo.service: "kafka"
+      com.echo.tier: "messaging"
+      com.echo.critical: "true"
 
   # ===========================================================================
-  # APPLICATION LAYER
+  # APPLICATION LAYER - PRODUCTION CONFIGURATION
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # API Gateway
+  # API Gateway - Production Configuration
   # ---------------------------------------------------------------------------
   api-gateway:
     build:
       context: ${PWD}
       dockerfile: services/api-gateway/Dockerfile
+      target: production
       args:
         BUILD_ENV: production
-    container_name: echo-api-gateway
+        VERSION: ${VERSION:-latest}
+    container_name: echo-api-gateway-prod
     image: echo/api-gateway:${VERSION:-latest}
+    restart: always
     ports:
       - "8080:8080"
     environment:
@@ -271,56 +253,92 @@ services:
       APP_ENV: production
       CONFIG_PATH: /app/configs/config.yaml
 
-      # Downstream Service URLs
-      AUTH_SERVICE_ADDR: auth-service:8081
+      # Service Discovery
       AUTH_SERVICE_URL: http://auth-service:8081
-      USER_SERVICE_ADDR: user-service:8082
       USER_SERVICE_URL: http://user-service:8082
-      MESSAGE_SERVICE_ADDR: message-service:8083
       MESSAGE_SERVICE_URL: http://message-service:8083
+      MEDIA_SERVICE_URL: http://media-service:8084
+      PRESENCE_SERVICE_URL: http://presence-service:8085
+
+      # Security
+      ENABLE_CORS: ${ENABLE_CORS:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      ENABLE_RATE_LIMIT: "true"
+      RATE_LIMIT_RPS: 100
+      RATE_LIMIT_BURST: 200
+
+      # Monitoring
+      ENABLE_METRICS: "true"
+      ENABLE_TRACING: "true"
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
 
       # Performance
       GOMAXPROCS: 4
       GOGC: 100
+      GOMEMLIMIT: 800MiB
     volumes:
       - api-gateway-logs:/var/log/api-gateway
+      - ./certs/api:/app/certs:ro
     networks:
       - echo-network
+      - echo-internal
     depends_on:
       - auth-service
       - message-service
+      - user-service
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health" ]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
-    restart: always
+      start_period: 30s
     deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0.3
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
       resources:
         limits:
           cpus: '2.0'
           memory: 1G
         reservations:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '0.5'
+          memory: 256M
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "100m"
+        max-file: "10"
+        labels: "service,tier,version"
+    labels:
+      com.echo.service: "api-gateway"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"
+      com.echo.critical: "true"
 
   # ---------------------------------------------------------------------------
-  # Auth Service
+  # Auth Service - Production Configuration
   # ---------------------------------------------------------------------------
   auth-service:
     build:
       context: ${PWD}
       dockerfile: services/auth-service/Dockerfile
+      target: production
       args:
         BUILD_ENV: production
-    container_name: echo-auth-service
+        VERSION: ${VERSION:-latest}
+    container_name: echo-auth-service-prod
     image: echo/auth-service:${VERSION:-latest}
+    restart: always
     expose:
       - "8081"
     environment:
@@ -329,6 +347,8 @@ services:
       SERVER_PORT: 8081
       APP_ENV: production
       CONFIG_PATH: /app/configs/config.yaml
+      LOG_LEVEL: info
+      LOG_FORMAT: json
 
       # Database Configuration
       DB_HOST: postgres
@@ -336,7 +356,7 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      DB_SSL_MODE: disable
+      DB_SSLMODE: require
       DB_MAX_OPEN_CONNS: 25
       DB_MAX_IDLE_CONNS: 5
       DB_CONN_MAX_LIFETIME: 300s
@@ -348,69 +368,95 @@ services:
       REDIS_DB: 0
       REDIS_MAX_RETRIES: 3
       REDIS_POOL_SIZE: 10
-
-      # External Services
-      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+      REDIS_MIN_IDLE_CONNS: 5
 
       # Security
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRY: 24h
-      REFRESH_TOKEN_EXPIRY: 168h
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
+      REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY:-168h}
+      BCRYPT_COST: 12
+
+      # External Services
+      LOCATION_SERVICE_URL: http://location-service:8090
+
+      # Monitoring
+      ENABLE_METRICS: "true"
+      ENABLE_TRACING: "true"
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
 
       # Performance
       GOMAXPROCS: 4
       GOGC: 100
+      GOMEMLIMIT: 800MiB
     volumes:
       - auth-service-logs:/var/log/auth-service
+      - ./certs/auth:/app/certs:ro
     networks:
-      - echo-network
+      - echo-internal
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
-      location-service:
-        condition: service_started
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health" ]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
-    restart: always
+      start_period: 30s
     deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 60s
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
       resources:
         limits:
           cpus: '2.0'
           memory: 1G
         reservations:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '0.5'
+          memory: 256M
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "100m"
+        max-file: "10"
+        labels: "service,tier,version"
+    labels:
+      com.echo.service: "auth-service"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"
+      com.echo.critical: "true"
 
   # ---------------------------------------------------------------------------
-  # Message Service
+  # Message Service - Production Configuration
   # ---------------------------------------------------------------------------
   message-service:
     build:
       context: ${PWD}
       dockerfile: services/message-service/Dockerfile
+      target: production
       args:
         BUILD_ENV: production
-    container_name: echo-message-service
+        VERSION: ${VERSION:-latest}
+    container_name: echo-message-service-prod
     image: echo/message-service:${VERSION:-latest}
-    ports:
-      - "8083:8083"
+    restart: always
+    expose:
+      - "8083"
+      - "8084"
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8083
+      WS_PORT: 8084
       APP_ENV: production
       LOG_LEVEL: info
       LOG_FORMAT: json
@@ -421,7 +467,7 @@ services:
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
-      DB_SSLMODE: disable
+      DB_SSLMODE: require
       DB_MAX_OPEN_CONNS: 25
       DB_MAX_IDLE_CONNS: 5
       DB_CONN_MAX_LIFETIME: 300s
@@ -430,30 +476,42 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      REDIS_DB: 0
+      REDIS_DB: 1
       REDIS_MAX_RETRIES: 3
       REDIS_POOL_SIZE: 10
 
       # Kafka Configuration
-      KAFKA_BROKERS: kafka:9092
+      KAFKA_BROKERS: kafka:29092
       KAFKA_TOPIC: messages
       KAFKA_NOTIFICATION_TOPIC: notifications
-      KAFKA_CONSUMER_GROUP: message-service
+      KAFKA_CONSUMER_GROUP: message-service-prod
       KAFKA_SESSION_TIMEOUT: 10s
       KAFKA_HEARTBEAT_INTERVAL: 3s
+      KAFKA_ENABLE_AUTO_COMMIT: "false"
+      KAFKA_PARTITION_ASSIGNMENT_STRATEGY: "range"
 
       # WebSocket Configuration
-      WS_READ_BUFFER_SIZE: 1024
-      WS_WRITE_BUFFER_SIZE: 1024
-      WS_MAX_MESSAGE_SIZE: 512
+      WS_READ_BUFFER_SIZE: 4096
+      WS_WRITE_BUFFER_SIZE: 4096
+      WS_MAX_MESSAGE_SIZE: 1048576
+      WS_PING_INTERVAL: 30s
+      WS_PONG_TIMEOUT: 60s
+      WS_MAX_CONNECTIONS: 10000
+
+      # Monitoring
+      ENABLE_METRICS: "true"
+      ENABLE_TRACING: "true"
+      JAEGER_ENDPOINT: http://jaeger:14268/api/traces
 
       # Performance
       GOMAXPROCS: 4
       GOGC: 100
+      GOMEMLIMIT: 800MiB
     volumes:
       - message-service-logs:/var/log/message-service
+      - ./certs/message:/app/certs:ro
     networks:
-      - echo-network
+      - echo-internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -461,40 +519,140 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health" ]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
-    restart: always
+      start_period: 30s
     deploy:
+      mode: replicated
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
       resources:
         limits:
           cpus: '2.0'
           memory: 1G
         reservations:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '0.5'
+          memory: 256M
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "100m"
+        max-file: "10"
+        labels: "service,tier,version"
+    labels:
+      com.echo.service: "message-service"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"
+      com.echo.critical: "true"
 
   # ---------------------------------------------------------------------------
-  # Location Service
+  # User Service - Production Configuration
+  # ---------------------------------------------------------------------------
+  user-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/user-service/Dockerfile
+      target: production
+      args:
+        BUILD_ENV: production
+        VERSION: ${VERSION:-latest}
+    container_name: echo-user-service-prod
+    image: echo/user-service:${VERSION:-latest}
+    restart: always
+    expose:
+      - "8082"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8082
+      APP_ENV: production
+      CONFIG_PATH: /app/configs/config.yaml
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_SSLMODE: require
+      DB_MAX_OPEN_CONNS: 25
+      DB_MAX_IDLE_CONNS: 5
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 2
+
+      # Monitoring
+      ENABLE_METRICS: "true"
+      ENABLE_TRACING: "true"
+
+      # Performance
+      GOMAXPROCS: 4
+      GOGC: 100
+      GOMEMLIMIT: 800MiB
+    volumes:
+      - user-service-logs:/var/log/user-service
+    networks:
+      - echo-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    labels:
+      com.echo.service: "user-service"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"
+
+  # ---------------------------------------------------------------------------
+  # Location Service - Production Configuration
   # ---------------------------------------------------------------------------
   location-service:
     build:
       context: ${PWD}
       dockerfile: services/location-service/Dockerfile
+      target: production
       args:
         BUILD_ENV: production
-    container_name: location-service
+        VERSION: ${VERSION:-latest}
+    container_name: echo-location-service-prod
     image: echo/location-service:${VERSION:-latest}
+    restart: always
     expose:
       - "8090"
     environment:
@@ -506,27 +664,211 @@ services:
       # Performance
       GOMAXPROCS: 2
       GOGC: 100
+      GOMEMLIMIT: 400MiB
     volumes:
       - location-service-logs:/var/log/location-service
+      - ./data/location:/app/data:ro
     networks:
-      - echo-network
+      - echo-internal
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health" ]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 10s
-    restart: always
     deploy:
+      mode: replicated
+      replicas: 2
       resources:
         limits:
           cpus: '1.0'
           memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    labels:
+      com.echo.service: "location-service"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"
+
+  # ---------------------------------------------------------------------------
+  # Media Service - Production Configuration
+  # ---------------------------------------------------------------------------
+  media-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/media-service/Dockerfile
+      target: production
+      args:
+        BUILD_ENV: production
+        VERSION: ${VERSION:-latest}
+    container_name: echo-media-service-prod
+    image: echo/media-service:${VERSION:-latest}
+    restart: always
+    expose:
+      - "8085"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8085
+      APP_ENV: production
+      CONFIG_PATH: /app/configs/config.yaml
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_SSLMODE: require
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 3
+
+      # Storage Configuration
+      STORAGE_TYPE: ${STORAGE_TYPE:-s3}
+      STORAGE_PATH: /app/media
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      MAX_FILE_SIZE: 52428800 # 50MB
+      ALLOWED_MIME_TYPES: "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav"
+
+      # Features
+      FEATURE_DEDUPLICATION_ENABLED: "true"
+      FEATURE_COMPRESSION_ENABLED: "true"
+      FEATURE_VIRUS_SCAN_ENABLED: ${VIRUS_SCAN_ENABLED:-false}
+
+      # Performance
+      GOMAXPROCS: 2
+      GOGC: 100
+      GOMEMLIMIT: 800MiB
+    volumes:
+      - media-service-logs:/var/log/media-service
+      - media-storage:/app/media
+    networks:
+      - echo-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8085/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
         reservations:
           cpus: '0.5'
           memory: 256M
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "100m"
+        max-file: "10"
+    labels:
+      com.echo.service: "media-service"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"
+
+  # ---------------------------------------------------------------------------
+  # Presence Service - Production Configuration
+  # ---------------------------------------------------------------------------
+  presence-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/presence-service/Dockerfile
+      target: production
+      args:
+        BUILD_ENV: production
+        VERSION: ${VERSION:-latest}
+    container_name: echo-presence-service-prod
+    image: echo/presence-service:${VERSION:-latest}
+    restart: always
+    expose:
+      - "8086"
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8086
+      APP_ENV: production
+      CONFIG_PATH: /app/configs/config.yaml
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_SSLMODE: require
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 4
+
+      # Presence Configuration
+      PRESENCE_UPDATE_INTERVAL: 30s
+      PRESENCE_TIMEOUT: 300s
+      PRESENCE_CLEANUP_INTERVAL: 60s
+
+      # Performance
+      GOMAXPROCS: 2
+      GOGC: 100
+      GOMEMLIMIT: 400MiB
+    volumes:
+      - presence-service-logs:/var/log/presence-service
+    networks:
+      - echo-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8086/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    labels:
+      com.echo.service: "presence-service"
+      com.echo.tier: "application"
+      com.echo.version: "${VERSION:-latest}"

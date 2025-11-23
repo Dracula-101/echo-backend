@@ -1,72 +1,90 @@
+# Echo Backend - Development Docker Compose Configuration
+# =============================================================================
+# This file contains the complete development environment with hot-reload
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================================
+
 name: echo-backend-dev
 
 # =============================================================================
-# NETWORKS
+# ADDITIONAL DEVELOPMENT NETWORKS
 # =============================================================================
 networks:
   echo-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
 
 # =============================================================================
-# VOLUMES
+# ADDITIONAL DEVELOPMENT VOLUMES
 # =============================================================================
 volumes:
-  # Database volumes
-  postgres_data:
-    driver: local
-
-  # Cache volumes
-  redis_data:
-    driver: local
-
-  # Message broker volumes
-  zookeeper_data:
-    driver: local
-  zookeeper_logs:
-    driver: local
-  kafka_data:
-    driver: local
-
-  # Centralized Go cache (shared across all services)
+  # Go build caches for faster compilation
   go-mod-cache:
     driver: local
+    labels:
+      com.echo.description: "Go modules cache"
+
   go-build-cache:
     driver: local
+    labels:
+      com.echo.description: "Go build cache"
 
-  # Service-specific build cache volumes (for hot reload artifacts)
-  api-gateway-build-cache:
+  # Service-specific build caches for hot reload
+  api-gateway-cache:
     driver: local
-  auth-service-build-cache:
+    labels:
+      com.echo.description: "API Gateway build cache"
+
+  auth-service-cache:
     driver: local
-  message-service-build-cache:
+    labels:
+      com.echo.description: "Auth Service build cache"
+
+  message-service-cache:
     driver: local
-  user-service-build-cache:
+    labels:
+      com.echo.description: "Message Service build cache"
+
+  user-service-cache:
     driver: local
-  location-service-build-cache:
+    labels:
+      com.echo.description: "User Service build cache"
+
+  location-service-cache:
     driver: local
-  media-service-build-cache:
+    labels:
+      com.echo.description: "Location Service build cache"
+
+  media-service-cache:
     driver: local
-  presence-service-build-cache:
+    labels:
+      com.echo.description: "Media Service build cache"
+
+  presence-service-cache:
     driver: local
+    labels:
+      com.echo.description: "Presence Service build cache"
 
 # =============================================================================
-# SERVICES
+# SERVICES CONFIGURATION OVERRIDES
 # =============================================================================
 services:
 
   # ===========================================================================
-  # CACHE WARMER (Run once to populate Go cache)
+  # DEVELOPMENT UTILITIES
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # Go Cache Warmer
+  # Go Cache Warmer - Speeds up initial builds
   # ---------------------------------------------------------------------------
   go-cache-warmer:
-    image: golang:1.25-alpine
+    image: golang:1.21-alpine
     container_name: echo-go-cache-warmer
     profiles: [ "cache-warmer" ]
     volumes:
-      - ${PWD}:/workspace
+      - ${PWD}:/workspace:ro
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
     networks:
@@ -75,69 +93,60 @@ services:
     command: >
       sh -c "
         echo '========================================';
-        echo 'Warming Up Go Module Cache';
+        echo '🚀 Warming Up Go Module Cache';
         echo '========================================';
         echo '';
-        cd /workspace/shared && echo '[1/8] Processing shared...' && go mod download;
-        cd /workspace/services/api-gateway && echo '[2/8] Processing api-gateway...' && go mod download;
-        cd /workspace/services/auth-service && echo '[3/8] Processing auth-service...' && go mod download;
-        cd /workspace/services/message-service && echo '[4/8] Processing message-service...' && go mod download;
-        cd /workspace/services/location-service && echo '[5/8] Processing location-service...' && go mod download;
-        cd /workspace/services/presence-service && echo '[6/8] Processing presence-service...' && go mod download;
-        cd /workspace/services/user-service && echo '[7/8] Processing user-service...' && go mod download 2>/dev/null || echo 'user-service not found, skipping...';
-        cd /workspace/services/media-service && echo '[8/8] Processing media-service...' && go mod download;
+        
+        # Install necessary tools
+        apk add --no-cache git &&
+        
+        # Process each service
+        services='shared api-gateway auth-service message-service user-service 
+                 location-service media-service presence-service' &&
+        
+        total=8 &&
+        current=0 &&
+        
+        for service in $$services; do
+          current=$$((current + 1));
+          if [ -d \"/workspace/services/$$service\" ] || [ -d \"/workspace/$$service\" ]; then
+            echo \"[$$current/$$total] Processing $$service...\";
+            if [ -d \"/workspace/services/$$service\" ]; then
+              cd /workspace/services/$$service;
+            else
+              cd /workspace/$$service;
+            fi;
+            go mod download 2>/dev/null || echo \"  ⚠️  $$service not found or has no go.mod\";
+          fi;
+        done;
+        
         echo '';
         echo '========================================';
-        echo '✓ Go cache warmup complete!';
+        echo '✅ Go cache warmup complete!';
         echo '========================================';
         echo '';
         echo 'Cache volumes populated:';
-        echo '  - go-mod-cache';
-        echo '  - go-build-cache';
+        echo '  - go-mod-cache: '`du -sh /go/pkg/mod 2>/dev/null | cut -f1`'';
+        echo '  - go-build-cache: '`du -sh /root/.cache/go-build 2>/dev/null | cut -f1`'';
         echo '';
-        echo 'All services will now build faster!';
+        echo 'Services are now ready for faster builds!';
       "
     restart: "no"
 
-  # ===========================================================================
-  # INFRASTRUCTURE LAYER
-  # ===========================================================================
-
   # ---------------------------------------------------------------------------
-  # PostgreSQL Database
-  # ---------------------------------------------------------------------------
-  postgres:
-    image: postgres:15-alpine
-    container_name: echo-postgres
-    ports:
-      - "0.0.0.0:5432:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-echo}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
-      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echo}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # ---------------------------------------------------------------------------
-  # Database Initializer
+  # Database Initializer - Creates schemas and initial data
   # ---------------------------------------------------------------------------
   db-init:
     image: postgres:15-alpine
     container_name: echo-db-init
+    profiles: [ "init" ]
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-echo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       POSTGRES_DB: ${POSTGRES_DB:-echo_db}
+      INIT_MODE: ${INIT_MODE:-development}
     volumes:
       - ${PWD}/infra/scripts:/scripts:ro
       - ${PWD}/database:/database:ro
@@ -149,63 +158,61 @@ services:
     entrypoint: [ "/bin/sh" ]
     command: >
       -c "
-        apk add --no-cache bash &&
-        echo '[INFO] Waiting for postgres to be ready...' &&
-        sleep 2 &&
-        cd /scripts &&
-        bash init-db.sh
+        apk add --no-cache bash postgresql-client &&
+        echo '[INFO] Waiting for PostgreSQL to be ready...' &&
+        
+        # Wait for database to be fully ready
+        until PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -U $$POSTGRES_USER -d $$POSTGRES_DB -c '\\q' 2>/dev/null; do
+          echo '  ⏳ PostgreSQL is starting up...';
+          sleep 2;
+        done;
+        
+        echo '[INFO] PostgreSQL is ready!' &&
+        
+        # Run initialization script
+        if [ -f /scripts/init-db.sh ]; then
+          echo '[INFO] Running database initialization...' &&
+          cd /scripts &&
+          bash init-db.sh;
+        else
+          echo '[WARN] No init-db.sh script found, skipping initialization';
+        fi
       "
     restart: "no"
 
-  # ---------------------------------------------------------------------------
-  # Redis Cache
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # INFRASTRUCTURE OVERRIDES FOR DEVELOPMENT
+  # ===========================================================================
+
+  postgres:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-echo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-echo_db}
+      # Development optimizations
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      # Disable fsync for better performance (ONLY for development!)
+      POSTGRES_HOST_AUTH_METHOD: "md5"
+    command: >
+      postgres -c shared_preload_libraries='pg_stat_statements' -c pg_stat_statements.track=all -c log_statement='all' -c log_duration=on -c log_min_duration_statement=100
+    ports:
+      - "5432:5432"
+
   redis:
-    image: redis:7-alpine
-    container_name: echo-redis
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
-    volumes:
-      - redis_data:/data
-    networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
+    command: >
+      redis-server  --appendonly yes  --requirepass ${REDIS_PASSWORD:-redis_password} --maxmemory 256mb --maxmemory-policy allkeys-lru --loglevel debug
 
-  # ---------------------------------------------------------------------------
-  # Zookeeper (Kafka Dependency)
-  # ---------------------------------------------------------------------------
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: echo-zookeeper
     ports:
       - "2181:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_logs:/var/lib/zookeeper/log
-    networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "srvr,mntr,ruok,stat"
 
-  # ---------------------------------------------------------------------------
-  # Kafka Message Broker
-  # ---------------------------------------------------------------------------
   kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: echo-kafka
     ports:
       - "9092:9092"
       - "9093:9093"
@@ -215,98 +222,102 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # Development settings
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_LOG_RETENTION_HOURS: 168
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-    networks:
-      - echo-network
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    restart: unless-stopped
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_LOG_LEVEL: DEBUG
 
   # ===========================================================================
-  # APPLICATION LAYER
+  # APPLICATION SERVICES FOR DEVELOPMENT
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # API Gateway
+  # API Gateway - Development Mode with Hot Reload
   # ---------------------------------------------------------------------------
   api-gateway:
     build:
       context: ${PWD}
       dockerfile: services/api-gateway/Dockerfile.dev
-    container_name: echo-api-gateway
-    image: api-gateway:latest
+      target: development
+    container_name: echo-api-gateway-dev
+    image: echo/api-gateway:dev
     ports:
       - "8080:8080"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/api-gateway/.env
+      - "2345:2345" # Debugger port
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8080
       APP_ENV: development
       CONFIG_PATH: /app/services/api-gateway/configs/config.yaml
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
 
-      # Downstream Service URLs
-      AUTH_SERVICE_ADDR: auth-service:8081
+      # Service Discovery
       AUTH_SERVICE_URL: http://auth-service:8081
-      USER_SERVICE_ADDR: user-service:8082
       USER_SERVICE_URL: http://user-service:8082
-      MESSAGE_SERVICE_ADDR: message-service:8083
       MESSAGE_SERVICE_URL: http://message-service:8083
-      MEDIA_SERVICE_ADDR: media-service:8084
       MEDIA_SERVICE_URL: http://media-service:8084
-      PRESENCE_SERVICE_ADDR: presence-service:8085
       PRESENCE_SERVICE_URL: http://presence-service:8085
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+      ENABLE_PROFILING: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
     volumes:
-      # Source code (hot reload)
+      # Source code for hot reload
       - ${PWD}/services/api-gateway:/app/services/api-gateway
-      - ${PWD}/shared:/app/shared
-      # Centralized Go cache
+      - ${PWD}/shared:/app/shared:ro
+      # Go caches
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - api-gateway-build-cache:/app/services/api-gateway/tmp
+      # Service cache
+      - api-gateway-cache:/app/tmp
     networks:
       - echo-network
     depends_on:
-      - auth-service
+      - postgres
+      - redis
+      - kafka
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "api-gateway"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Auth Service
+  # Auth Service - Development Mode with Hot Reload
   # ---------------------------------------------------------------------------
   auth-service:
     build:
       context: ${PWD}
       dockerfile: services/auth-service/Dockerfile.dev
-    container_name: echo-auth-service
-    image: auth-service:latest
-    expose:
-      - "8081"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/auth-service/.env
+      target: development
+    container_name: echo-auth-service-dev
+    image: echo/auth-service:dev
+    ports:
+      - "8081:8081"
+      - "2346:2345" # Debugger port
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8081
       APP_ENV: development
       CONFIG_PATH: /app/services/auth-service/configs/config.yaml
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
 
       # Database Configuration
       DB_HOST: postgres
@@ -314,7 +325,9 @@ services:
       DB_USER: ${POSTGRES_USER:-echo}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       DB_NAME: ${POSTGRES_DB:-echo_db}
-      DB_SSL_MODE: disable
+      DB_SSLMODE: disable
+      DB_MAX_OPEN_CONNS: 10
+      DB_MAX_IDLE_CONNS: 5
 
       # Redis Configuration
       REDIS_HOST: redis
@@ -322,17 +335,30 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
       REDIS_DB: 0
 
+      # Security (Development)
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_key_change_in_production}
+      JWT_EXPIRY: 24h
+      REFRESH_TOKEN_EXPIRY: 168h
+
       # External Services
-      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+      LOCATION_SERVICE_URL: http://location-service:8090
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
     volumes:
-      # Source code (hot reload)
+      # Source code for hot reload
       - ${PWD}/services/auth-service:/app/services/auth-service
-      - ${PWD}/shared:/app/shared
-      # Centralized Go cache
+      - ${PWD}/shared:/app/shared:ro
+      # Go caches
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - auth-service-build-cache:/app/services/auth-service/tmp
+      # Service cache
+      - auth-service-cache:/app/tmp
     networks:
       - echo-network
     depends_on:
@@ -340,79 +366,39 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
-      location-service:
-        condition: service_started
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "auth-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # User Service
-  # ---------------------------------------------------------------------------
-  user-service:
-    build:
-      context: ${PWD}
-      dockerfile: services/user-service/Dockerfile.dev
-    container_name: echo-user-service
-    image: user-service:latest
-    expose:
-      - "8082"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/user-service/.env
-    environment:
-      # Server Configuration
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8082
-      APP_ENV: development
-      CONFIG_PATH: /app/services/user-service/configs/config.yaml
-      LOG_LEVEL: debug
-      LOG_FORMAT: console
-      # Database Configuration
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-echo}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
-      DB_NAME: ${POSTGRES_DB:-echo_db}
-      DB_SSLMODE: disable
-      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
-
-    volumes:
-      # Source code (hot reload)
-      - ${PWD}/services/user-service:/app/services/user-service
-      - ${PWD}/shared:/app/shared
-      # Centralized Go cache
-      - go-mod-cache:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - user-service-build-cache:/app/services/user-service/tmp
-    networks:
-      - echo-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  # ---------------------------------------------------------------------------
-  # Message Service
+  # Message Service - Development Mode with Hot Reload
   # ---------------------------------------------------------------------------
   message-service:
     build:
       context: ${PWD}
       dockerfile: services/message-service/Dockerfile.dev
-    container_name: echo-message-service
-    image: message-service:latest
-    expose:
-      - "8083"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/message-service/.env
+      target: development
+    container_name: echo-message-service-dev
+    image: echo/message-service:dev
+    ports:
+      - "8083:8083"
+      - "8084:8084" # WebSocket port
+      - "2347:2345" # Debugger port
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8083
+      WS_PORT: 8084
       APP_ENV: development
       LOG_LEVEL: debug
       LOG_FORMAT: console
@@ -429,22 +415,39 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
-      REDIS_DB: 0
+      REDIS_DB: 1
 
       # Kafka Configuration
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC: messages
       KAFKA_NOTIFICATION_TOPIC: notifications
-      KAFKA_CONSUMER_GROUP: message-service
+      KAFKA_CONSUMER_GROUP: message-service-dev
+      KAFKA_SESSION_TIMEOUT: 10s
+      KAFKA_HEARTBEAT_INTERVAL: 3s
+
+      # WebSocket Configuration
+      WS_READ_BUFFER_SIZE: 1024
+      WS_WRITE_BUFFER_SIZE: 1024
+      WS_MAX_MESSAGE_SIZE: 512000
+      WS_PING_INTERVAL: 30s
+      WS_PONG_TIMEOUT: 60s
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
     volumes:
-      # Source code (hot reload)
+      # Source code for hot reload
       - ${PWD}/services/message-service:/app/services/message-service
-      - ${PWD}/shared:/app/shared
-      # Centralized Go cache
+      - ${PWD}/shared:/app/shared:ro
+      # Go caches
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - message-service-build-cache:/app/services/message-service/tmp
+      # Service cache
+      - message-service-cache:/app/tmp
     networks:
       - echo-network
     depends_on:
@@ -454,34 +457,171 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8083/health" ]
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 40s
     restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "message-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Media Service
+  # User Service - Development Mode with Hot Reload
+  # ---------------------------------------------------------------------------
+  user-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/user-service/Dockerfile.dev
+      target: development
+    container_name: echo-user-service-dev
+    image: echo/user-service:dev
+    ports:
+      - "8082:8082"
+      - "2348:2345" # Debugger port
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8082
+      APP_ENV: development
+      CONFIG_PATH: /app/services/user-service/configs/config.yaml
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSLMODE: disable
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: 2
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
+    volumes:
+      # Source code for hot reload
+      - ${PWD}/services/user-service:/app/services/user-service
+      - ${PWD}/shared:/app/shared:ro
+      # Go caches
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service cache
+      - user-service-cache:/app/tmp
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8082/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "user-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
+
+  # ---------------------------------------------------------------------------
+  # Location Service - Development Mode with Hot Reload
+  # ---------------------------------------------------------------------------
+  location-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/location-service/Dockerfile.dev
+      target: development
+    container_name: echo-location-service-dev
+    image: echo/location-service:dev
+    ports:
+      - "8090:8090"
+      - "2349:2345" # Debugger port
+    environment:
+      # Server Configuration
+      HOST: 0.0.0.0
+      PORT: 8090
+      LOG_LEVEL: debug
+
+      # Database Configuration (if needed)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSLMODE: disable
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
+    volumes:
+      # Source code for hot reload
+      - ${PWD}/services/location-service:/app/services/location-service
+      - ${PWD}/shared:/app/shared:ro
+      # Data directory
+      - ${PWD}/services/location-service/data:/app/data:ro
+      # Go caches
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service cache
+      - location-service-cache:/app/tmp
+    networks:
+      - echo-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8090/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "location-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
+
+  # ---------------------------------------------------------------------------
+  # Media Service - Development Mode with Hot Reload
   # ---------------------------------------------------------------------------
   media-service:
     build:
       context: ${PWD}
       dockerfile: services/media-service/Dockerfile.dev
-    container_name: echo-media-service
-    image: media-service:latest
-    expose:
-      - "8084"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/media-service/.env
+      target: development
+    container_name: echo-media-service-dev
+    image: echo/media-service:dev
+    ports:
+      - "8085:8085"
+      - "2350:2345" # Debugger port
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8084
+      SERVER_PORT: 8085
       APP_ENV: development
       CONFIG_PATH: /app/services/media-service/configs/config.yaml
       LOG_LEVEL: debug
@@ -499,19 +639,36 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
-      REDIS_DB: 0
+      REDIS_DB: 3
 
-      FEATURE_DEDUPLICATION_ENABLED: false
+      # Storage Configuration
+      STORAGE_TYPE: local
+      STORAGE_PATH: /app/media
+      MAX_FILE_SIZE: 10485760 # 10MB
+      ALLOWED_MIME_TYPES: "image/jpeg,image/png,image/gif,video/mp4,audio/mpeg"
 
+      # Features
+      FEATURE_DEDUPLICATION_ENABLED: "true"
+      FEATURE_COMPRESSION_ENABLED: "true"
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
     volumes:
-      # Source code (hot reload)
+      # Source code for hot reload
       - ${PWD}/services/media-service:/app/services/media-service
-      - ${PWD}/shared:/app/shared
-      # Centralized Go cache
+      - ${PWD}/shared:/app/shared:ro
+      # Media storage
+      - ${PWD}/data/media:/app/media
+      # Go caches
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - media-service-build-cache:/app/services/media-service/tmp
+      # Service cache
+      - media-service-cache:/app/tmp
     networks:
       - echo-network
     depends_on:
@@ -519,34 +676,37 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8085/health" ]
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 40s
     restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "media-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Presence Service
+  # Presence Service - Development Mode with Hot Reload
   # ---------------------------------------------------------------------------
   presence-service:
     build:
       context: ${PWD}
       dockerfile: services/presence-service/Dockerfile.dev
-    container_name: echo-presence-service
-    image: presence-service:latest
-    expose:
-      - "8085"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/presence-service/.env
+      target: development
+    container_name: echo-presence-service-dev
+    image: echo/presence-service:dev
+    ports:
+      - "8086:8086"
+      - "2351:2345" # Debugger port
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8085
+      SERVER_PORT: 8086
       APP_ENV: development
       CONFIG_PATH: /app/services/presence-service/configs/config.yaml
       LOG_LEVEL: debug
@@ -558,22 +718,35 @@ services:
       DB_USER: ${POSTGRES_USER:-echo}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       DB_NAME: ${POSTGRES_DB:-echo_db}
-      DB_SSL_MODE: disable
+      DB_SSLMODE: disable
 
       # Redis Configuration
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
-      REDIS_DB: 0
+      REDIS_DB: 4
+
+      # Presence Configuration
+      PRESENCE_UPDATE_INTERVAL: 30s
+      PRESENCE_TIMEOUT: 300s
+      PRESENCE_CLEANUP_INTERVAL: 60s
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
     volumes:
-      # Source code (hot reload)
+      # Source code for hot reload
       - ${PWD}/services/presence-service:/app/services/presence-service
-      - ${PWD}/shared:/app/shared
-      # Centralized Go cache
+      - ${PWD}/shared:/app/shared:ro
+      # Go caches
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - presence-service-build-cache:/app/services/presence-service/tmp
+      # Service cache
+      - presence-service-cache:/app/tmp
     networks:
       - echo-network
     depends_on:
@@ -581,58 +754,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8085/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 40s
     restart: unless-stopped
-
-  # ---------------------------------------------------------------------------
-  # Location Service
-  # ---------------------------------------------------------------------------
-  location-service:
-    build:
-      context: ${PWD}
-      dockerfile: services/location-service/Dockerfile.dev
-    container_name: location-service
-    image: location-service:latest
-    ports:
-      - "8090:8090"
-    env_file:
-      - ${PWD}/.env
-      - ${PWD}/services/location-service/.env
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-echo}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
-      DB_NAME: ${POSTGRES_DB:-echo_db}
-      DB_SSLMODE: disable
-      # Server Configuration
-      HOST: 0.0.0.0
-      PORT: 8090
-      LOG_LEVEL: debug
-    volumes:
-      # Source code (hot reload)
-      - ${PWD}/services/location-service:/app/services/location-service
-      - ${PWD}/shared:/app/shared
-      # Data directory
-      - ${PWD}/services/location-service/data:/app/data:ro
-      # Centralized Go cache
-      - go-mod-cache:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
-      # Service build cache
-      - location-service-build-cache:/app/services/location-service/tmp
-    networks:
-      - echo-network
-    healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health" ]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
-    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "presence-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"

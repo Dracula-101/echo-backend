@@ -187,6 +187,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	} else {
 		session.SessionId = activeSession.ID
 		session.SessionToken = activeSession.SessionToken
+		userResult.Session.RefreshToken = *activeSession.RefreshToken
 	}
 
 	h.log.Info("Login successful",
