@@ -25,4 +25,6 @@ COPY services/api-gateway/.env .env
 
 EXPOSE 8080 9090
 
+
+# Add a development stage for Docker Compose build target
 CMD ["air", "-c", ".air.toml"]

@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # locate .env (only used for local fallback)
 ENV_FILE=""
-for candidate in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/../.env" "$SCRIPT_DIR/../../.env" "$SCRIPT_DIR/../../../.env"; do
+for candidate in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/.${PWD}/.env" "$SCRIPT_DIR/../.${PWD}/.env" "$SCRIPT_DIR/../../.${PWD}/.env"; do
   [ -f "$candidate" ] && ENV_FILE="$candidate" && break
 done
 

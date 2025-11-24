@@ -139,14 +139,12 @@ services:
   db-init:
     image: postgres:15-alpine
     container_name: echo-db-init
-    profiles: [ "init" ]
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-echo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
       POSTGRES_DB: ${POSTGRES_DB:-echo_db}
-      INIT_MODE: ${INIT_MODE:-development}
     volumes:
       - ${PWD}/infra/scripts:/scripts:ro
       - ${PWD}/database:/database:ro
@@ -158,25 +156,11 @@ services:
     entrypoint: [ "/bin/sh" ]
     command: >
       -c "
-        apk add --no-cache bash postgresql-client &&
-        echo '[INFO] Waiting for PostgreSQL to be ready...' &&
-        
-        # Wait for database to be fully ready
-        until PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -U $$POSTGRES_USER -d $$POSTGRES_DB -c '\\q' 2>/dev/null; do
-          echo '  ⏳ PostgreSQL is starting up...';
-          sleep 2;
-        done;
-        
-        echo '[INFO] PostgreSQL is ready!' &&
-        
-        # Run initialization script
-        if [ -f /scripts/init-db.sh ]; then
-          echo '[INFO] Running database initialization...' &&
-          cd /scripts &&
-          bash init-db.sh;
-        else
-          echo '[WARN] No init-db.sh script found, skipping initialization';
-        fi
+        apk add --no-cache bash &&
+        echo '[INFO] Waiting for postgres to be ready...' &&
+        sleep 2 &&
+        cd /scripts &&
+        bash init-db.sh
       "
     restart: "no"
 
@@ -210,7 +194,8 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "srvr,mntr,ruok,stat"
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "*"
 
   kafka:
     ports:
@@ -219,31 +204,41 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+
+      # Listeners
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Zookeeper Connection
+      KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: 30000
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 30000
+
       # Development settings
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_DELETE_TOPIC_ENABLE: "true"
       KAFKA_LOG_LEVEL: DEBUG
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
   # ===========================================================================
   # APPLICATION SERVICES FOR DEVELOPMENT
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # API Gateway - Development Mode with Hot Reload
+  # API Gateway - Development Mode with Hot Reload (ONLY EXPOSED SERVICE)
   # ---------------------------------------------------------------------------
   api-gateway:
     build:
       context: ${PWD}
       dockerfile: services/api-gateway/Dockerfile.dev
-      target: development
     container_name: echo-api-gateway-dev
     image: echo/api-gateway:dev
     ports:
-      - "8080:8080"
-      - "2345:2345" # Debugger port
+      - "8080:8080" # HTTP API - ONLY external port
+      - "2345:2345" # Debugger port (optional for development)
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -253,12 +248,12 @@ services:
       LOG_LEVEL: debug
       LOG_FORMAT: console
 
-      # Service Discovery
+      # Service Discovery - Internal network only
       AUTH_SERVICE_URL: http://auth-service:8081
       USER_SERVICE_URL: http://user-service:8082
       MESSAGE_SERVICE_URL: http://message-service:8083
-      MEDIA_SERVICE_URL: http://media-service:8084
-      PRESENCE_SERVICE_URL: http://presence-service:8085
+      MEDIA_SERVICE_URL: http://media-service:8085
+      PRESENCE_SERVICE_URL: http://presence-service:8086
 
       # Development Features
       ENABLE_HOT_RELOAD: "true"
@@ -280,9 +275,22 @@ services:
     networks:
       - echo-network
     depends_on:
-      - postgres
-      - redis
-      - kafka
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      message-service:
+        condition: service_healthy
+      media-service:
+        condition: service_healthy
+      presence-service:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 30s
@@ -298,18 +306,19 @@ services:
       com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Auth Service - Development Mode with Hot Reload
+  # Auth Service - Development Mode with Hot Reload (INTERNAL ONLY)
   # ---------------------------------------------------------------------------
   auth-service:
     build:
       context: ${PWD}
       dockerfile: services/auth-service/Dockerfile.dev
-      target: development
     container_name: echo-auth-service-dev
     image: echo/auth-service:dev
-    ports:
-      - "8081:8081"
-      - "2346:2345" # Debugger port
+    # NO PORTS EXPOSED - Internal network only
+    expose:
+      - "8081"
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -341,7 +350,7 @@ services:
       REFRESH_TOKEN_EXPIRY: 168h
 
       # External Services
-      LOCATION_SERVICE_URL: http://location-service:8090
+      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
 
       # Development Features
       ENABLE_HOT_RELOAD: "true"
@@ -381,19 +390,20 @@ services:
       com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Message Service - Development Mode with Hot Reload
+  # Message Service - Development Mode with Hot Reload (INTERNAL ONLY)
   # ---------------------------------------------------------------------------
   message-service:
     build:
       context: ${PWD}
       dockerfile: services/message-service/Dockerfile.dev
-      target: development
     container_name: echo-message-service-dev
     image: echo/message-service:dev
-    ports:
-      - "8083:8083"
-      - "8084:8084" # WebSocket port
-      - "2347:2345" # Debugger port
+    # NO PORTS EXPOSED - Internal network only
+    expose:
+      - "8083"
+      - "8084" # WebSocket port (internal)
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -418,7 +428,7 @@ services:
       REDIS_DB: 1
 
       # Kafka Configuration
-      KAFKA_BROKERS: kafka:9092
+      KAFKA_BROKERS: kafka:29092
       KAFKA_TOPIC: messages
       KAFKA_NOTIFICATION_TOPIC: notifications
       KAFKA_CONSUMER_GROUP: message-service-dev
@@ -472,18 +482,19 @@ services:
       com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # User Service - Development Mode with Hot Reload
+  # User Service - Development Mode with Hot Reload (INTERNAL ONLY)
   # ---------------------------------------------------------------------------
   user-service:
     build:
       context: ${PWD}
       dockerfile: services/user-service/Dockerfile.dev
-      target: development
     container_name: echo-user-service-dev
     image: echo/user-service:dev
-    ports:
-      - "8082:8082"
-      - "2348:2345" # Debugger port
+    # NO PORTS EXPOSED - Internal network only
+    expose:
+      - "8082"
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -545,18 +556,19 @@ services:
       com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Location Service - Development Mode with Hot Reload
+  # Location Service - Development Mode with Hot Reload (INTERNAL ONLY)
   # ---------------------------------------------------------------------------
   location-service:
     build:
       context: ${PWD}
       dockerfile: services/location-service/Dockerfile.dev
-      target: development
     container_name: echo-location-service-dev
     image: echo/location-service:dev
-    ports:
-      - "8090:8090"
-      - "2349:2345" # Debugger port
+    # NO PORTS EXPOSED - Internal network only
+    expose:
+      - "8090"
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       HOST: 0.0.0.0
@@ -606,18 +618,19 @@ services:
       com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Media Service - Development Mode with Hot Reload
+  # Media Service - Development Mode with Hot Reload (INTERNAL ONLY)
   # ---------------------------------------------------------------------------
   media-service:
     build:
       context: ${PWD}
       dockerfile: services/media-service/Dockerfile.dev
-      target: development
     container_name: echo-media-service-dev
     image: echo/media-service:dev
-    ports:
-      - "8085:8085"
-      - "2350:2345" # Debugger port
+    # NO PORTS EXPOSED - Internal network only
+    expose:
+      - "8085"
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0
@@ -691,18 +704,19 @@ services:
       com.echo.mode: "development"
 
   # ---------------------------------------------------------------------------
-  # Presence Service - Development Mode with Hot Reload
+  # Presence Service - Development Mode with Hot Reload (INTERNAL ONLY)
   # ---------------------------------------------------------------------------
   presence-service:
     build:
       context: ${PWD}
       dockerfile: services/presence-service/Dockerfile.dev
-      target: development
     container_name: echo-presence-service-dev
     image: echo/presence-service:dev
-    ports:
-      - "8086:8086"
-      - "2351:2345" # Debugger port
+    # NO PORTS EXPOSED - Internal network only
+    expose:
+      - "8086"
+    env_file:
+      - ${PWD}/.env
     environment:
       # Server Configuration
       SERVER_HOST: 0.0.0.0

@@ -39,7 +39,7 @@ services:
   auth-service:
     protocol: http
     addresses:
-      - ${AUTH_SERVICE_ADDR:localhost:8081}
+      - ${AUTH_SERVICE_URL:localhost:8081}
     health_check:
       enabled: true
       path: /health
@@ -52,7 +52,7 @@ services:
   user-service:
     protocol: http
     addresses:
-      - ${USER_SERVICE_ADDR:localhost:8082}
+      - ${USER_SERVICE_URL:localhost:8082}
     health_check:
       enabled: true
       path: /health
@@ -65,7 +65,7 @@ services:
   message-service:
     protocol: http
     addresses:
-      - ${MESSAGE_SERVICE_ADDR:localhost:8083}
+      - ${MESSAGE_SERVICE_URL:localhost:8083}
     health_check:
       enabled: true
       path: /health
@@ -78,7 +78,7 @@ services:
   media-service:
     protocol: http
     addresses:
-      - ${MEDIA_SERVICE_ADDR:localhost:8084}
+      - ${MEDIA_SERVICE_URL:localhost:8084}
     health_check:
       enabled: true
       path: /health 
@@ -91,7 +91,7 @@ services:
   presence-service:
     protocol: http
     addresses:
-      - ${PRESENCE_SERVICE_ADDR:localhost:8085}
+      - ${PRESENCE_SERVICE_URL:localhost:8085}
     health_check:
       enabled: true
       path: /health

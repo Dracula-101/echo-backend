@@ -25,4 +25,6 @@ COPY services/presence-service/.env .env
 
 EXPOSE 8085 9095
 
+
+# Add a development stage for Docker Compose build target
 CMD ["air", "-c", ".air.toml"]
