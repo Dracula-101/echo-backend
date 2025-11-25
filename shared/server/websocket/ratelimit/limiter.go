@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"sync"
 
 	"golang.org/x/time/rate"
@@ -38,7 +39,7 @@ func (l *TokenBucketLimiter) Allow(key string) bool {
 
 // Wait waits until action is allowed
 func (l *TokenBucketLimiter) Wait(key string) error {
-	return l.getLimiter(key).Wait(nil)
+	return l.getLimiter(key).Wait(context.Background())
 }
 
 // Reset resets the limiter for a key

@@ -282,9 +282,6 @@ func (s *messageService) sendPushNotification(message *models.Message, recipient
 func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) (*models.MessagesResponse, error) {
 	messages, err := s.repo.GetMessages(ctx, conversationID, params)
 	if err != nil {
-		if appErr, ok := err.(pkgErrors.AppError); ok {
-			return nil, appErr.WithService("message-service")
-		}
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get messages").
 			WithService("message-service").
 			WithDetail("conversation_id", conversationID.String())

@@ -6,7 +6,6 @@ replace shared => ../../shared
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
 	shared v0.0.0-00010101000000-000000000000
 )
 
@@ -17,6 +16,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/redis/go-redis/v9 v9.16.0 // indirect
