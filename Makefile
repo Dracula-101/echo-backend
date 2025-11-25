@@ -97,6 +97,7 @@ include infra/make/message.mk
 include infra/make/location.mk
 include infra/make/media.mk
 include infra/make/presence.mk
+include infra/make/ws.mk
 include infra/make/kafka.mk
 include infra/make/database.mk
 include infra/make/redis.mk

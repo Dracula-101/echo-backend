@@ -137,6 +137,7 @@ const (
 	XBrowserVersion     = "X-Browser-Version"
 	XSessionID          = "X-Session-ID"
 	XTenantID           = "X-Tenant-ID"
+	XUserID             = "X-User-ID"
 
 	// ------------ Response Time & Performance Headers ------------
 	XResponseTime = "X-Response-Time"

@@ -10,5 +10,6 @@ use (
 	./services/notification-service
 	./services/presence-service
 	./services/user-service
+	./services/ws-service
 	./shared
 )

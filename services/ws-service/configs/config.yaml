@@ -1,0 +1,72 @@
+service:
+  name: ws-service
+  version: 1.0.0
+  environment: ${ENV:development}
+
+server:
+  port: ${SERVER_PORT:8087}
+  host: ${SERVER_HOST:0.0.0.0}
+  read_timeout: ${SERVER_READ_TIMEOUT:15s}
+  write_timeout: ${SERVER_WRITE_TIMEOUT:15s}
+  idle_timeout: ${SERVER_IDLE_TIMEOUT:60s}
+  shutdown_timeout: ${SERVER_SHUTDOWN_TIMEOUT:30s}
+  max_header_bytes: ${SERVER_MAX_HEADER_BYTES:1048576}
+
+database:
+  postgres:
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:5432}
+    user: ${DB_USER:postgres}
+    password: ${DB_PASSWORD}
+    db_name: ${DB_NAME:echo_db}
+    ssl_mode: ${DB_SSL_MODE:disable}
+    max_open_conns: ${DB_MAX_OPEN_CONNS:25}
+    max_idle_conns: ${DB_MAX_IDLE_CONNS:5}
+    conn_max_lifetime: ${DB_CONN_MAX_LIFETIME:5m}
+    conn_max_idle_time: ${DB_CONN_MAX_IDLE_TIME:5m}
+
+cache:
+  enabled: ${CACHE_ENABLED:true}
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    db: ${REDIS_DB:0}
+    max_retries: ${REDIS_MAX_RETRIES:3}
+    pool_size: ${REDIS_POOL_SIZE:10}
+    min_idle_conns: ${REDIS_MIN_IDLE_CONNS:5}
+    dial_timeout: ${REDIS_DIAL_TIMEOUT:5s}
+    read_timeout: ${REDIS_READ_TIMEOUT:3s}
+    write_timeout: ${REDIS_WRITE_TIMEOUT:3s}
+
+websocket:
+  # Connection timeouts
+  write_wait: ${WS_WRITE_WAIT:10s}
+  pong_wait: ${WS_PONG_WAIT:60s}
+  ping_period: ${WS_PING_PERIOD:54s}
+
+  # Buffer sizes
+  read_buffer_size: ${WS_READ_BUFFER_SIZE:1024}
+  write_buffer_size: ${WS_WRITE_BUFFER_SIZE:1024}
+  max_message_size: ${WS_MAX_MESSAGE_SIZE:10485760}
+  client_buffer_size: ${WS_CLIENT_BUFFER_SIZE:256}
+
+  # Cleanup and maintenance
+  cleanup_interval: ${WS_CLEANUP_INTERVAL:30s}
+  stale_connection_timeout: ${WS_STALE_CONNECTION_TIMEOUT:90s}
+
+  # Hub channels
+  register_buffer: ${WS_REGISTER_BUFFER:256}
+  unregister_buffer: ${WS_UNREGISTER_BUFFER:256}
+  broadcast_buffer: ${WS_BROADCAST_BUFFER:1024}
+
+logging:
+  level: ${LOG_LEVEL:info}
+  format: ${LOG_FORMAT:json}
+  output: ${LOG_OUTPUT:stdout}
+  time_format: ${LOG_TIME_FORMAT:rfc3339}
+
+shutdown:
+  timeout: ${SHUTDOWN_TIMEOUT:30s}
+  wait_for_connections: ${SHUTDOWN_WAIT_FOR_CONNECTIONS:true}
+  drain_timeout: ${SHUTDOWN_DRAIN_TIMEOUT:5s}

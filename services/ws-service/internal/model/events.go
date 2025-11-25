@@ -76,6 +76,26 @@ const (
 	EventSystemAnnouncement EventType = "system.announcement"
 )
 
+// RealtimeEvent represents a real-time event to be broadcast via WebSocket
+type RealtimeEvent struct {
+	// Event metadata
+	ID        uuid.UUID     `json:"id"`
+	Type      EventType     `json:"type"`
+	Category  EventCategory `json:"category"`
+	Timestamp time.Time     `json:"timestamp"`
+
+	// Routing information
+	Recipients []uuid.UUID `json:"recipients"`           // User IDs to receive this event
+	Sender     *uuid.UUID  `json:"sender,omitempty"`     // User ID of sender (if applicable)
+
+	// Event payload (specific to event type)
+	Payload interface{} `json:"payload"`
+
+	// Optional metadata
+	Priority int `json:"priority,omitempty"` // 0=normal, 1=high, 2=urgent
+	TTL      int `json:"ttl,omitempty"`      // Time to live in seconds (for offline storage)
+}
+
 // BroadcastRequest represents a request from other services to broadcast events
 type BroadcastRequest struct {
 	EventType  EventType   `json:"event_type" validate:"required"`
@@ -86,61 +106,10 @@ type BroadcastRequest struct {
 	TTL        int         `json:"ttl,omitempty"`
 }
 
-// Specific Event Payloads
-
-// PresencePayload for presence events
-type PresencePayload struct {
-	UserID       uuid.UUID  `json:"user_id"`
-	OnlineStatus string     `json:"online_status"`
-	CustomStatus string     `json:"custom_status,omitempty"`
-	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
-}
-
-// MessagePayload for message events
-type MessagePayload struct {
-	MessageID      uuid.UUID `json:"message_id"`
-	ConversationID uuid.UUID `json:"conversation_id"`
-	SenderID       uuid.UUID `json:"sender_id"`
-	Content        string    `json:"content,omitempty"`
-	MessageType    string    `json:"message_type,omitempty"` // text, image, video, etc.
-	Timestamp      time.Time `json:"timestamp"`
-}
-
-// TypingPayload for typing events
-type TypingPayload struct {
-	ConversationID uuid.UUID `json:"conversation_id"`
-	UserID         uuid.UUID `json:"user_id"`
-	IsTyping       bool      `json:"is_typing"`
-}
-
-// CallPayload for call events
-type CallPayload struct {
-	CallID     uuid.UUID `json:"call_id"`
-	CallerID   uuid.UUID `json:"caller_id"`
-	CalleeID   uuid.UUID `json:"callee_id"`
-	CallType   string    `json:"call_type"` // audio, video
-	RoomID     string    `json:"room_id,omitempty"`
-	SignalData string    `json:"signal_data,omitempty"` // WebRTC signaling data
-}
-
-// NotificationPayload for notification events
-type NotificationPayload struct {
-	NotificationID uuid.UUID              `json:"notification_id"`
-	Title          string                 `json:"title"`
-	Body           string                 `json:"body"`
-	Data           map[string]interface{} `json:"data,omitempty"`
-	ActionURL      string                 `json:"action_url,omitempty"`
-}
-
-// UserPayload for user events
-type UserPayload struct {
-	UserID  uuid.UUID              `json:"user_id"`
-	Updates map[string]interface{} `json:"updates"`
-}
-
-// SystemPayload for system events
-type SystemPayload struct {
-	Title   string                 `json:"title"`
-	Message string                 `json:"message"`
-	Data    map[string]interface{} `json:"data,omitempty"`
+// BroadcastResponse represents the response after broadcasting
+type BroadcastResponse struct {
+	EventID         uuid.UUID `json:"event_id"`
+	Recipients      int       `json:"recipients"`
+	OnlineRecipients int      `json:"online_recipients"`
+	Timestamp       time.Time `json:"timestamp"`
 }

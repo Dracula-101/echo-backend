@@ -67,9 +67,3 @@ type BulkPresenceRequest struct {
 type BulkPresenceResponse struct {
 	Presences map[uuid.UUID]UserPresence `json:"presences"`
 }
-
-// PresenceEvent represents a WebSocket event message
-type PresenceEvent struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
-}

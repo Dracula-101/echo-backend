@@ -67,6 +67,11 @@ volumes:
     labels:
       com.echo.description: "Presence Service build cache"
 
+  ws-service-cache:
+    driver: local
+    labels:
+      com.echo.description: "WebSocket Service build cache"
+
 # =============================================================================
 # SERVICES CONFIGURATION OVERRIDES
 # =============================================================================
@@ -779,5 +784,89 @@ services:
     tty: true
     labels:
       com.echo.service: "presence-service"
+      com.echo.tier: "application"
+      com.echo.mode: "development"
+
+  # =============================================================================
+  # WebSocket Service - Development Mode with Hot Reload (INTERNAL ONLY)
+  # =============================================================================
+  ws-service:
+    build:
+      context: ${PWD}
+      dockerfile: services/ws-service/Dockerfile.dev
+    container_name: echo-ws-service-dev
+    image: echo/ws-service:dev
+    ports:
+      - "8087:8087"
+    expose:
+      - "8087"
+    env_file:
+      - ${PWD}/.env
+    environment:
+      # Server Configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8087
+      APP_ENV: development
+      CONFIG_PATH: /app/services/ws-service/configs/config.yaml
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-echo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
+      DB_NAME: ${POSTGRES_DB:-echo_db}
+      DB_SSLMODE: disable
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      REDIS_DB: 5
+
+      # WebSocket Configuration
+      WS_WRITE_WAIT: 10s
+      WS_PONG_WAIT: 60s
+      WS_PING_PERIOD: 54s
+      WS_READ_BUFFER_SIZE: 1024
+      WS_WRITE_BUFFER_SIZE: 1024
+      WS_MAX_MESSAGE_SIZE: 10485760
+      WS_CLIENT_BUFFER_SIZE: 256
+
+      # Development Features
+      ENABLE_HOT_RELOAD: "true"
+      ENABLE_DEBUG: "true"
+
+      # Performance Settings
+      GOMAXPROCS: 2
+      GOGC: 100
+    volumes:
+      # Source code for hot reload
+      - ${PWD}/services/ws-service:/app/services/ws-service
+      - ${PWD}/shared:/app/shared:ro
+      # Go caches
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      # Service cache
+      - ws-service-cache:/app/tmp
+    networks:
+      - echo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8087/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    labels:
+      com.echo.service: "ws-service"
       com.echo.tier: "application"
       com.echo.mode: "development"

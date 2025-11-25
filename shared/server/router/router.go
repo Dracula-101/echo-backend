@@ -66,6 +66,16 @@ func (r *Router) RegisterExact(method, path string, handler http.Handler) *mux.R
 	return route
 }
 
+func (r *Router) RegisterFuncExact(method, path string, handler http.HandlerFunc) *mux.Route {
+	route := r.mux.NewRoute().Path(path).Methods(method).HandlerFunc(handler)
+	r.routes = append(r.routes, RouteInfo{
+		Method:  method,
+		Pattern: path,
+		Type:    RouteTypeExact,
+	})
+	return route
+}
+
 func (r *Router) With(middlewares ...middleware.Handler) *Router {
 	for _, m := range middlewares {
 		r.mux.Use(func(h http.Handler) http.Handler {
@@ -80,7 +90,7 @@ func (r *Router) Handle(path string, method string, handler http.Handler) *mux.R
 }
 
 func (r *Router) HandleFunc(path string, method string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(method, path, handler)
+	return r.RegisterFuncExact(method, path, handler)
 }
 
 func (r *Router) Get(path string, handler http.HandlerFunc) *mux.Route {

@@ -11,7 +11,6 @@ import (
 	healthCheckers "presence-service/internal/health/checkers"
 	"presence-service/internal/repo"
 	"presence-service/internal/service"
-	"presence-service/internal/websocket"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -129,7 +128,6 @@ func setupRoutes(
 
 func createRouter(
 	presenceHandler *handler.PresenceHandler,
-	wsConnectionHandler *websocket.ConnectionHandler,
 	healthHandler *health.Handler,
 	log logger.Logger,
 ) (*router.Router, error) {
@@ -150,8 +148,6 @@ func createRouter(
 			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
-	builder = builder.WithStatusEndpoint("/ws", wsConnectionHandler.HandleConnection)
-
 	// Add liveness and readiness endpoints
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/live", healthHandler.Liveness)
@@ -166,7 +162,7 @@ func createRouter(
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, wsManager *websocket.Manager, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
@@ -175,16 +171,6 @@ func setupShutdownManager(srv *server.Server, wsManager *websocket.Manager, log 
 	shutdownMgr.RegisterWithPriority(
 		"http-server",
 		shutdown.ServerShutdownHook(srv),
-		shutdown.PriorityHigh,
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"websocket-manager",
-		shutdown.Hook(func(ctx context.Context) error {
-			log.Info("Shutting down WebSocket manager")
-			wsManager.Shutdown()
-			return nil
-		}),
 		shutdown.PriorityHigh,
 	)
 
@@ -277,20 +263,14 @@ func main() {
 	// Initialize repository
 	presenceRepo := repo.NewPresenceRepository(dbClient, log)
 
-	// Initialize centralized WebSocket manager (handles all WebSocket operations)
-	wsManager := websocket.NewManager(presenceRepo, cacheClient, log)
-	wsManager.Start()
-	log.Info("WebSocket Manager initialized and started")
-
-	// Initialize legacy HTTP service (delegates most operations to wsManager)
-	presenceService := service.NewPresenceService(presenceRepo, cacheClient, wsManager.GetHub(), log)
+	// Initialize legacy HTTP service
+	presenceService := service.NewPresenceService(presenceRepo, cacheClient, log)
 
 	// Initialize handlers
 	presenceHandler := handler.NewPresenceHandler(presenceService, log)
-	wsConnectionHandler := websocket.NewConnectionHandler(wsManager, log)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(presenceHandler, wsConnectionHandler, healthHandler, log)
+	routerInstance, err := createRouter(presenceHandler, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}
@@ -311,7 +291,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, wsManager, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, log, cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {

@@ -5,22 +5,12 @@ import (
 	"fmt"
 	"presence-service/internal/model"
 	"presence-service/internal/repo"
-	"presence-service/internal/websocket"
 
 	"shared/pkg/cache"
 	"shared/pkg/logger"
 
 	"github.com/google/uuid"
 )
-
-// WebSocketHub interface for broadcasting (to avoid circular dependency)
-// This matches the hub in internal/websocket package
-type WebSocketHub interface {
-	IsUserOnline(userID uuid.UUID) bool
-	GetOnlineUsers() []uuid.UUID
-	BroadcastPresenceUpdate(update *websocket.HubPresenceUpdate)
-	BroadcastTypingIndicator(typing *websocket.HubTypingBroadcast)
-}
 
 type PresenceService interface {
 	// Presence management
@@ -33,25 +23,18 @@ type PresenceService interface {
 	// Typing indicators
 	SetTypingIndicator(ctx context.Context, indicator *model.TypingIndicator) error
 	GetTypingIndicators(ctx context.Context, conversationID uuid.UUID) ([]*model.TypingIndicator, error)
-
-	// Centralized event broadcasting (for other services)
-	BroadcastEvent(ctx context.Context, event *model.RealtimeEvent) error
-	IsUserOnline(ctx context.Context, userID uuid.UUID) (bool, error)
-	GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error)
 }
 
 type presenceService struct {
 	repo  repo.PresenceRepository
 	cache cache.Cache
-	hub   WebSocketHub
 	log   logger.Logger
 }
 
-func NewPresenceService(repo repo.PresenceRepository, cache cache.Cache, hub WebSocketHub, log logger.Logger) PresenceService {
+func NewPresenceService(repo repo.PresenceRepository, cache cache.Cache, log logger.Logger) PresenceService {
 	return &presenceService{
 		repo:  repo,
 		cache: cache,
-		hub:   hub,
 		log:   log,
 	}
 }
@@ -168,98 +151,15 @@ func (s *presenceService) applyPrivacyFilters(
 	case "nobody":
 		filtered.LastSeenAt = nil
 	case "contacts":
+		// TODO: Check if requester is in target's contacts
 	}
 
 	switch privacy.OnlineStatusVisibility {
 	case "nobody":
 		filtered.OnlineStatus = "offline"
 	case "contacts":
+		// TODO: Check if requester is in target's contacts
 	}
 
 	return &filtered
-}
-
-// BroadcastEvent broadcasts a real-time event to connected users via WebSocket
-func (s *presenceService) BroadcastEvent(ctx context.Context, event *model.RealtimeEvent) error {
-	s.log.Debug("Broadcasting event",
-		logger.String("event_type", string(event.Type)),
-		logger.String("category", string(event.Category)),
-		logger.Int("recipients", len(event.Recipients)),
-	)
-
-	// Broadcast based on event category
-	switch event.Category {
-	case model.CategoryPresence:
-		// Handle presence events
-		if payload, ok := event.Payload.(map[string]interface{}); ok {
-			s.hub.BroadcastPresenceUpdate(&websocket.HubPresenceUpdate{
-				UserID:       event.Recipients[0], // TODO: handle multiple recipients properly
-				OnlineStatus: payload["online_status"].(string),
-				CustomStatus: getStringFromMap(payload, "custom_status"),
-				BroadcastTo:  event.Recipients,
-			})
-		}
-
-	case model.CategoryTyping:
-		// Handle typing events
-		if payload, ok := event.Payload.(map[string]interface{}); ok {
-			conversationID, _ := uuid.Parse(payload["conversation_id"].(string))
-			userID, _ := uuid.Parse(payload["user_id"].(string))
-			s.hub.BroadcastTypingIndicator(&websocket.HubTypingBroadcast{
-				ConversationID: conversationID,
-				UserID:         userID,
-				IsTyping:       payload["is_typing"].(bool),
-				Participants:   event.Recipients,
-			})
-		}
-
-	default:
-		// For other event types, log for now
-		// TODO: Implement generic broadcast in hub
-		s.log.Info("Broadcasting generic event",
-			logger.String("event_type", string(event.Type)),
-		)
-	}
-
-	return nil
-}
-
-func getStringFromMap(m map[string]interface{}, key string) string {
-	if val, ok := m[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
-
-// IsUserOnline checks if a user has any active WebSocket connections
-func (s *presenceService) IsUserOnline(ctx context.Context, userID uuid.UUID) (bool, error) {
-	if s.hub == nil {
-		return false, fmt.Errorf("WebSocket hub not initialized")
-	}
-
-	isOnline := s.hub.IsUserOnline(userID)
-
-	s.log.Debug("Checked user online status",
-		logger.String("user_id", userID.String()),
-		logger.Bool("is_online", isOnline),
-	)
-
-	return isOnline, nil
-}
-
-// GetOnlineUsers returns list of all currently online users
-func (s *presenceService) GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error) {
-	if s.hub == nil {
-		return nil, fmt.Errorf("WebSocket hub not initialized")
-	}
-
-	onlineUsers := s.hub.GetOnlineUsers()
-
-	s.log.Debug("Retrieved online users",
-		logger.Int("count", len(onlineUsers)),
-	)
-
-	return onlineUsers, nil
 }
