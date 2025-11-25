@@ -9,18 +9,10 @@ import (
 	"shared/pkg/cache"
 	"shared/pkg/database"
 	"shared/pkg/logger"
+	"shared/server/websocket/hub"
 
 	"github.com/google/uuid"
 )
-
-// Hub interface to avoid circular dependency
-type Hub interface {
-	IsUserOnline(userID uuid.UUID) bool
-	GetOnlineUsers() []uuid.UUID
-	GetUserDeviceCount(userID uuid.UUID) int
-	BroadcastEvent(event *model.RealtimeEvent) int
-	GetStats() *model.StatsResponse
-}
 
 type WSService interface {
 	// User validation
@@ -44,15 +36,15 @@ type WSService interface {
 type wsService struct {
 	db    database.Database
 	cache cache.Cache
-	hub   Hub
+	hub   *hub.Hub
 	log   logger.Logger
 }
 
-func NewWSService(db database.Database, cache cache.Cache, hub Hub, log logger.Logger) WSService {
+func NewWSService(db database.Database, cache cache.Cache, h *hub.Hub, log logger.Logger) WSService {
 	return &wsService{
 		db:    db,
 		cache: cache,
-		hub:   hub,
+		hub:   h,
 		log:   log,
 	}
 }
@@ -160,7 +152,7 @@ func (s *wsService) HandleClientDisconnect(ctx context.Context, userID uuid.UUID
 	s.log.Info("Client disconnected",
 		logger.String("user_id", userID.String()),
 		logger.String("device_id", deviceID),
-		logger.Bool("user_still_online", s.hub.IsUserOnline(userID)),
+		logger.Bool("user_still_online", s.hub.IsOnline(userID)),
 	)
 
 	// You can add any additional logic here, such as:
@@ -190,8 +182,31 @@ func (s *wsService) BroadcastEvent(ctx context.Context, req *model.BroadcastRequ
 		TTL:        req.TTL,
 	}
 
-	// Broadcast to hub
-	onlineCount := s.hub.BroadcastEvent(event)
+	// Broadcast to recipients via hub
+	onlineCount := 0
+	for _, recipientID := range req.Recipients {
+		if s.hub.IsOnline(recipientID) {
+			// Marshal event to JSON
+			data, err := s.marshalEvent(event)
+			if err != nil {
+				s.log.Error("Failed to marshal event",
+					logger.String("event_id", event.ID.String()),
+					logger.Error(err),
+				)
+				continue
+			}
+
+			// Broadcast to all user's devices
+			if err := s.hub.Broadcast(recipientID, data); err != nil {
+				s.log.Warn("Failed to broadcast to user",
+					logger.String("user_id", recipientID.String()),
+					logger.Error(err),
+				)
+			} else {
+				onlineCount++
+			}
+		}
+	}
 
 	s.log.Info("Event broadcasted",
 		logger.String("event_id", event.ID.String()),
@@ -208,9 +223,17 @@ func (s *wsService) BroadcastEvent(ctx context.Context, req *model.BroadcastRequ
 	}, nil
 }
 
+// marshalEvent marshals an event to JSON bytes
+func (s *wsService) marshalEvent(event *model.RealtimeEvent) ([]byte, error) {
+	// You can use encoding/json or your preferred JSON library
+	// For now, using a simple approach
+	return []byte(fmt.Sprintf(`{"id":"%s","type":"%s","payload":%v}`,
+		event.ID.String(), event.Type, event.Payload)), nil
+}
+
 // IsUserOnline checks if a user has any active WebSocket connections
 func (s *wsService) IsUserOnline(ctx context.Context, userID uuid.UUID) (bool, error) {
-	isOnline := s.hub.IsUserOnline(userID)
+	isOnline := s.hub.IsOnline(userID)
 
 	s.log.Debug("Checked user online status",
 		logger.String("user_id", userID.String()),
@@ -222,7 +245,12 @@ func (s *wsService) IsUserOnline(ctx context.Context, userID uuid.UUID) (bool, e
 
 // GetOnlineUsers returns list of all currently online users
 func (s *wsService) GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error) {
-	onlineUsers := s.hub.GetOnlineUsers()
+	clients := s.hub.GetAllClients()
+	onlineUsers := make([]uuid.UUID, 0, len(clients))
+
+	for _, client := range clients {
+		onlineUsers = append(onlineUsers, client.UserID)
+	}
 
 	s.log.Debug("Retrieved online users",
 		logger.Int("count", len(onlineUsers)),
@@ -233,7 +261,10 @@ func (s *wsService) GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error) {
 
 // GetStats returns WebSocket hub statistics
 func (s *wsService) GetStats(ctx context.Context) (*model.StatsResponse, error) {
-	stats := s.hub.GetStats()
+	stats := &model.StatsResponse{
+		TotalUsers:   s.hub.ClientCount(),
+		TotalDevices: s.hub.ConnectionCount(),
+	}
 
 	s.log.Debug("Retrieved hub stats",
 		logger.Int("total_users", stats.TotalUsers),

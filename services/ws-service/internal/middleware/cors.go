@@ -6,10 +6,10 @@ import (
 
 // CORSConfig holds CORS configuration
 type CORSConfig struct {
-	AllowedOrigins []string
-	AllowedMethods []string
-	AllowedHeaders []string
-	ExposeHeaders  []string
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	ExposeHeaders    []string
 	AllowCredentials bool
 }
 

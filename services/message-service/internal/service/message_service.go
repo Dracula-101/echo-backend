@@ -196,11 +196,6 @@ func (s *messageService) broadcastMessage(message *models.Message, participantID
 	offlineCount := 0
 
 	for _, participantID := range participantIDs {
-		// Skip sender (they already have the message)
-		if participantID == senderID {
-			continue
-		}
-
 		// Check if user is online
 		if s.hub.IsUserOnline(participantID) {
 			// Send via WebSocket

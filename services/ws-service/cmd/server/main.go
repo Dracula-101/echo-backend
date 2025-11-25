@@ -5,17 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
+
 	"ws-service/internal/config"
 	"ws-service/internal/health"
 	healthCheckers "ws-service/internal/health/checkers"
-	"ws-service/internal/model"
 	"ws-service/internal/service"
-	"ws-service/internal/ws/broadcast"
-	"ws-service/internal/ws/handlers"
-	"ws-service/internal/ws/presence"
-	"ws-service/internal/ws/router"
-	"ws-service/internal/ws/subscription"
+	wsManager "ws-service/internal/websocket"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -26,10 +21,10 @@ import (
 	env "shared/server/env"
 	"shared/server/middleware"
 	"shared/server/response"
-	serverRouter "shared/server/router"
+	"shared/server/router"
 	"shared/server/server"
 	"shared/server/shutdown"
-	"shared/server/websocket"
+	"shared/server/websocket/handler"
 
 	"github.com/google/uuid"
 )
@@ -52,27 +47,32 @@ func loadConfig() (*config.Config, error) {
 
 	appEnv := env.GetEnv("APP_ENV", "development")
 	configPath := env.GetEnv("CONFIG_PATH", "configs/config.yaml")
-	configLogger.Debug("Loading config from environment variables",
-		logger.String("configPath", configPath),
-		logger.String("environment", appEnv))
+
+	configLogger.Debug("Loading configuration",
+		logger.String("path", configPath),
+		logger.String("environment", appEnv),
+	)
 
 	cfg, err := config.Load(configPath, appEnv)
 	if err != nil {
-		configLogger.Error("Failed to load config", logger.Error(err))
 		return nil, err
 	}
 
 	if err := config.ValidateAndSetDefaults(cfg); err != nil {
-		configLogger.Error("Invalid configuration", logger.Error(err))
 		return nil, err
 	}
 
-	configLogger.Debug("Config loaded successfully")
+	configLogger.Debug("Configuration loaded successfully")
 	return cfg, nil
 }
 
 func createDBClient(cfg config.PostgresConfig, log logger.Logger) (database.Database, error) {
-	log.Debug("Creating database client")
+	log.Debug("Creating database client",
+		logger.String("host", cfg.Host),
+		logger.Int("port", cfg.Port),
+		logger.String("database", cfg.DBName),
+	)
+
 	dbClient, err := postgres.New(database.Config{
 		Host:            cfg.Host,
 		Port:            cfg.Port,
@@ -88,12 +88,17 @@ func createDBClient(cfg config.PostgresConfig, log logger.Logger) (database.Data
 	if err != nil {
 		return nil, err
 	}
+
 	log.Info("Database client created successfully")
 	return dbClient, nil
 }
 
 func createCacheClient(cfg config.RedisConfig, log logger.Logger) (cache.Cache, error) {
-	log.Debug("Creating cache client")
+	log.Debug("Creating cache client",
+		logger.String("host", cfg.Host),
+		logger.Int("port", cfg.Port),
+	)
+
 	cacheClient, err := redis.New(cache.Config{
 		Host:         cfg.Host,
 		Port:         cfg.Port,
@@ -109,70 +114,97 @@ func createCacheClient(cfg config.RedisConfig, log logger.Logger) (cache.Cache, 
 	if err != nil {
 		return nil, err
 	}
+
 	log.Info("Cache client created successfully")
 	return cacheClient, nil
 }
 
-type hubAdapter struct {
-	*websocket.Hub
-}
+func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
+	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
 
-func (ha *hubAdapter) BroadcastEvent(event *model.RealtimeEvent) int {
-	ha.Hub.BroadcastToAll(event)
-	return 1 // Return count of broadcasts
-}
-
-func (ha *hubAdapter) GetStats() *model.StatsResponse {
-	stats := ha.Hub.GetStats()
-	return &model.StatsResponse{
-		TotalUsers:       stats.OnlineUsers,
-		TotalDevices:     stats.TotalClients,
-		TotalConnections: int64(stats.TotalConnections),
+	if dbClient != nil {
+		healthMgr.RegisterChecker(healthCheckers.NewDatabaseChecker(dbClient))
 	}
-}
 
-func newHubAdapter(hub *websocket.Hub) service.Hub {
-	return &hubAdapter{Hub: hub}
-}
-
-func convertWebSocketConfig(cfg *config.WebSocketConfig) *websocket.Config {
-	return &websocket.Config{
-		WriteWait:              cfg.WriteWait,
-		PongWait:               cfg.PongWait,
-		PingPeriod:             cfg.PingPeriod,
-		CloseGracePeriod:       5 * time.Second,
-		HandshakeTimeout:       10 * time.Second,
-		ReadBufferSize:         cfg.ReadBufferSize,
-		WriteBufferSize:        cfg.WriteBufferSize,
-		MaxMessageSize:         int64(cfg.MaxMessageSize),
-		ClientBufferSize:       cfg.ClientBufferSize,
-		CleanupInterval:        cfg.CleanupInterval,
-		StaleConnectionTimeout: cfg.StaleConnectionTimeout,
-		MaxConnectionsPerUser:  10,
-		MaxReconnectAttempts:   3,
-		ReconnectBackoff:       time.Second,
-		RegisterBuffer:         cfg.RegisterBuffer,
-		UnregisterBuffer:       cfg.UnregisterBuffer,
-		BroadcastBuffer:        cfg.BroadcastBuffer,
-		CheckOrigin:            false,
-		AllowedOrigins:         []string{},
-		EnableCompression:      false,
-		CompressionLevel:       -1,
-		MaxMessagesPerSecond:   100,
-		BurstSize:              10,
-		EnableMetrics:          true,
-		MetricsInterval:        5 * time.Minute,
+	if cacheClient != nil && cfg.Cache.Enabled {
+		healthMgr.RegisterChecker(healthCheckers.NewCacheChecker(cacheClient))
 	}
+
+	return healthMgr
 }
 
-func createHTTPRouter(
-	healthHandler *health.Handler,
-	wsUpgrader *websocket.Upgrader,
-	createMessageHandler func(context.Context, *websocket.Client) websocket.MessageHandler,
+func createWebSocketHandler(
+	manager *wsManager.Manager,
+	wsService service.WSService,
+	cfg *config.Config,
 	log logger.Logger,
-) (*serverRouter.Router, error) {
+) *handler.Handler {
+	handlerCfg := &handler.Config{
+		// Connection settings from config
+		SendBufferSize:    cfg.WebSocket.ClientBufferSize,
+		MaxMessageSize:    int64(cfg.WebSocket.MaxMessageSize),
+		PingInterval:      cfg.WebSocket.PingPeriod,
+		WriteTimeout:      cfg.WebSocket.WriteWait,
+		ReadTimeout:       cfg.WebSocket.PongWait,
+		StaleTimeout:      cfg.WebSocket.StaleConnectionTimeout,
+		CheckOrigin:       func(r *http.Request) bool { return true },
+		ReadBufferSize:    cfg.WebSocket.ReadBufferSize,
+		WriteBufferSize:   cfg.WebSocket.WriteBufferSize,
+		EnableCompression: false,
 
-	builder := serverRouter.NewBuilder().
+		ValidateUser: func(ctx context.Context, userID uuid.UUID) (bool, error) {
+			return wsService.ValidateUserExists(ctx, userID)
+		},
+		ExtractUserID: handler.DefaultUserIDExtractor,
+		HandleMessage: func(ctx context.Context, conn *handler.Connection, message []byte) error {
+			return manager.HandleMessage(ctx, conn, message)
+		},
+		ExtractMetadata: handler.DefaultMetadataExtractor,
+		OnConnected: func(conn *handler.Connection) {
+			userID, _ := conn.GetMetadata("user_id")
+			deviceID, _ := conn.GetMetadata("device_id")
+			if uid, ok := userID.(uuid.UUID); ok {
+				if did, ok := deviceID.(string); ok {
+					wsService.HandleClientConnect(context.Background(), uid, did)
+				}
+			}
+		},
+		OnDisconnected: func(conn *handler.Connection) {
+			userID, _ := conn.GetMetadata("user_id")
+			deviceID, _ := conn.GetMetadata("device_id")
+			if uid, ok := userID.(uuid.UUID); ok {
+				if did, ok := deviceID.(string); ok {
+					wsService.HandleClientDisconnect(context.Background(), uid, did)
+				}
+			}
+		},
+		SendErrorsToClient: true,
+	}
+
+	return handler.New(manager.GetEngine(), handlerCfg, log)
+}
+
+func setupAPIRoutes(
+	builder *router.Builder,
+	wsHandler *handler.Handler,
+	log logger.Logger,
+) *router.Builder {
+	log.Debug("Registering API routes")
+
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/", wsHandler.HandleUpgrade)
+	})
+
+	log.Debug("API routes registered successfully")
+	return builder
+}
+
+func createRouter(
+	wsHandler *handler.Handler,
+	healthHandler *health.Handler,
+	log logger.Logger,
+) (*router.Router, error) {
+	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", healthHandler.Health).
 		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
 			response.RouteNotFoundError(r.Context(), r, w, log)
@@ -181,39 +213,35 @@ func createHTTPRouter(
 			response.MethodNotAllowedError(r.Context(), r, w)
 		}).
 		WithEarlyMiddleware(
-			serverRouter.Middleware(middleware.RequestReceivedLogger(log)),
+			router.Middleware(middleware.RequestReceivedLogger(log)),
 		).
 		WithLateMiddleware(
-			serverRouter.Middleware(middleware.Recovery(log)),
-			serverRouter.Middleware(middleware.RequestCompletedLogger(log)),
+			router.Middleware(middleware.Recovery(log)),
+			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
 	// Health check endpoints
-	builder = builder.WithRoutes(func(r *serverRouter.Router) {
+	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/live", healthHandler.Liveness)
 		r.Get("/ready", healthHandler.Readiness)
 		r.Get("/health/liveness", healthHandler.Liveness)
 		r.Get("/health/readiness", healthHandler.Readiness)
 	})
 
-	// WebSocket upgrade endpoints
-	builder = builder.WithRoutes(func(r *serverRouter.Router) {
-		wsHandler := func(w http.ResponseWriter, req *http.Request) {
-			log.Info("Upgrading HTTP connection to WebSocket",
-				logger.String("remote_addr", req.RemoteAddr),
-				logger.String("request_uri", req.RequestURI),
-			)
-			messageHandler := createMessageHandler(req.Context(), nil)
-			wsUpgrader.HandleUpgrade(w, req, messageHandler)
-		}
-		r.Get("/", wsHandler)
-	})
+	builder = setupAPIRoutes(builder, wsHandler, log)
 
-	routerInstance := builder.Build()
-	return routerInstance, nil
+	r := builder.Build()
+	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, hub *websocket.Hub, subManager *subscription.Manager, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(
+	srv *server.Server,
+	manager *wsManager.Manager,
+	dbClient database.Database,
+	cacheClient cache.Cache,
+	log logger.Logger,
+	cfg *config.Config,
+) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
@@ -226,18 +254,41 @@ func setupShutdownManager(srv *server.Server, hub *websocket.Hub, subManager *su
 		shutdown.PriorityHigh,
 	)
 
-	// Then shutdown WebSocket hub
+	// Then shutdown WebSocket manager
 	shutdownMgr.RegisterWithPriority(
-		"websocket-hub",
+		"websocket-manager",
 		shutdown.Hook(func(ctx context.Context) error {
-			log.Info("Shutting down WebSocket hub")
-			hub.Shutdown()
-			return nil
+			log.Info("Shutting down WebSocket manager")
+			return manager.Stop()
 		}),
 		shutdown.PriorityHigh,
 	)
 
-	// Finally sync logger
+	// Close database
+	if dbClient != nil {
+		shutdownMgr.RegisterWithPriority(
+			"database",
+			shutdown.Hook(func(ctx context.Context) error {
+				log.Info("Closing database connection")
+				return dbClient.Close()
+			}),
+			shutdown.PriorityNormal,
+		)
+	}
+
+	// Close cache
+	if cacheClient != nil {
+		shutdownMgr.RegisterWithPriority(
+			"cache",
+			shutdown.Hook(func(ctx context.Context) error {
+				log.Info("Closing cache connection")
+				return cacheClient.Close()
+			}),
+			shutdown.PriorityNormal,
+		)
+	}
+
+	// Sync logger
 	shutdownMgr.RegisterWithPriority(
 		"logger-sync",
 		shutdown.Hook(func(ctx context.Context) error {
@@ -255,7 +306,6 @@ func waitForShutdown(shutdownMgr *shutdown.Manager) <-chan struct{} {
 	go func() {
 		defer close(done)
 		if err := shutdownMgr.Wait(); err != nil {
-			// Error already logged by shutdown manager
 		}
 	}()
 	return done
@@ -272,12 +322,13 @@ func main() {
 	log := createLogger(cfg.Service.Name)
 	defer log.Sync()
 
-	log.Info("Starting WebSocket Service",
+	log.Info("Initializing application",
 		logger.String("service", cfg.Service.Name),
 		logger.String("version", cfg.Service.Version),
 		logger.String("environment", cfg.Service.Environment),
 	)
 
+	// Create database client
 	dbClient, err := createDBClient(cfg.Database.Postgres, log)
 	if err != nil {
 		log.Fatal("Failed to create database client", logger.Error(err))
@@ -291,6 +342,7 @@ func main() {
 		}
 	}()
 
+	// Create cache client (optional)
 	var cacheClient cache.Cache
 	if cfg.Cache.Enabled {
 		cacheClient, err = createCacheClient(cfg.Cache.Redis, log)
@@ -309,128 +361,33 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
-	// Initialize health manager
-	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
-	healthMgr.RegisterChecker(healthCheckers.NewDatabaseChecker(dbClient))
-	if cfg.Cache.Enabled && cacheClient != nil {
-		healthMgr.RegisterChecker(healthCheckers.NewCacheChecker(cacheClient))
+	// Initialize WebSocket manager
+	manager := wsManager.NewManager(log)
+	log.Info("WebSocket manager initialized")
+
+	// Start WebSocket engine
+	if err := manager.Start(); err != nil {
+		log.Fatal("Failed to start WebSocket manager", logger.Error(err))
 	}
+	log.Info("WebSocket engine started")
+
+	// Initialize service with hub
+	wsService := service.NewWSService(dbClient, cacheClient, manager.GetHub(), log)
+
+	// Setup health checks
+	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
+	healthHandler := health.NewHandler(healthMgr)
 	log.Info("Health checks registered")
 
-	// Initialize WebSocket Hub with converted config
-	wsConfig := convertWebSocketConfig(&cfg.WebSocket)
-	hub := websocket.NewHub(wsConfig, log)
-	go hub.Run()
-	log.Info("WebSocket hub initialized and started")
+	// Initialize WebSocket handler with config
+	wsHandler := createWebSocketHandler(manager, wsService, cfg, log)
 
-	// Initialize subscription manager
-	subManager := subscription.NewManager(log)
-	log.Info("Subscription manager initialized")
-
-	// Initialize broadcaster
-	broadcaster := broadcast.NewBroadcaster(hub, subManager, log)
-	log.Info("Broadcaster initialized")
-
-	// Initialize presence tracker
-	presenceTracker := presence.NewTracker(hub, log)
-	log.Info("Presence tracker initialized")
-
-	// Initialize message router
-	msgRouter := router.NewMessageRouter(log)
-	log.Info("Message router initialized")
-
-	// Register message handlers
-	msgRouter.RegisterHandler(handlers.NewPingHandler(log))
-	msgRouter.RegisterHandler(handlers.NewAuthenticateHandler(log))
-	msgRouter.RegisterHandler(handlers.NewSubscribeHandler(subManager, log))
-	msgRouter.RegisterHandler(handlers.NewUnsubscribeHandler(subManager, log))
-	msgRouter.RegisterHandler(handlers.NewPresenceUpdateHandler(presenceTracker, log))
-	msgRouter.RegisterHandler(handlers.NewPresenceQueryHandler(presenceTracker, log))
-	msgRouter.RegisterHandler(handlers.NewTypingStartHandler(broadcaster, hub, log))
-	msgRouter.RegisterHandler(handlers.NewTypingStopHandler(broadcaster, hub, log))
-	msgRouter.RegisterHandler(handlers.NewMarkAsReadHandler(broadcaster, log))
-	msgRouter.RegisterHandler(handlers.NewMarkAsDeliveredHandler(broadcaster, log))
-	msgRouter.RegisterHandler(handlers.NewCallOfferHandler(broadcaster, hub, log))
-	msgRouter.RegisterHandler(handlers.NewCallAnswerHandler(broadcaster, log))
-	msgRouter.RegisterHandler(handlers.NewCallICEHandler(broadcaster, log))
-	msgRouter.RegisterHandler(handlers.NewCallHangupHandler(broadcaster, log))
-	log.Info("All message handlers registered")
-
-	// Initialize service (minimal service for user validation)
-	// Wrap hub with adapter to match service.Hub interface
-	hubAdapted := newHubAdapter(hub)
-	wsService := service.NewWSService(dbClient, cacheClient, hubAdapted, log)
-
-	// Set disconnect callback
-	hub.SetOnDisconnect(func(client *websocket.Client) {
-		// Unsubscribe from all topics
-		subManager.UnsubscribeAll(client)
-
-		// Update presence
-		presenceTracker.OnUserDisconnected(client.UserID)
-
-		// Handle disconnect in service
-		if err := wsService.HandleClientDisconnect(context.Background(), client.UserID, client.DeviceID); err != nil {
-			log.Error("Failed to handle client disconnect",
-				logger.String("client_id", client.ID),
-				logger.String("user_id", client.UserID.String()),
-				logger.Error(err),
-			)
-		}
-	})
-
-	// Create message handler function that uses the router
-	createMessageHandler := func(ctx context.Context, client *websocket.Client) websocket.MessageHandler {
-		return func(c *websocket.Client, messageData []byte) {
-			if err := msgRouter.Route(ctx, c, messageData); err != nil {
-				log.Error("Failed to route message",
-					logger.String("client_id", c.ID),
-					logger.Error(err),
-				)
-			}
-		}
-	}
-
-	// Initialize WebSocket upgrader
-	wsUpgrader := websocket.NewUpgrader(hub, wsConfig, log)
-
-	// Set user validator
-	wsUpgrader.SetUserValidator(func(ctx context.Context, userID uuid.UUID) (bool, error) {
-		return wsService.ValidateUserExists(ctx, userID)
-	})
-
-	// Set after upgrade hook to initialize message handler
-	wsUpgrader.SetAfterUpgrade(func(ctx context.Context, client *websocket.Client) error {
-		// Set message handler for this client
-		handler := createMessageHandler(ctx, client)
-		client.SetMessageHandler(handler)
-
-		// Notify presence
-		presenceTracker.OnUserConnected(client.UserID)
-
-		// Handle connect in service
-		if err := wsService.HandleClientConnect(ctx, client.UserID, client.DeviceID); err != nil {
-			log.Error("Failed to handle client connect",
-				logger.String("client_id", client.ID),
-				logger.Error(err),
-			)
-		}
-
-		return nil
-	})
-
-	log.Info("WebSocket upgrader initialized")
-
-	// Initialize health handler
-	healthHandler := health.NewHandler(healthMgr)
-
-	// Create HTTP router with WebSocket support
-	routerInstance, err := createHTTPRouter(healthHandler, wsUpgrader, createMessageHandler, log)
+	// Create HTTP server
+	routerInstance, err := createRouter(wsHandler, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}
 
-	// Create HTTP server
 	serverCfg := &server.Config{
 		Port:            cfg.Server.Port,
 		Host:            cfg.Server.Host,
@@ -448,12 +405,12 @@ func main() {
 	}
 
 	// Setup graceful shutdown
-	shutdownMgr := setupShutdownManager(srv, hub, subManager, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, manager, dbClient, cacheClient, log, cfg)
 
 	// Start server
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Info("WebSocket Service is running",
+		log.Info("Starting WebSocket Service",
 			logger.String("address", srv.Address()),
 			logger.String("websocket_endpoint", "ws://"+srv.Address()),
 		)
