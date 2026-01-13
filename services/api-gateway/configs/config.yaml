@@ -19,6 +19,7 @@ server:
   tls_cert_file: ${TLS_CERT_FILE}
   tls_key_file: ${TLS_KEY_FILE}
   tls_min_version: 1.2
+  prefix_path: /api/v1
   jwt:
     access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
     refresh_token_ttl: ${JWT_REFRESH_TOKEN_TTL:168h}
@@ -27,12 +28,12 @@ server:
     audience: ${JWT_AUDIENCE:api}
     leeway: ${JWT_LEEWAY:1m}
     skip_paths:
-      - /api/v1/auth/login
-      - /api/v1/auth/register
-      - /api/v1/health
-      - /api/v1/metrics
-      - /api/v1/presence/health
-      - /api/v1/presence/ws
+      - /auth/login
+      - /auth/register
+      - /health
+      - /metrics
+      - /presence/health
+      - /presence/ws
 
 
 services:
@@ -103,7 +104,7 @@ services:
 
 router_groups:
   - name: auth_routes
-    prefix: /api/v1/auth
+    prefix: /auth
     service: auth-service
     transform: true
     methods:
@@ -115,7 +116,7 @@ router_groups:
       - OPTIONS
 
   - name: user_routes
-    prefix: /api/v1/users
+    prefix: /users
     service: user-service
     transform: true
     methods:
@@ -127,7 +128,7 @@ router_groups:
       - OPTIONS
 
   - name: message_routes
-    prefix: /api/v1/messages
+    prefix: /messages
     service: message-service
     transform: true
     methods:
@@ -139,7 +140,7 @@ router_groups:
       - OPTIONS
 
   - name: media_routes
-    prefix: /api/v1/media
+    prefix: /media
     service: media-service
     transform: true
     methods:
@@ -150,7 +151,7 @@ router_groups:
       - OPTIONS
 
   - name: presence_routes
-    prefix: /api/v1/presence
+    prefix: /presence
     service: presence-service
     transform: true
     methods:
@@ -173,15 +174,15 @@ ratelimit:
     strategy: token_bucket
   
   endpoints:
-    /api/v1/auth/login:
+    /auth/login:
       requests: 5
       window: 5m
       strategy: sliding_window
-    /api/v1/auth/register:
+    /auth/register:
       requests: 3
       window: 1h
       strategy: fixed_window
-    /api/v1/media/upload:
+    /media/upload:
       requests: 10
       window: 1m
       strategy: token_bucket
@@ -221,7 +222,7 @@ security:
     Referrer-Policy: "strict-origin-when-cross-origin"
     Permissions-Policy: "geolocation=(), microphone=(), camera=()"
   max_body_size: 10485760
-  path_limits:
+  path_limits:    # TODO: Customize per-path body size limits
     /api/v1/media/upload: 104857600
 
 loadbalance:

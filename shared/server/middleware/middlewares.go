@@ -876,8 +876,10 @@ func Auth(config AuthConfig) Handler {
 			}
 
 			ctx := SetUserID(r.Context(), userID)
-			r.Header.Set("X-User-ID", userID)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			newReq := r.WithContext(ctx)
+			newReq.Header.Set("X-User-ID", userID)
+			newReq.Header.Set("X-Session-ID", userID)
+			next.ServeHTTP(w, newReq)
 		})
 	}
 }

@@ -31,6 +31,7 @@ type ServerConfig struct {
 	WriteTimeout      time.Duration `yaml:"write_timeout"`
 	IdleTimeout       time.Duration `yaml:"idle_timeout"`
 	ShutdownTimeout   time.Duration `yaml:"shutdown_timeout"`
+	PrefixPath        string        `yaml:"prefix_path"`
 	MaxHeaderBytes    int           `yaml:"max_header_bytes"`
 	EnableCompression bool          `yaml:"enable_compression"`
 	TLSEnabled        bool          `yaml:"tls_enabled"`

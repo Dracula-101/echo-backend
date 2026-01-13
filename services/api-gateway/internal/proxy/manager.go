@@ -414,6 +414,8 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 			logger.Bool("transform", transform),
 			logger.String("query", r.URL.RawQuery),
 			logger.Bool("has_auth", r.Header.Get("Authorization") != ""),
+			logger.String("x_user_id", r.Header.Get("X-User-ID")),
+			logger.String("x_session_id", r.Header.Get("X-Session-ID")),
 			logger.String("content_type", r.Header.Get("Content-Type")),
 		)
 
