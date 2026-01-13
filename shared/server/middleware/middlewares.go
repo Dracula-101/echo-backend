@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path"
+	"regexp"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -891,15 +891,25 @@ func matchPath(requestPath, pattern string) bool {
 	if pattern == requestPath {
 		return true
 	}
-	if matched, err := path.Match(pattern, requestPath); err == nil && matched {
-		return true
-	}
-	return false
+	regexPattern := "^" + strings.ReplaceAll(strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*\*`, `.*`), `\*`, `[^/]*`) + "$"
+	matched, _ := regexp.MatchString(regexPattern, requestPath)
+	return matched
 }
 
 func InterceptUserId() Handler {
+	// Paths that don't require user ID authentication
+	skipPaths := []string{"/health", "/live", "/ready", "/health/liveness", "/health/readiness", "/metrics"}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip authentication for health and monitoring endpoints
+			for _, skipPath := range skipPaths {
+				if r.URL.Path == skipPath || strings.HasPrefix(r.URL.Path, skipPath+"/") {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
 			userID := r.Header.Get("X-User-ID")
 			if userID != "" {
 				ctx := SetUserID(r.Context(), userID)
@@ -913,8 +923,19 @@ func InterceptUserId() Handler {
 }
 
 func InterceptSessionId() Handler {
+	// Paths that don't require session ID authentication
+	skipPaths := []string{"/health", "/live", "/ready", "/health/liveness", "/health/readiness", "/metrics"}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip authentication for health and monitoring endpoints
+			for _, skipPath := range skipPaths {
+				if r.URL.Path == skipPath || strings.HasPrefix(r.URL.Path, skipPath+"/") {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
 			sessionID := r.Header.Get("X-Session-ID")
 			if sessionID != "" {
 				ctx := context.WithValue(r.Context(), sContext.SessionIDKey, sessionID)

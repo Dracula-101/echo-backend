@@ -160,7 +160,9 @@ func (b *Builder) WithRoutesGroup(prefix string, registrar func(*RouteGroup)) *B
 func (b *Builder) Build() *Router {
 	b.logger.Debug("Building router")
 
-	if b.enableSystemRoutes {
+	mainMux := b.router.Mux()
+
+	if b.enableSystemRoutes && len(b.systemEndpoints) > 0 {
 		for _, endpoint := range b.systemEndpoints {
 			path := endpoint.Path
 			if b.systemPrefix != "" {
@@ -170,39 +172,30 @@ func (b *Builder) Build() *Router {
 		}
 	}
 
-	appMux := mux.NewRouter().StrictSlash(true)
-	appRouter := &Router{
-		mux:            appMux,
-		routes:         make([]RouteInfo, 0),
-		strictPriority: b.router.strictPriority,
-	}
-
 	for _, mw := range b.earlyMiddleware {
-		appRouter.Use(mux.MiddlewareFunc(mw))
+		mainMux.Use(mux.MiddlewareFunc(mw))
 	}
 
 	for _, mw := range b.lateMiddleware {
-		appRouter.Use(mux.MiddlewareFunc(mw))
+		mainMux.Use(mux.MiddlewareFunc(mw))
 	}
 
 	for _, routeRegistrar := range b.routes {
-		routeRegistrar(appRouter)
+		routeRegistrar(b.router)
 	}
 
 	for _, rg := range b.routeGroups {
-		group := appRouter.Group(rg.prefix)
+		group := b.router.Group(rg.prefix)
 		rg.registrar(group)
 	}
 
 	if b.notFoundHandler != nil {
-		appMux.NotFoundHandler = http.HandlerFunc(b.notFoundHandler)
+		mainMux.NotFoundHandler = http.HandlerFunc(b.notFoundHandler)
 	}
 
 	if b.notAllowedHandler != nil {
-		appMux.MethodNotAllowedHandler = http.HandlerFunc(b.notAllowedHandler)
+		mainMux.MethodNotAllowedHandler = http.HandlerFunc(b.notAllowedHandler)
 	}
-
-	b.router.Mux().PathPrefix("/").Handler(appMux)
 
 	b.logger.Info("Router built",
 		logger.Int("system_endpoints", len(b.systemEndpoints)),

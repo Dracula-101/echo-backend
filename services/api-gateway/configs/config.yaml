@@ -30,10 +30,8 @@ server:
     skip_paths:
       - /auth/login
       - /auth/register
-      - /health
-      - /metrics
-      - /presence/health
-      - /presence/ws
+      - /**/health
+      - /**/metrics
 
 
 services:
@@ -79,10 +77,10 @@ services:
   media-service:
     protocol: http
     addresses:
-      - ${MEDIA_SERVICE_URL:localhost:8084}
+      - ${MEDIA_SERVICE_URL:localhost:8085}
     health_check:
       enabled: true
-      path: /health 
+      path: /health
       interval: 10s
       timeout: 5s
       failure_threshold: 3
@@ -92,7 +90,7 @@ services:
   presence-service:
     protocol: http
     addresses:
-      - ${PRESENCE_SERVICE_URL:localhost:8085}
+      - ${PRESENCE_SERVICE_URL:localhost:8086}
     health_check:
       enabled: true
       path: /health
