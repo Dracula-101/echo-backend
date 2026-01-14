@@ -6,22 +6,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"media-service/api/v1/dto"
 	"media-service/internal/service/models"
 	req "shared/server/request"
 	"shared/server/response"
 )
-
-type CreateAlbumRequest struct {
-	Title       string `json:"title" validate:"required,min=1,max=255"`
-	Description string `json:"description"`
-	AlbumType   string `json:"album_type" validate:"required"`
-	Visibility  string `json:"visibility" validate:"required"`
-}
-
-type AddFileToAlbumRequest struct {
-	FileID       string `json:"file_id" validate:"required"`
-	DisplayOrder int    `json:"display_order"`
-}
 
 func (h *Handler) CreateAlbum(handler *req.RequestHandler) {
 	ctx := handler.Context()
@@ -33,7 +22,7 @@ func (h *Handler) CreateAlbum(handler *req.RequestHandler) {
 		return
 	}
 
-	var req CreateAlbumRequest
+	var req dto.CreateAlbumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid request body", err)
 		return
@@ -137,7 +126,7 @@ func (h *Handler) AddFileToAlbum(handler *req.RequestHandler) {
 		return
 	}
 
-	var req AddFileToAlbumRequest
+	var req dto.AddFileToAlbumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid request body", err)
 		return

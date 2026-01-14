@@ -6,22 +6,13 @@ import (
 	"net/http"
 	"time"
 
+	"media-service/api/v1/dto"
 	"media-service/internal/service/models"
 	req "shared/server/request"
 	"shared/server/response"
 
 	"github.com/gorilla/mux"
 )
-
-type CreateShareRequest struct {
-	FileID         string `json:"file_id" validate:"required"`
-	SharedWithUser string `json:"shared_with_user_id"`
-	ConversationID string `json:"conversation_id"`
-	AccessType     string `json:"access_type" validate:"required"`
-	ExpiresInHours int    `json:"expires_in_hours"`
-	MaxViews       int    `json:"max_views"`
-	Password       string `json:"password"`
-}
 
 func (h *Handler) CreateShare(handler *req.RequestHandler) {
 	ctx := handler.Context()
@@ -33,7 +24,7 @@ func (h *Handler) CreateShare(handler *req.RequestHandler) {
 		return
 	}
 
-	var reqBody CreateShareRequest
+	var reqBody dto.CreateShareRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid request body", err)
 		return
