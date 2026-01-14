@@ -9,8 +9,6 @@ import (
 	"media-service/internal/service/models"
 	req "shared/server/request"
 	"shared/server/response"
-
-	"github.com/gorilla/mux"
 )
 
 type CreateAlbumRequest struct {
@@ -65,9 +63,7 @@ func (h *Handler) CreateAlbum(handler *req.RequestHandler) {
 
 func (h *Handler) GetAlbum(handler *req.RequestHandler) {
 	ctx := handler.Context()
-	r := handler.Request()
-	vars := mux.Vars(r)
-	albumID := vars["id"]
+	albumID := handler.PathParam("id")
 
 	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
@@ -132,9 +128,8 @@ func (h *Handler) ListAlbums(handler *req.RequestHandler) {
 
 func (h *Handler) AddFileToAlbum(handler *req.RequestHandler) {
 	ctx := handler.Context()
+	albumID := handler.PathParam("id")
 	r := handler.Request()
-	vars := mux.Vars(r)
-	albumID := vars["id"]
 
 	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
@@ -170,10 +165,8 @@ func (h *Handler) AddFileToAlbum(handler *req.RequestHandler) {
 
 func (h *Handler) RemoveFileFromAlbum(handler *req.RequestHandler) {
 	ctx := handler.Context()
-	r := handler.Request()
-	vars := mux.Vars(r)
-	albumID := vars["id"]
-	fileID := vars["file_id"]
+	albumID := handler.PathParam("id")
+	fileID := handler.PathParam("file_id")
 
 	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
