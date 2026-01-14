@@ -7,13 +7,12 @@ import (
 	"shared/server/response"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 )
 
 // DeleteMessage flow at a glance:
 //
 //	[1] Request helper — capture request ID + auth context.
-//	[2] Path params (mux) — pull message ID.
+//	[2] Path params — pull message ID.
 //	[3] MessageService.DeleteMessage — verify ownership/permissions, remove record.
 //	[4] Response helper — respond 200 once deletion succeeds.
 //
@@ -35,12 +34,7 @@ func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get message ID from path
-	vars := mux.Vars(r)
-	messageID := vars["id"]
-	if messageID == "" {
-		response.BadRequestError(r.Context(), r, w, "Message ID is required", nil)
-		return
-	}
+	messageID := handler.PathParam("id")
 
 	// Call service layer
 	err := h.service.DeleteMessage(r.Context(), uuid.MustParse(messageID), uuid.MustParse(userID))

@@ -10,8 +10,6 @@ import (
 	"media-service/internal/service/models"
 	req "shared/server/request"
 	"shared/server/response"
-
-	"github.com/gorilla/mux"
 )
 
 func (h *Handler) CreateShare(handler *req.RequestHandler) {
@@ -68,9 +66,7 @@ func (h *Handler) CreateShare(handler *req.RequestHandler) {
 
 func (h *Handler) RevokeShare(handler *req.RequestHandler) {
 	ctx := handler.Context()
-	r := handler.Request()
-	vars := mux.Vars(r)
-	shareID := vars["id"]
+	shareID := handler.PathParam("id")
 
 	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {

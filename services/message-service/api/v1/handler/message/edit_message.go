@@ -8,14 +8,13 @@ import (
 	"shared/server/response"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 )
 
 // EditMessage flow at a glance:
 //
 //	[1] Request helper — parse JSON body + expose request ID.
 //	[2] Auth context — ensure editor's user ID.
-//	[3] Path params (mux) — extract message ID.
+//	[3] Path params — extract message ID.
 //	[4] MessageService.EditMessage — authorize + update content.
 //	[5] Response helper — emit 200 confirmation.
 //
@@ -37,12 +36,7 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get message ID from path
-	vars := mux.Vars(r)
-	messageID := vars["id"]
-	if messageID == "" {
-		response.BadRequestError(r.Context(), r, w, "Message ID is required", nil)
-		return
-	}
+	messageID := handler.PathParam("id")
 
 	// Parse and validate request
 	request := dto.NewEditMessageRequest()

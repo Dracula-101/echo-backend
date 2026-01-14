@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-playground/validator/v10 v10.30.1
-	github.com/gorilla/mux v1.8.1
 	shared v0.0.0
 )
 
@@ -38,6 +37,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
