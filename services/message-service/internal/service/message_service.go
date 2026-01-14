@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"echo-backend/services/message-service/internal/domain"
 	"echo-backend/services/message-service/internal/models"
 	"echo-backend/services/message-service/internal/repo"
-	"echo-backend/services/message-service/internal/websocket"
 
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -31,23 +31,23 @@ type MessageService interface {
 }
 
 type messageService struct {
-	repo   repo.MessageRepository
-	hub    *websocket.Hub
-	kafka  messaging.Producer
-	logger logger.Logger
+	repo           repo.MessageRepository
+	eventPublisher EventPublisher
+	kafka          messaging.Producer
+	logger         logger.Logger
 }
 
 func NewMessageService(
 	repo repo.MessageRepository,
-	hub *websocket.Hub,
+	eventPublisher EventPublisher,
 	kafka messaging.Producer,
 	log logger.Logger,
 ) MessageService {
 	return &messageService{
-		repo:   repo,
-		hub:    hub,
-		kafka:  kafka,
-		logger: log,
+		repo:           repo,
+		eventPublisher: eventPublisher,
+		kafka:          kafka,
+		logger:         log,
 	}
 }
 
@@ -165,8 +165,8 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 		}()
 	}
 
-	// Step 7: Broadcast message to all participants
-	go s.broadcastMessage(message, participantIDs, req.SenderUserID)
+	// Step 7: Publish message event for ws-service to broadcast
+	go s.publishMessageSentEvent(message, recipientIDs)
 
 	// Step 8: Update unread counts for all recipients
 	go func() {
@@ -184,55 +184,35 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 	return message, nil
 }
 
-// broadcastMessage handles the intelligent broadcasting of messages
-func (s *messageService) broadcastMessage(message *models.Message, participantIDs []uuid.UUID, senderID uuid.UUID) {
-	event := models.MessageEvent{
-		Type:      "new_message",
-		Message:   message,
-		Timestamp: time.Now(),
+// publishMessageSentEvent publishes message.sent event for ws-service to handle
+func (s *messageService) publishMessageSentEvent(message *models.Message, recipientIDs []uuid.UUID) {
+	event := &domain.MessageEvent{
+		EventType:      domain.MessageEventTypeSent,
+		MessageID:      message.ID,
+		ConversationID: message.ConversationID,
+		SenderUserID:   message.SenderUserID,
+		RecipientIDs:   recipientIDs,
+		Timestamp:      time.Now(),
+		Payload:        message,
 	}
 
-	onlineCount := 0
-	offlineCount := 0
-
-	for _, participantID := range participantIDs {
-		// Check if user is online
-		if s.hub.IsUserOnline(participantID) {
-			// Send via WebSocket
-			if err := s.hub.SendToUser(participantID, event); err != nil {
-				s.logger.Error("Failed to send via WebSocket",
-					logger.String("user_id", participantID.String()),
-					logger.String("message_id", message.ID.String()),
-					logger.Error(err),
-				)
-			} else {
-				onlineCount++
-
-				// Automatically mark as delivered for online users
-				go func(uid uuid.UUID) {
-					ctx := context.Background()
-					if err := s.repo.MarkAsDelivered(ctx, message.ID, uid); err != nil {
-						s.logger.Warn("Failed to mark as delivered",
-							logger.String("message_id", message.ID.String()),
-							logger.String("user_id", uid.String()),
-							logger.Error(err),
-						)
-					}
-				}(participantID)
-			}
-		} else {
-			// User is offline, send push notification via Kafka
-			s.sendPushNotification(message, participantID)
-			offlineCount++
-		}
+	ctx := context.Background()
+	if err := s.eventPublisher.PublishMessageEvent(ctx, event); err != nil {
+		s.logger.Error("Failed to publish message.sent event",
+			logger.String("message_id", message.ID.String()),
+			logger.Error(err),
+		)
+	} else {
+		s.logger.Debug("Published message.sent event",
+			logger.String("message_id", message.ID.String()),
+			logger.Int("recipients", len(recipientIDs)),
+		)
 	}
 
-	s.logger.Info("Message broadcast complete",
-		logger.String("message_id", message.ID.String()),
-		logger.Int("online", onlineCount),
-		logger.Int("offline", offlineCount),
-		logger.Int("total", len(participantIDs)-1), // -1 for sender
-	)
+	// Also send push notifications for offline users (ws-service will handle online users)
+	for _, recipientID := range recipientIDs {
+		s.sendPushNotification(message, recipientID)
+	}
 }
 
 // sendPushNotification sends a push notification for offline users via Kafka
@@ -326,7 +306,7 @@ func (s *messageService) EditMessage(ctx context.Context, messageID uuid.UUID, u
 		return fmt.Errorf("failed to edit message: %w", err)
 	}
 
-	// Broadcast edit event to all participants
+	// Publish edit event for ws-service to broadcast
 	go func() {
 		bgCtx := context.Background()
 		participantIDs, err := s.repo.GetParticipantUserIDs(bgCtx, message.ConversationID)
@@ -334,17 +314,33 @@ func (s *messageService) EditMessage(ctx context.Context, messageID uuid.UUID, u
 			return
 		}
 
-		editEvent := models.MessageEvent{
-			Type:      "message_edited",
-			MessageID: messageID,
-			Message: &models.Message{
+		// Filter out the editor from recipients
+		recipientIDs := make([]uuid.UUID, 0)
+		for _, pid := range participantIDs {
+			if pid != userID {
+				recipientIDs = append(recipientIDs, pid)
+			}
+		}
+
+		editEvent := &domain.MessageEvent{
+			EventType:      domain.MessageEventTypeEdited,
+			MessageID:      messageID,
+			ConversationID: message.ConversationID,
+			SenderUserID:   userID,
+			RecipientIDs:   recipientIDs,
+			Timestamp:      time.Now(),
+			Payload: &models.Message{
 				ID:      messageID,
 				Content: newContent,
 			},
-			Timestamp: time.Now(),
 		}
 
-		_ = s.hub.SendToUsers(participantIDs, editEvent, []uuid.UUID{userID})
+		if err := s.eventPublisher.PublishMessageEvent(bgCtx, editEvent); err != nil {
+			s.logger.Error("Failed to publish message.edited event",
+				logger.String("message_id", messageID.String()),
+				logger.Error(err),
+			)
+		}
 	}()
 
 	return nil
@@ -360,7 +356,7 @@ func (s *messageService) DeleteMessage(ctx context.Context, messageID uuid.UUID,
 		return fmt.Errorf("failed to delete message: %w", err)
 	}
 
-	// Broadcast delete event
+	// Publish delete event for ws-service to broadcast
 	go func() {
 		bgCtx := context.Background()
 		message, err := s.repo.GetMessageByID(bgCtx, messageID)
@@ -373,14 +369,29 @@ func (s *messageService) DeleteMessage(ctx context.Context, messageID uuid.UUID,
 			return
 		}
 
-		deleteEvent := models.MessageEvent{
-			Type:      "message_deleted",
-			MessageID: messageID,
-			UserID:    userID,
-			Timestamp: time.Now(),
+		// Filter out the deleter from recipients
+		recipientIDs := make([]uuid.UUID, 0)
+		for _, pid := range participantIDs {
+			if pid != userID {
+				recipientIDs = append(recipientIDs, pid)
+			}
 		}
 
-		_ = s.hub.SendToUsers(participantIDs, deleteEvent, []uuid.UUID{userID})
+		deleteEvent := &domain.MessageEvent{
+			EventType:      domain.MessageEventTypeDeleted,
+			MessageID:      messageID,
+			ConversationID: message.ConversationID,
+			SenderUserID:   userID,
+			RecipientIDs:   recipientIDs,
+			Timestamp:      time.Now(),
+		}
+
+		if err := s.eventPublisher.PublishMessageEvent(bgCtx, deleteEvent); err != nil {
+			s.logger.Error("Failed to publish message.deleted event",
+				logger.String("message_id", messageID.String()),
+				logger.Error(err),
+			)
+		}
 	}()
 
 	return nil
@@ -456,16 +467,28 @@ func (s *messageService) notifyDeliveryStatus(messageID, readerID uuid.UUID, sta
 		return
 	}
 
-	// Send notification to sender
-	event := models.MessageEvent{
-		Type:      fmt.Sprintf("message_%s", status),
-		MessageID: messageID,
-		UserID:    readerID,
-		Timestamp: time.Now(),
+	// Determine event type
+	var eventType domain.MessageEventType
+	if status == "delivered" {
+		eventType = domain.MessageEventTypeDelivered
+	} else if status == "read" {
+		eventType = domain.MessageEventTypeRead
+	} else {
+		return
 	}
 
-	if err := s.hub.SendToUser(message.SenderUserID, event); err != nil {
-		s.logger.Debug("Failed to send delivery status to sender",
+	// Publish delivery/read event for ws-service
+	event := &domain.MessageEvent{
+		EventType:      eventType,
+		MessageID:      messageID,
+		ConversationID: message.ConversationID,
+		SenderUserID:   readerID,
+		RecipientIDs:   []uuid.UUID{message.SenderUserID},
+		Timestamp:      time.Now(),
+	}
+
+	if err := s.eventPublisher.PublishMessageEvent(ctx, event); err != nil {
+		s.logger.Debug("Failed to publish delivery status event",
 			logger.String("message_id", messageID.String()),
 			logger.String("status", status),
 			logger.Error(err),
@@ -480,7 +503,7 @@ func (s *messageService) SetTypingIndicator(ctx context.Context, conversationID,
 		return fmt.Errorf("failed to set typing indicator: %w", err)
 	}
 
-	// Broadcast to all participants except the typing user
+	// Publish typing event for ws-service to broadcast
 	go func() {
 		bgCtx := context.Background()
 		participantIDs, err := s.repo.GetParticipantUserIDs(bgCtx, conversationID)
@@ -488,13 +511,32 @@ func (s *messageService) SetTypingIndicator(ctx context.Context, conversationID,
 			return
 		}
 
-		typingEvent := models.MessageEvent{
-			Type:      "typing",
-			UserID:    userID,
-			Timestamp: time.Now(),
+		// Filter out the typing user from recipients
+		recipientIDs := make([]uuid.UUID, 0)
+		for _, pid := range participantIDs {
+			if pid != userID {
+				recipientIDs = append(recipientIDs, pid)
+			}
 		}
 
-		_ = s.hub.SendToUsers(participantIDs, typingEvent, []uuid.UUID{userID})
+		eventType := domain.ConversationEventTypeTypingStarted
+		if !isTyping {
+			eventType = domain.ConversationEventTypeTypingStopped
+		}
+
+		typingEvent := &domain.ConversationEvent{
+			EventType:      eventType,
+			ConversationID: conversationID,
+			UserID:         userID,
+			Timestamp:      time.Now(),
+		}
+
+		if err := s.eventPublisher.PublishConversationEvent(bgCtx, typingEvent); err != nil {
+			s.logger.Error("Failed to publish typing event",
+				logger.String("conversation_id", conversationID.String()),
+				logger.Error(err),
+			)
+		}
 	}()
 
 	return nil

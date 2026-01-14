@@ -13,7 +13,6 @@ import (
 	healthCheckers "echo-backend/services/message-service/internal/health/checkers"
 	"echo-backend/services/message-service/internal/repo"
 	"echo-backend/services/message-service/internal/service"
-	"echo-backend/services/message-service/internal/websocket"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -132,14 +131,12 @@ func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *handler.MessageHandler,
 	conversationHandler *handler.ConversationHandler,
-	wsHandler *websocket.Handler,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
 
 	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get("/ws", wsHandler.HandleConnection)             // WebSocket connection
 		r.Post("/", messageHandler.SendMessage)              // Send a new message
 		r.Get("/", messageHandler.GetMessages)               // Get messages (with query params)
 		r.Put("/{id}", messageHandler.EditMessage)           // Edit a message
@@ -161,7 +158,6 @@ func setupAPIRoutes(
 func createRouter(
 	messageHandler *handler.MessageHandler,
 	conversationHandler *handler.ConversationHandler,
-	wsHandler *websocket.Handler,
 	healthHandler *health.Handler,
 	cfg *config.Config,
 	log logger.Logger,
@@ -192,13 +188,13 @@ func createRouter(
 			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
-	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, wsHandler, log)
+	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, log)
 
 	r := builder.Build()
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, hub *websocket.Hub, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
@@ -207,16 +203,6 @@ func setupShutdownManager(srv *server.Server, hub *websocket.Hub, log logger.Log
 	shutdownMgr.RegisterWithPriority(
 		"http-server",
 		shutdown.ServerShutdownHook(srv),
-		shutdown.PriorityHigh,
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"websocket-hub",
-		shutdown.Hook(func(ctx context.Context) error {
-			log.Info("Shutting down WebSocket hub")
-			hub.Shutdown()
-			return nil
-		}),
 		shutdown.PriorityHigh,
 	)
 
@@ -312,10 +298,6 @@ func main() {
 		}
 	}()
 
-	hub := websocket.NewHub(log)
-	go hub.Run()
-	log.Info("WebSocket hub started")
-
 	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
 	healthMgr.RegisterChecker(healthCheckers.NewDatabaseChecker(dbClient))
 	if cfg.Cache.Enabled && cacheClient != nil {
@@ -327,17 +309,19 @@ func main() {
 	messageRepo := repo.NewMessageRepository(dbClient)
 	conversationRepo := repo.NewConversationRepository(dbClient)
 
+	// Initialize event publisher
+	eventPublisher := service.NewKafkaEventPublisher(kafkaProducer, log)
+
 	// Initialize services
-	messageService := service.NewMessageService(messageRepo, hub, kafkaProducer, log)
+	messageService := service.NewMessageService(messageRepo, eventPublisher, kafkaProducer, log)
 	conversationService := service.NewConversationService(conversationRepo, log)
 
 	// Initialize handlers
 	messageHandler := handler.NewMessageHandler(messageService, log)
 	conversationHandler := handler.NewConversationHandler(conversationService, log)
-	wsHandler := websocket.NewHandler(hub, log)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(messageHandler, conversationHandler, wsHandler, healthHandler, cfg, log)
+	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}
@@ -358,7 +342,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, hub, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, log, cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {
