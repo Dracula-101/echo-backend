@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"echo-backend/services/message-service/api/v1/handler"
+	conversationHandler "echo-backend/services/message-service/api/v1/handler/conversation"
+	messageHandler "echo-backend/services/message-service/api/v1/handler/message"
 	"echo-backend/services/message-service/internal/config"
 	"echo-backend/services/message-service/internal/health"
 	healthCheckers "echo-backend/services/message-service/internal/health/checkers"
@@ -129,8 +130,8 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 
 func setupAPIRoutes(
 	builder *router.Builder,
-	messageHandler *handler.MessageHandler,
-	conversationHandler *handler.ConversationHandler,
+	messageHandler *messageHandler.MessageHandler,
+	conversationHandler *conversationHandler.ConversationHandler,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
@@ -156,8 +157,8 @@ func setupAPIRoutes(
 }
 
 func createRouter(
-	messageHandler *handler.MessageHandler,
-	conversationHandler *handler.ConversationHandler,
+	messageHandler *messageHandler.MessageHandler,
+	conversationHandler *conversationHandler.ConversationHandler,
 	healthHandler *health.Handler,
 	cfg *config.Config,
 	log logger.Logger,
@@ -317,8 +318,8 @@ func main() {
 	conversationService := service.NewConversationService(conversationRepo, log)
 
 	// Initialize handlers
-	messageHandler := handler.NewMessageHandler(messageService, log)
-	conversationHandler := handler.NewConversationHandler(conversationService, log)
+	messageHandler := messageHandler.NewMessageHandler(messageService, log)
+	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
 	healthHandler := health.NewHandler(healthMgr)
 
 	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)

@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"echo-backend/services/message-service/internal/service"

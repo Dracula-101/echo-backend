@@ -8,14 +8,14 @@ import (
 	"media-service/internal/service/models"
 
 	"shared/pkg/logger"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 )
 
 // Upload handles file upload
-func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	handler := request.NewHandler(r, w)
+func (h *Handler) Upload(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 
 	defer func() {
 		if r.MultipartForm != nil {
@@ -23,16 +23,16 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
 	file, fileHeader, err := handler.GetFormFile("file")
 	if err != nil {
 		h.log.Error("Failed to get file from form", logger.Error(err))
-		response.BadRequestError(ctx, r, w, "File is required", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "File is required", err)
 		return
 	}
 	defer file.Close()
@@ -66,7 +66,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 			logger.String("file_name", fileHeader.Filename),
 			logger.Error(err),
 		)
-		response.InternalServerError(ctx, r, w, "Failed to upload file", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to upload file", err)
 		return
 	}
 
@@ -82,5 +82,5 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		AccessToken:      output.AccessToken,
 		UploadedAt:       output.UploadedAt,
 	}
-	response.JSONWithContext(ctx, r, w, http.StatusCreated, responseDTO)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, responseDTO)
 }

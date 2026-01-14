@@ -1,6 +1,7 @@
 package request
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -193,4 +194,18 @@ func (h *RequestHandler) parseJSON(v interface{}) error {
 	}
 
 	return nil
+}
+
+// Accessors
+
+func (h *RequestHandler) Request() *http.Request {
+	return h.request
+}
+
+func (h *RequestHandler) Writer() http.ResponseWriter {
+	return h.writer
+}
+
+func (h *RequestHandler) Context() context.Context {
+	return h.request.Context()
 }

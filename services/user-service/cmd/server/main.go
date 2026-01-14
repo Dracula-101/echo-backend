@@ -22,6 +22,7 @@ import (
 	"shared/server/common/token"
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
+	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
 	"shared/server/server"
@@ -157,8 +158,8 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering user routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/profile", h.CreateProfile)
-		r.Get("/profile/{user_id}", h.GetProfile)
+		r.Post("/profile", request.Adapt(h.CreateProfile))
+		r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
 	})
 	log.Debug("User routes registered successfully")
 	return builder

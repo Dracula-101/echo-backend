@@ -5,18 +5,27 @@ import (
 	"fmt"
 	"net/http"
 	"shared/pkg/logger"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 	"user-service/api/v1/dto"
 )
 
-func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	handler := request.NewHandler(r, w)
+// GetProfile flow at a glance:
+//
+//	[1] Request helper — ensure path param `user_id`, add request ID to context.
+//	[2] UserService.GetProfile — fetch profile from Postgres.
+//	[3] Branches:
+//	      · record present → respond 200 JSON.
+//	      · record missing → respond 400 “not found”.
+//	      · repo error → respond 400 with error message.
+//
+// Each response includes the same trace metadata for debuggability.
+func (h *UserHandler) GetProfile(handler *req.RequestHandler) {
+	ctx := handler.Context()
 
 	userID := handler.PathParam("user_id")
 	if userID == "" {
-		response.BadRequestError(ctx, r, w, "User ID is required", errors.New("user_id path parameter is missing"))
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "User ID is required", errors.New("user_id path parameter is missing"))
 		return
 	}
 
@@ -31,12 +40,12 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 			logger.String("user_id", userID),
 			logger.Error(err),
 		)
-		response.BadRequestError(ctx, r, w, "Failed to get user profile", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Failed to get user profile", err)
 		return
 	}
 
 	if user == nil {
-		response.BadRequestError(ctx, r, w, "User not found", fmt.Errorf("no user found with ID %s", userID))
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "User not found", fmt.Errorf("no user found with ID %s", userID))
 		return
 	}
 
@@ -56,5 +65,5 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:    user.UpdatedAt,
 	}
 
-	response.JSONWithMessage(ctx, r, w, http.StatusOK, "Profile retrieved successfully", resp)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusOK, "Profile retrieved successfully", resp)
 }

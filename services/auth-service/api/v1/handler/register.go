@@ -6,12 +6,23 @@ import (
 	serviceModels "auth-service/internal/service/models"
 	"net/http"
 	"shared/pkg/logger"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 )
 
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	handler := request.NewHandler(r, w)
+// Register flow at a glance:
+//
+//	[1] Request helper — parse & validate JSON, capture request/correlation IDs.
+//	[2] AuthService.IsEmailTaken — fast-fail if email already exists (400).
+//	[3] AuthService.RegisterUser — create account, enforce password/email policy.
+//	      · weak password / invalid email → 400 with message.
+//	      · other issues → 500.
+//	[4] Email provider (triggered inside service) — send verification mail.
+//	[5] Response helper — return 201 JSON with user + verification status.
+//
+// Logs include request + correlation IDs for every branch.
+func (h *AuthHandler) Register(handler *req.RequestHandler) {
+	ctx := handler.Context()
 	requestID := handler.GetRequestID()
 	correlationID := handler.GetCorrelationID()
 
@@ -22,8 +33,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	req := dto.NewRegisterRequest()
-	if ok := handler.ParseValidateAndSend(req); !ok {
+	reqBody := dto.NewRegisterRequest()
+	if ok := handler.ParseValidateAndSend(reqBody); !ok {
 		h.log.Warn("Registration request validation failed",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
@@ -36,44 +47,44 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug("Checking if email is already registered",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("request_id", requestID),
-		logger.String("email", req.Email),
+		logger.String("email", reqBody.Email),
 	)
 
-	emailTaken, dbErr := h.service.IsEmailTaken(r.Context(), req.Email)
+	emailTaken, dbErr := h.service.IsEmailTaken(ctx, reqBody.Email)
 	if dbErr != nil {
 		h.log.Error("Failed to check if email is taken",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
-			logger.String("email", req.Email),
+			logger.String("email", reqBody.Email),
 			logger.Error(dbErr),
 		)
-		response.InternalServerError(r.Context(), r, w, "Failed to process registration", dbErr)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to check email availability", dbErr)
 		return
 	}
 	if emailTaken {
 		h.log.Warn("Registration attempt with existing email",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
-			logger.String("email", req.Email),
+			logger.String("email", reqBody.Email),
 		)
-		response.BadRequestError(r.Context(), r, w, "Email is already registered", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", nil)
 		return
 	}
 
-	output, authErr := h.service.RegisterUser(r.Context(), serviceModels.RegisterUserInput{
-		Email:            req.Email,
-		Password:         req.Password,
-		PhoneNumber:      req.PhoneNumber,
-		PhoneCountryCode: req.PhoneCountryCode,
+	output, authErr := h.service.RegisterUser(ctx, serviceModels.RegisterUserInput{
+		Email:            reqBody.Email,
+		Password:         reqBody.Password,
+		PhoneNumber:      reqBody.PhoneNumber,
+		PhoneCountryCode: reqBody.PhoneCountryCode,
 		IPAddress:        clientIp,
 		UserAgent:        handler.GetUserAgent(),
-		AcceptTerms:      req.AcceptTerms,
+		AcceptTerms:      reqBody.AcceptTerms,
 	})
 	if authErr != nil {
 		if authErr.Code() == authErrors.CodePasswordTooWeak || authErr.Code() == authErrors.CodeInvalidEmail {
-			response.BadRequestError(r.Context(), r, w, authErr.Message(), nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), nil)
 		} else {
-			response.InternalServerError(r.Context(), r, w, authErr.Message(), authErr)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
 		}
 		return
 	}
@@ -85,7 +96,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		logger.String("email", output.Email),
 	)
 
-	response.JSONWithMessage(r.Context(), r, w, http.StatusCreated, "Registration successful",
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Registration successful",
 		dto.NewRegisterResponse(
 			output.UserID,
 			output.Email,

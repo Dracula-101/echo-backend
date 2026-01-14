@@ -5,16 +5,16 @@ import (
 	"net/http"
 
 	"media-service/internal/service/models"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 )
 
-func (h *Handler) GetStorageStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) GetStorageStats(handler *req.RequestHandler) {
+	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
@@ -24,9 +24,9 @@ func (h *Handler) GetStorageStats(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.mediaService.GetStorageStats(ctx, input)
 	if err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to get storage stats", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to get storage stats", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, output)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, output)
 }

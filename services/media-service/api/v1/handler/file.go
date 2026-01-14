@@ -9,22 +9,21 @@ import (
 	"media-service/internal/service/models"
 
 	"shared/pkg/logger"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 )
 
 // GetFile handles getting a file's metadata
-func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	handler := request.NewHandler(r, w)
+func (h *Handler) GetFile(handler *req.RequestHandler) {
+	ctx := handler.Context()
 	fileID := handler.PathParam("file_id")
 
 	if fileID == "" {
-		response.BadRequestError(ctx, r, w, "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
 		return
 	}
 
-	userID, _ := request.GetUserIDFromContext(ctx)
+	userID, _ := req.GetUserIDFromContext(ctx)
 	accessToken := handler.GetAuthToken()
 
 	output, err := h.mediaService.GetFile(ctx, models.GetFileInput{
@@ -39,7 +38,7 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 			logger.String("file_id", fileID),
 			logger.Error(err),
 		)
-		response.NotFoundError(ctx, r, w, "File")
+		response.NotFoundError(ctx, handler.Request(), handler.Writer(), "File")
 		return
 	}
 
@@ -57,23 +56,23 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 		ViewCount:        output.ViewCount,
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, responseDTO)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, responseDTO)
 }
 
 // DeleteFile handles file deletion
-func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	handler := request.NewHandler(r, w).AllowEmptyBody()
+func (h *Handler) DeleteFile(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	handler.AllowEmptyBody()
 
 	fileID := handler.PathParam("file_id")
 	if fileID == "" {
-		response.BadRequestError(ctx, r, w, "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "File ID is required", fmt.Errorf(mediaErrors.CodeFileNotFound))
 		return
 	}
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
@@ -99,7 +98,7 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 			logger.String("user_id", userID),
 			logger.Error(err),
 		)
-		response.InternalServerError(ctx, r, w, "Failed to delete file", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to delete file", err)
 		return
 	}
 
@@ -108,5 +107,5 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		FileID:  fileID,
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, responseDTO)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, responseDTO)
 }

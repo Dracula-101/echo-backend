@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
@@ -11,7 +11,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// SendMessage handles sending a new message
+// SendMessage flow at a glance:
+//
+//	[1] Request helper — parse + validate JSON, capture request/correlation IDs.
+//	[2] Auth middleware context — ensure caller has a user ID.
+//	[3] Metadata shaping — map incoming metadata into internal model (MediaURL, etc.).
+//	[4] MessageService.SendMessage — persist content, apply threading/mentions logic.
+//	[5] Response helper — return 201 with DTO payload.
+//
+// Every step logs request + user identifiers for traceability.
 func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 	requestID := handler.GetRequestID()

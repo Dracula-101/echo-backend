@@ -7,23 +7,22 @@ import (
 
 	"media-service/internal/service/models"
 	"shared/pkg/logger"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 )
 
-func (h *Handler) UploadProfilePhoto(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	handler := request.NewHandler(r, w)
+func (h *Handler) UploadProfilePhoto(handler *req.RequestHandler) {
+	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
 	file, fileHeader, err := handler.GetFormFile("file")
 	if err != nil {
-		response.BadRequestError(ctx, r, w, "File is required", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "File is required", err)
 		return
 	}
 	defer file.Close()
@@ -44,12 +43,11 @@ func (h *Handler) UploadProfilePhoto(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.mediaService.UploadProfilePhoto(ctx, input)
 	if err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to upload profile photo", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to upload profile photo", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusCreated, output)
-
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
 	defer func() {
 		h.log.Info("Starting async image processing for profile photo",
 			logger.String("file_id", output.FileID))

@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
@@ -10,7 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// SetTypingIndicator handles setting typing indicator
+// SetTypingIndicator flow at a glance:
+//
+//	[1] Request helper — parse DTO with conversation ID + typing state.
+//	[2] Auth context — ensure user ID exists.
+//	[3] MessageService.SetTypingIndicator — persist/broadcast state change.
+//	[4] Response helper — emit 200 confirmation.
+//
+// Trace IDs + user/conversation IDs are logged for debugging.
 func (h *MessageHandler) SetTypingIndicator(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 

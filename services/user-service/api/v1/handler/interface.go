@@ -1,8 +1,6 @@
 package handler
 
-import (
-	"net/http"
-)
+import req "shared/server/request"
 
 // ============================================================================
 // Handler Interface
@@ -10,8 +8,8 @@ import (
 
 type UserHandlerInterface interface {
 	// Profile endpoints
-	GetProfile(w http.ResponseWriter, r *http.Request)
-	CreateProfile(w http.ResponseWriter, r *http.Request)
+	GetProfile(handler *req.RequestHandler)
+	CreateProfile(handler *req.RequestHandler)
 }
 
 // Compile-time interface compliance check

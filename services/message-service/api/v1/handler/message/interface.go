@@ -1,4 +1,4 @@
-package handler
+package message
 
 import "net/http"
 
@@ -7,7 +7,10 @@ import "net/http"
 // HTTP handlers may be added in the future for REST API endpoints
 type MessageHandlerInterface interface {
 	GetMessages(w http.ResponseWriter, r *http.Request)
+	SendMessage(w http.ResponseWriter, r *http.Request)
+	EditMessage(w http.ResponseWriter, r *http.Request)
+	MarkAsRead(w http.ResponseWriter, r *http.Request)
+	SetTypingIndicator(w http.ResponseWriter, r *http.Request)
 }
 
-// Ensure MessageHandler implements MessageHandlerInterface
 var _ MessageHandlerInterface = (*MessageHandler)(nil)

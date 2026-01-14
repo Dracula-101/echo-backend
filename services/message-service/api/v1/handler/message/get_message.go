@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
@@ -11,7 +11,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// GetMessages handles retrieving messages for a conversation
+// GetMessages flow at a glance:
+//
+//	[1] Request helper — parse pagination + conversation ID, surface request ID.
+//	[2] Auth context — ensure user ID available (gateway-authenticated).
+//	[3] MessageService.GetMessages — fetch paginated history from storage.
+//	[4] Response helper — wrap service DTO, return 200 JSON.
+//
+// All branches reuse the same trace IDs for observability.
 func (h *MessageHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 	requestID := handler.GetRequestID()

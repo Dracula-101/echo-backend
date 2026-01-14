@@ -63,7 +63,7 @@ func MetricsHandler() http.HandlerFunc {
 
 func NotFoundHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		response.NotFoundError(r.Context(), r, w, "Resource")
+		response.NotFoundError(r.Context(), r, w, "Route not found")
 	}
 }
 

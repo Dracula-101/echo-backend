@@ -298,7 +298,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/api/v1/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s
@@ -382,7 +382,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8081/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s
@@ -474,7 +474,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8083//health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s
@@ -548,7 +548,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8082/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s
@@ -610,7 +610,7 @@ services:
       - echo-network
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8090/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 20s
@@ -696,7 +696,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8085/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s
@@ -775,7 +775,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s
@@ -859,7 +859,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8087/health" ]
-      interval: 30s
+      interval: 1m
       timeout: 3s
       retries: 3
       start_period: 40s

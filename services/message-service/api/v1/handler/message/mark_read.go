@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
@@ -10,7 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// MarkAsRead handles marking a message as read
+// MarkAsRead flow at a glance:
+//
+//	[1] Request helper — parse DTO, expose request ID.
+//	[2] Auth context — ensure reader's user ID.
+//	[3] MessageService.MarkAsRead — persist read receipt for message/user.
+//	[4] Response helper — emit 200 acknowledgement.
+//
+// Structured errors bubble up directly from the service layer.
 func (h *MessageHandler) MarkAsRead(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 	requestID := handler.GetRequestID()

@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"media-service/internal/service/models"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 
 	"github.com/gorilla/mux"
@@ -25,23 +25,24 @@ type AddFileToAlbumRequest struct {
 	DisplayOrder int    `json:"display_order"`
 }
 
-func (h *Handler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) CreateAlbum(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
 	var req CreateAlbumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequestError(ctx, r, w, "Invalid request body", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid request body", err)
 		return
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		response.BadRequestError(ctx, r, w, "Validation failed", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Validation failed", err)
 		return
 	}
 
@@ -55,21 +56,22 @@ func (h *Handler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.mediaService.CreateAlbum(ctx, input)
 	if err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to create album", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to create album", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusCreated, output)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
 }
 
-func (h *Handler) GetAlbum(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) GetAlbum(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 	vars := mux.Vars(r)
 	albumID := vars["id"]
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
@@ -80,19 +82,20 @@ func (h *Handler) GetAlbum(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.mediaService.GetAlbum(ctx, input)
 	if err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to get album", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to get album", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, output)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, output)
 }
 
-func (h *Handler) ListAlbums(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) ListAlbums(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
@@ -114,7 +117,7 @@ func (h *Handler) ListAlbums(w http.ResponseWriter, r *http.Request) {
 
 	albums, err := h.mediaService.ListAlbums(ctx, input)
 	if err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to list albums", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to list albums", err)
 		return
 	}
 
@@ -124,28 +127,29 @@ func (h *Handler) ListAlbums(w http.ResponseWriter, r *http.Request) {
 		"offset": offset,
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, result)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, result)
 }
 
-func (h *Handler) AddFileToAlbum(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) AddFileToAlbum(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 	vars := mux.Vars(r)
 	albumID := vars["id"]
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
 	var req AddFileToAlbumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequestError(ctx, r, w, "Invalid request body", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid request body", err)
 		return
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		response.BadRequestError(ctx, r, w, "Validation failed", err)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Validation failed", err)
 		return
 	}
 
@@ -157,22 +161,23 @@ func (h *Handler) AddFileToAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.mediaService.AddFileToAlbum(ctx, input); err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to add file to album", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to add file to album", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, map[string]string{"message": "file added to album successfully"})
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, map[string]string{"message": "file added to album successfully"})
 }
 
-func (h *Handler) RemoveFileFromAlbum(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) RemoveFileFromAlbum(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 	vars := mux.Vars(r)
 	albumID := vars["id"]
 	fileID := vars["file_id"]
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
@@ -183,9 +188,9 @@ func (h *Handler) RemoveFileFromAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.mediaService.RemoveFileFromAlbum(ctx, input); err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to remove file from album", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to remove file from album", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, map[string]string{"message": "file removed from album successfully"})
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, map[string]string{"message": "file removed from album successfully"})
 }

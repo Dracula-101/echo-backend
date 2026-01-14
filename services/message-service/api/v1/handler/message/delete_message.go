@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"net/http"
@@ -10,7 +10,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// DeleteMessage handles deleting a message
+// DeleteMessage flow at a glance:
+//
+//	[1] Request helper — capture request ID + auth context.
+//	[2] Path params (mux) — pull message ID.
+//	[3] MessageService.DeleteMessage — verify ownership/permissions, remove record.
+//	[4] Response helper — respond 200 once deletion succeeds.
+//
+// Errors short-circuit with Unauthorized/BadRequest/500 as appropriate.
 func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 	requestID := handler.GetRequestID()

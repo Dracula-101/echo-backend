@@ -1,4 +1,4 @@
-package handler
+package conversation
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
@@ -7,31 +7,18 @@ import (
 	req "shared/server/request"
 	"shared/server/response"
 
-	pkgErrors "shared/pkg/errors"
-
 	"github.com/google/uuid"
 )
 
-// ConversationHandler handles conversation-related HTTP requests
-type ConversationHandler struct {
-	service ConversationService
-	log     logger.Logger
-}
-
-// ConversationService interface for conversation operations
-type ConversationService interface {
-	CreateConversation(userID uuid.UUID, conversationType string, participantIDs []uuid.UUID, title, description string, isEncrypted, isPublic bool) (uuid.UUID, []uuid.UUID, int64, pkgErrors.AppError)
-	GetConversations(userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError)
-}
-
-func NewConversationHandler(service ConversationService, log logger.Logger) *ConversationHandler {
-	return &ConversationHandler{
-		service: service,
-		log:     log,
-	}
-}
-
-// CreateConversation handles creating a new conversation
+// CreateConversation flow at a glance:
+//
+//	[1] Request helper — parse payload, capture request/correlation IDs.
+//	[2] Auth context — ensure creator user ID.
+//	[3] Payload shaping — coerce participant IDs into uuid.UUID slice.
+//	[4] ConversationService.CreateConversation — persist convo + participants.
+//	[5] Response helper — return 201 DTO with metadata.
+//
+// Any validation/service failures short-circuit with structured errors.
 func (h *ConversationHandler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 	requestID := handler.GetRequestID()
@@ -116,58 +103,5 @@ func (h *ConversationHandler) CreateConversation(w http.ResponseWriter, r *http.
 			allParticipants,
 			createdAt,
 		),
-	)
-}
-
-// GetConversations handles retrieving user's conversations
-func (h *ConversationHandler) GetConversations(w http.ResponseWriter, r *http.Request) {
-	handler := req.NewHandler(r, w)
-	requestID := handler.GetRequestID()
-
-	h.log.Info("Get conversations request received",
-		logger.String("service", "message-service"),
-		logger.String("request_id", requestID),
-	)
-
-	// Extract user_id from context
-	userID, ok := req.GetUserIDFromContext(r.Context())
-	if !ok {
-		response.UnauthorizedError(r.Context(), r, w, "User not authenticated", nil)
-		return
-	}
-
-	// Parse and validate request
-	request := dto.NewGetConversationsRequest()
-	if !handler.ParseValidateAndSend(request) {
-		return
-	}
-
-	// Call service layer
-	conversations, total, err := h.service.GetConversations(
-		uuid.MustParse(userID),
-		request.Limit,
-		request.Offset,
-	)
-
-	if err != nil {
-		h.log.Error("Failed to get conversations",
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		response.InternalServerError(r.Context(), r, w, "Failed to get conversations", err)
-		return
-	}
-
-	hasMore := request.Offset+len(conversations) < total
-
-	// Send response
-	response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Conversations retrieved successfully",
-		dto.GetConversationsResponse{
-			Conversations: conversations,
-			Total:         total,
-			Limit:         request.Limit,
-			Offset:        request.Offset,
-			HasMore:       hasMore,
-		},
 	)
 }

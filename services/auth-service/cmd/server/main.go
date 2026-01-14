@@ -23,6 +23,7 @@ import (
 
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
+	req "shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
 	"shared/server/server"
@@ -137,8 +138,8 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering auth routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/register", h.Register)
-		r.Post("/login", h.Login)
+		r.Post("/register", req.Adapt(h.Register))
+		r.Post("/login", req.Adapt(h.Login))
 	})
 	log.Debug("Auth routes registered successfully")
 	return builder

@@ -11,39 +11,26 @@ import (
 	dbModels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 	"time"
 )
 
-func (h *AuthHandler) LogFailedLogin(ctx context.Context, device request.DeviceInfo, locationInfo *request.IpAddressInfo, userID string, userAgent string, failureReason string) {
-	h.log.Info("Logging failed login attempt",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-		logger.String("ip_address", locationInfo.IP),
-		logger.String("device_os", device.OS),
-		logger.String("reason", failureReason),
-	)
-
-	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
-		DeviceInfo:    device,
-		IPInfo:        *locationInfo,
-		FailureReason: &failureReason,
-		UserID:        userID,
-		SessionID:     nil,
-		LoginMethod:   utils.PtrString("password"),
-		Status:        utils.PtrString("failure"),
-		UserAgent:     &userAgent,
-		IsNewDevice:   utils.PtrBool(false),
-		IsNewLocation: utils.PtrBool(false),
-	})
-	if err != nil {
-		h.log.Error("Failed to create login history record", logger.Error(err))
-	}
-}
-
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	handler := request.NewHandler(r, w)
+// Login flow at a glance:
+//
+//	[1] Request helper — parse & validate JSON, expose request/correlation IDs.
+//	[2] AuthService.GetUserByEmail — load account + run status gates.
+//	[3] LocationService.Lookup — attach GeoIP context for session metadata.
+//	[4] AuthService.Login — verify credentials.
+//	      -> invalid creds → LoginHistoryRepo + 400
+//	      -> other auth errors → 400
+//	      -> success → continue
+//	[5] SessionService — reuse/create session, persist device/browser + FCM/APNs tokens.
+//	[6] Response helper — return 200 JSON (user, tokens, session info).
+//
+// Each step logs the same request + correlation IDs for traceability.
+func (h *AuthHandler) Login(handler *req.RequestHandler) {
+	ctx := handler.Context()
 	requestID := handler.GetRequestID()
 	correlationID := handler.GetCorrelationID()
 
@@ -84,10 +71,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	user, authErr := h.service.GetUserByEmail(r.Context(), loginRequest.Email)
+	user, authErr := h.service.GetUserByEmail(ctx, loginRequest.Email)
 	if authErr != nil {
 		h.log.Error("Failed to fetch user during login", logger.Error(authErr))
-		response.InternalServerError(r.Context(), r, w, "Failed to process login", authErr)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", authErr)
 		return
 	}
 	if user == nil {
@@ -96,25 +83,25 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			logger.String("request_id", requestID),
 			logger.String("email", loginRequest.Email),
 		)
-		response.BadRequestError(r.Context(), r, w, fmt.Sprintf("User does not exist with email %s", loginRequest.Email), nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), fmt.Sprintf("User does not exist with email %s", loginRequest.Email), nil)
 		return
 	}
 
 	switch user.AccountStatus {
 	case dbModels.AccountStatusDeactivated:
-		response.BadRequestError(r.Context(), r, w, "Account is deactivated. Please contact support.", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is deactivated. Please contact support.", nil)
 		return
 	case dbModels.AccountStatusSuspended:
-		response.BadRequestError(r.Context(), r, w, "Account is suspended. Please contact support.", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is suspended. Please contact support.", nil)
 		return
 	case dbModels.AccountStatusLocked:
-		response.BadRequestError(r.Context(), r, w, "Account is locked due to multiple failed login attempts. Please reset your password or contact support.", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is locked due to multiple failed login attempts. Please reset your password or contact support.", nil)
 		return
 	case dbModels.AccountStatusPending:
-		response.BadRequestError(r.Context(), r, w, "Account is pending verification. Please verify your account before logging in.", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is pending verification. Please verify your account before logging in.", nil)
 		return
 	case dbModels.AccountStatusDeleted:
-		response.BadRequestError(r.Context(), r, w, "Account has been deleted. Please contact support for further assistance.", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account has been deleted. Please contact support for further assistance.", nil)
 		return
 	case dbModels.AccountStatusActive:
 		// Proceed with login
@@ -125,36 +112,36 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			logger.String("user_id", user.ID),
 			logger.String("account_status", string(user.AccountStatus)),
 		)
-		response.InternalServerError(r.Context(), r, w, "Failed to process login due to unknown account status", nil)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login due to unknown account status", nil)
 		return
 	}
 
-	userResult, authErr := h.service.Login(r.Context(), loginRequest.Email, loginRequest.Password)
+	userResult, authErr := h.service.Login(ctx, loginRequest.Email, loginRequest.Password)
 	if authErr != nil {
 		if authErr.Code() == authErrors.CodeInvalidCredentials {
-			h.LogFailedLogin(r.Context(), deviceInfo, locationInfo, user.ID, userAgent, authErr.Message())
-			response.BadRequestError(r.Context(), r, w, authErr.Message(), authErr)
+			h.LogFailedLogin(ctx, deviceInfo, locationInfo, user.ID, userAgent, authErr.Message())
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
 		} else {
-			response.BadRequestError(r.Context(), r, w, authErr.Message(), authErr)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
 		}
 		return
 	}
 	if userResult == nil {
-		response.BadRequestError(r.Context(), r, w, fmt.Sprintf("No user found with email %s", loginRequest.Email), nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), fmt.Sprintf("No user found with email %s", loginRequest.Email), nil)
 		return
 	}
 
 	session := &serviceModels.CreateSessionOutput{}
-	activeSession, sessErr := h.sessionService.GetSessionByUserId(r.Context(), user.ID)
+	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID)
 	if sessErr != nil {
 		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
-		response.InternalServerError(r.Context(), r, w, "Failed to process login", sessErr)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessErr)
 		return
 	}
 
 	if activeSession == nil {
 		isMobile := deviceInfo.IsMobile()
-		session, err = h.sessionService.CreateSession(r.Context(), serviceModels.CreateSessionInput{
+		session, err = h.sessionService.CreateSession(ctx, serviceModels.CreateSessionInput{
 			UserID:          userResult.User.ID,
 			RefreshToken:    userResult.Session.RefreshToken,
 			Device:          deviceInfo,
@@ -181,7 +168,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			h.log.Error("Failed to create session after login", logger.Error(err))
-			response.InternalServerError(r.Context(), r, w, "Failed to create session", err)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to create session", err)
 			return
 		}
 	} else {
@@ -197,7 +184,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		logger.String("session_id", session.SessionId),
 	)
 
-	response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Login successful",
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusOK, "Login successful",
 		map[string]any{
 			"user":          userResult.User,
 			"access_token":  userResult.Session.AccessToken,
@@ -207,4 +194,30 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			"session_id":    session.SessionId,
 		},
 	)
+}
+
+func (h *AuthHandler) LogFailedLogin(ctx context.Context, device req.DeviceInfo, locationInfo *req.IpAddressInfo, userID string, userAgent string, failureReason string) {
+	h.log.Info("Logging failed login attempt",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("ip_address", locationInfo.IP),
+		logger.String("device_os", device.OS),
+		logger.String("reason", failureReason),
+	)
+
+	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
+		DeviceInfo:    device,
+		IPInfo:        *locationInfo,
+		FailureReason: &failureReason,
+		UserID:        userID,
+		SessionID:     nil,
+		LoginMethod:   utils.PtrString("password"),
+		Status:        utils.PtrString("failure"),
+		UserAgent:     &userAgent,
+		IsNewDevice:   utils.PtrBool(false),
+		IsNewLocation: utils.PtrBool(false),
+	})
+	if err != nil {
+		h.log.Error("Failed to create login history record", logger.Error(err))
+	}
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"media-service/internal/service/models"
-	"shared/server/request"
+	req "shared/server/request"
 	"shared/server/response"
 
 	"github.com/gorilla/mux"
@@ -23,65 +23,67 @@ type CreateShareRequest struct {
 	Password       string `json:"password"`
 }
 
-func (h *Handler) CreateShare(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) CreateShare(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
-	var req CreateShareRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequestError(ctx, r, w, "Invalid request body", err)
+	var reqBody CreateShareRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid request body", err)
 		return
 	}
 
-	if err := h.validator.Struct(req); err != nil {
-		response.BadRequestError(ctx, r, w, "Validation failed", err)
+	if err := h.validator.Struct(reqBody); err != nil {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Validation failed", err)
 		return
 	}
 
 	var expiresIn *time.Duration
-	if req.ExpiresInHours > 0 {
-		duration := time.Duration(req.ExpiresInHours) * time.Hour
+	if reqBody.ExpiresInHours > 0 {
+		duration := time.Duration(reqBody.ExpiresInHours) * time.Hour
 		expiresIn = &duration
 	}
 
 	var maxViews *int
-	if req.MaxViews > 0 {
-		maxViews = &req.MaxViews
+	if reqBody.MaxViews > 0 {
+		maxViews = &reqBody.MaxViews
 	}
 
 	input := models.CreateShareInput{
-		FileID:         req.FileID,
+		FileID:         reqBody.FileID,
 		UserID:         userID,
-		SharedWithUser: req.SharedWithUser,
-		ConversationID: req.ConversationID,
-		AccessType:     req.AccessType,
+		SharedWithUser: reqBody.SharedWithUser,
+		ConversationID: reqBody.ConversationID,
+		AccessType:     reqBody.AccessType,
 		ExpiresIn:      expiresIn,
 		MaxViews:       maxViews,
-		Password:       req.Password,
+		Password:       reqBody.Password,
 	}
 
 	output, err := h.mediaService.CreateShare(ctx, input)
 	if err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to create share", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to create share", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusCreated, output)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
 }
 
-func (h *Handler) RevokeShare(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *Handler) RevokeShare(handler *req.RequestHandler) {
+	ctx := handler.Context()
+	r := handler.Request()
 	vars := mux.Vars(r)
 	shareID := vars["id"]
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := req.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		response.UnauthorizedError(ctx, r, w, "User not authenticated", fmt.Errorf("missing user ID"))
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", fmt.Errorf("missing user ID"))
 		return
 	}
 
@@ -91,9 +93,9 @@ func (h *Handler) RevokeShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.mediaService.RevokeShare(ctx, input); err != nil {
-		response.InternalServerError(ctx, r, w, "Failed to revoke share", err)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to revoke share", err)
 		return
 	}
 
-	response.JSONWithContext(ctx, r, w, http.StatusOK, map[string]string{"message": "share revoked successfully"})
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, map[string]string{"message": "share revoked successfully"})
 }

@@ -1,4 +1,4 @@
-package handler
+package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
@@ -11,7 +11,15 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// EditMessage handles editing an existing message
+// EditMessage flow at a glance:
+//
+//	[1] Request helper — parse JSON body + expose request ID.
+//	[2] Auth context — ensure editor's user ID.
+//	[3] Path params (mux) — extract message ID.
+//	[4] MessageService.EditMessage — authorize + update content.
+//	[5] Response helper — emit 200 confirmation.
+//
+// Logs include user/message IDs for auditability.
 func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 	handler := req.NewHandler(r, w)
 	requestID := handler.GetRequestID()

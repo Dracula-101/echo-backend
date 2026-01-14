@@ -1,8 +1,6 @@
 package handler
 
-import (
-	"net/http"
-)
+import req "shared/server/request"
 
 // ============================================================================
 // Handler Interfaces
@@ -11,8 +9,8 @@ import (
 // AuthHandlerInterface defines the contract for authentication HTTP handlers
 type AuthHandlerInterface interface {
 	// Authentication endpoints
-	Register(w http.ResponseWriter, r *http.Request)
-	Login(w http.ResponseWriter, r *http.Request)
+	Register(handler *req.RequestHandler)
+	Login(handler *req.RequestHandler)
 }
 
 // Compile-time interface compliance check

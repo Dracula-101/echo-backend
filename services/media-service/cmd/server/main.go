@@ -24,6 +24,7 @@ import (
 	"shared/pkg/storage/r2"
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
+	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
 	"shared/server/server"
@@ -164,32 +165,32 @@ func setupRoutes(builder *router.Builder, h *handler.Handler, cfg *config.Config
 	log.Debug("Registering media routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/upload", coreMiddleware.ApplyMiddlewares(
-			h.Upload,
+			request.Adapt(h.Upload),
 			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
 		))
 
 		r.Post("/profile-photo", coreMiddleware.ApplyMiddlewares(
-			h.UploadProfilePhoto,
+			request.Adapt(h.UploadProfilePhoto),
 			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
 		))
 
 		r.Post("/message-media", coreMiddleware.ApplyMiddlewares(
-			h.UploadMessageMedia,
+			request.Adapt(h.UploadMessageMedia),
 			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes),
 		))
 
-		r.Get("/files/{file_id}", h.GetFile)
-		r.Delete("/files/{file_id}", h.DeleteFile)
-		r.Post("/albums", h.CreateAlbum)
-		r.Get("/albums/{id}", h.GetAlbum)
-		r.Get("/albums", h.ListAlbums)
-		r.Post("/albums/{id}/files", h.AddFileToAlbum)
-		r.Delete("/albums/{id}/files/{file_id}", h.RemoveFileFromAlbum)
+		r.Get("/files/{file_id}", request.Adapt(h.GetFile))
+		r.Delete("/files/{file_id}", request.Adapt(h.DeleteFile))
+		r.Post("/albums", request.Adapt(h.CreateAlbum))
+		r.Get("/albums/{id}", request.Adapt(h.GetAlbum))
+		r.Get("/albums", request.Adapt(h.ListAlbums))
+		r.Post("/albums/{id}/files", request.Adapt(h.AddFileToAlbum))
+		r.Delete("/albums/{id}/files/{file_id}", request.Adapt(h.RemoveFileFromAlbum))
 
-		r.Post("/shares", h.CreateShare)
-		r.Delete("/shares/{id}", h.RevokeShare)
+		r.Post("/shares", request.Adapt(h.CreateShare))
+		r.Delete("/shares/{id}", request.Adapt(h.RevokeShare))
 
-		r.Get("/stats", h.GetStorageStats)
+		r.Get("/stats", request.Adapt(h.GetStorageStats))
 	})
 	log.Debug("Media routes registered successfully")
 	return builder
