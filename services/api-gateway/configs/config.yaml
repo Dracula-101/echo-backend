@@ -28,8 +28,8 @@ server:
     audience: ${JWT_AUDIENCE:api}
     leeway: ${JWT_LEEWAY:1m}
     skip_paths:
-      - /auth/login
-      - /auth/register
+      - /api/v1/auth/login
+      - /api/v1/auth/register
       - /**/health
       - /**/metrics
 
