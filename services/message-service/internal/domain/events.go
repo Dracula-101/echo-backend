@@ -7,7 +7,7 @@ import (
 )
 
 // ============================================================================
-// Event Types (for event-driven architecture)
+// Event Types (for producer/consumer model)
 // ============================================================================
 
 // MessageEvent represents a message-related event
@@ -17,6 +17,15 @@ type MessageEvent struct {
 	ConversationID uuid.UUID
 	SenderUserID   uuid.UUID
 	RecipientIDs   []uuid.UUID
+	Timestamp      time.Time
+	Payload        interface{}
+}
+
+// ConversationEvent represents a conversation-related event
+type ConversationEvent struct {
+	EventType      ConversationEventType
+	ConversationID uuid.UUID
+	UserID         uuid.UUID
 	Timestamp      time.Time
 	Payload        interface{}
 }

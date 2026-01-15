@@ -9,6 +9,14 @@ import (
 	"shared/pkg/logger"
 )
 
+// SessionRepositoryInterface defines the contract for session repository operations
+type SessionRepositoryInterface interface {
+	// Session management
+	CreateSession(ctx context.Context, session *models.AuthSession) pkgErrors.AppError
+	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError)
+	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
+}
+
 // ============================================================================
 // Repository Definition
 // ============================================================================

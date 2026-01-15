@@ -2,8 +2,8 @@ package handler
 
 import (
 	"auth-service/api/v1/dto"
-	authErrors "auth-service/internal/errors"
-	serviceModels "auth-service/internal/service/model"
+	"auth-service/internal/domain"
+	authErrors "auth-service/internal/error"
 	"net/http"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -50,15 +50,15 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		logger.String("email", reqBody.Email),
 	)
 
-	emailTaken, dbErr := h.authService.IsEmailTaken(ctx, reqBody.Email)
-	if dbErr != nil {
+	emailTaken, authErr := h.authService.IsEmailTaken(ctx, reqBody.Email)
+	if authErr != nil {
 		h.log.Error("Failed to check if email is taken",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
 			logger.String("email", reqBody.Email),
-			logger.Error(dbErr),
+			logger.Error(authErr.Error),
 		)
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to check email availability", dbErr)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to check email availability", authErr.Error)
 		return
 	}
 	if emailTaken {
@@ -71,7 +71,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		return
 	}
 
-	output, authErr := h.authService.RegisterUser(ctx, serviceModels.RegisterUserInput{
+	output, authErr := h.authService.RegisterUser(ctx, domain.RegisterUserInput{
 		Email:            reqBody.Email,
 		Password:         reqBody.Password,
 		PhoneNumber:      reqBody.PhoneNumber,
@@ -81,10 +81,10 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		AcceptTerms:      reqBody.AcceptTerms,
 	})
 	if authErr != nil {
-		if authErr.Code() == authErrors.CodePasswordTooWeak || authErr.Code() == authErrors.CodeInvalidEmail {
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), nil)
+		if authErr.Code == authErrors.CodePasswordTooWeak || authErr.Code == authErrors.CodeInvalidEmail {
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message, nil)
 		} else {
-			response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
 		}
 		return
 	}

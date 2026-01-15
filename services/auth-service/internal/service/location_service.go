@@ -1,6 +1,7 @@
 package service
 
 import (
+	"auth-service/internal/domain"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,12 @@ import (
 	"shared/server/request"
 	"time"
 )
+
+// LocationServiceInterface defines the contract for location service operations
+type LocationServiceInterface interface {
+	// IP lookup
+	Lookup(ip string) (*request.IpAddressInfo, pkgErrors.AppError)
+}
 
 type LocationService struct {
 	Endpoint string
@@ -63,7 +70,7 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, pkgErrors.A
 			WithDetail("ip", ip)
 	}
 
-	var locationData LocationData
+	var locationData domain.LocationData
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(&locationData); err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to decode location response").
@@ -83,20 +90,4 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, pkgErrors.A
 		ISP:         locationData.ISP,
 		IP:          locationData.IP,
 	}, nil
-}
-
-type LocationData struct {
-	Latitude      float64 `json:"latitude"`
-	Longitude     float64 `json:"longitude"`
-	City          string  `json:"city"`
-	Continent     string  `json:"continent"`
-	ContinentCode string  `json:"continent_code"`
-	State         string  `json:"state"`
-	StateCode     string  `json:"state_code"`
-	PostalCode    string  `json:"postal_code"`
-	Country       string  `json:"country"`
-	CountryCode   string  `json:"country_code"`
-	Timezone      string  `json:"timezone"`
-	ISP           string  `json:"isp"`
-	IP            string  `json:"ip"`
 }

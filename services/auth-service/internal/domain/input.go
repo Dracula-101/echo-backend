@@ -1,9 +1,11 @@
 package domain
 
-import "time"
+import (
+	"shared/server/request"
+	"time"
+)
 
-// RegistrationInput contains all data needed for user registration
-type RegistrationInput struct {
+type RegisterUserInput struct {
 	Email            string
 	Password         string
 	PhoneNumber      string
@@ -13,28 +15,36 @@ type RegistrationInput struct {
 	AcceptTerms      bool
 }
 
-// LoginInput contains credentials for user authentication
 type LoginInput struct {
-	Email        string
-	Password     string
-	IPAddress    string
-	UserAgent    string
-	DeviceInfo   DeviceInfo
-	LocationInfo LocationInfo
+	Email    string
+	Password string
 }
 
-// SessionCreationInput contains data for creating a new session
-type SessionCreationInput struct {
+type FailedLoginAttemptInput struct {
+	UserID        string
+	Device        request.DeviceInfo
+	Location      *request.IpAddressInfo
+	UserAgent     string
+	Reason        string
+	LoginMethod   string
+	IsNewDevice   bool
+	IsNewLocation bool
+}
+
+type CreateSessionInput struct {
 	UserID          string
 	RefreshToken    string
-	Device          DeviceInfo
-	Browser         BrowserInfo
-	Location        LocationInfo
+	Device          request.DeviceInfo
+	Browser         request.BrowserInfo
 	UserAgent       string
+	IP              request.IpAddressInfo
+	Latitude        float64
+	Longitude       float64
+	IsMobile        bool
 	IsTrustedDevice bool
-	FCMToken        *string
-	APNSToken       *string
-	SessionType     string
+	FCMToken        string
+	APNSToken       string
+	SessionType     SessionType
 	ExpiresAt       time.Time
 	Metadata        map[string]interface{}
 }

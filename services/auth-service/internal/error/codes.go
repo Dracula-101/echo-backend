@@ -1,8 +1,10 @@
-package errors
+package error
 
 // ============================================================================
 // Auth Service Error Codes
 // ============================================================================
+
+type AuthErrorCode string
 
 const (
 	// Authentication Errors
@@ -22,6 +24,9 @@ const (
 	CodeEmailVerificationFailed = "AUTH_EMAIL_VERIFY_FAILED"
 	CodePhoneVerificationFailed = "AUTH_PHONE_VERIFY_FAILED"
 
+	// Database Errors
+	CodeDatabaseError = "AUTH_DATABASE_ERROR"
+
 	// Registration Errors
 	CodeInvalidEmail       = "AUTH_INVALID_EMAIL"
 	CodeInvalidPhoneNumber = "AUTH_INVALID_PHONE"
@@ -40,9 +45,3 @@ const (
 	CodeIPBlocked             = "AUTH_IP_BLOCKED"
 	CodeDeviceNotTrusted      = "AUTH_DEVICE_NOT_TRUSTED"
 )
-
-// ============================================================================
-// Service Name
-// ============================================================================
-
-const ServiceName = "auth-service"

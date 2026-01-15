@@ -1,11 +1,5 @@
 package domain
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
-
 // MessageEventType represents the type of message event
 type MessageEventType string
 
@@ -17,15 +11,6 @@ const (
 	MessageEventTypeRead      MessageEventType = "message.read"
 	MessageEventTypeFailed    MessageEventType = "message.failed"
 )
-
-// ConversationEvent represents a conversation-related event
-type ConversationEvent struct {
-	EventType      ConversationEventType
-	ConversationID uuid.UUID
-	UserID         uuid.UUID
-	Timestamp      time.Time
-	Payload        interface{}
-}
 
 // ConversationEventType represents the type of conversation event
 type ConversationEventType string

@@ -1,7 +1,9 @@
 package repository
 
 import (
-	authErrors "auth-service/internal/errors"
+	"auth-service/internal/domain"
+	authErrors "auth-service/internal/error"
+	"auth-service/internal/repo/model"
 	repoModels "auth-service/internal/repo/model"
 	"context"
 	"database/sql"
@@ -15,6 +17,17 @@ import (
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
+
+// AuthRepositoryInterface defines the contract for authentication repository operations
+type AuthRepositoryInterface interface {
+	// User management
+	ExistsByEmail(ctx context.Context, email string) (bool, pkgErrors.AppError)
+	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
+	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
+	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)
+	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError
+	RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError
+}
 
 // ============================================================================
 // Repository Definition
@@ -173,7 +186,7 @@ func (r *AuthRepository) UnlockUserAccount(ctx context.Context, userID string) p
 // User Retrieval
 // ============================================================================
 
-func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*models.AuthUser, pkgErrors.AppError) {
+func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError) {
 	r.log.Debug("Fetching user by email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -202,7 +215,33 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 		logger.Any("account_status", user.AccountStatus),
 	)
 
-	return &user, nil
+	return &domain.User{
+		ID:                     user.ID,
+		Email:                  user.Email,
+		PhoneNumber:            derefString(user.PhoneNumber),
+		PhoneCountryCode:       derefString(user.PhoneCountryCode),
+		PasswordHash:           user.PasswordHash,
+		PasswordSalt:           user.PasswordSalt,
+		PasswordAlgorithm:      user.PasswordAlgorithm,
+		EmailVerified:          user.EmailVerified,
+		PhoneVerified:          user.PhoneVerified,
+		TwoFactorEnabled:       user.TwoFactorEnabled,
+		AccountStatus:          user.AccountStatus,
+		AccountLockedUntil:     user.AccountLockedUntil,
+		FailedLoginAttempts:    user.FailedLoginAttempts,
+		LastFailedLoginAt:      user.LastFailedLoginAt,
+		RequiresPasswordChange: user.RequiresPasswordChange,
+		DeletedAt:              user.DeletedAt,
+		UpdatedAt:              user.UpdatedAt,
+	}, nil
+}
+
+// Helper to dereference *string to string
+func derefString(s *string) string {
+	if s != nil {
+		return *s
+	}
+	return ""
 }
 
 // ============================================================================

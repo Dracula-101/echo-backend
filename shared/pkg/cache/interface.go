@@ -51,3 +51,7 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 }
+
+const (
+	DefaultCacheTTL = 5 * time.Minute
+)

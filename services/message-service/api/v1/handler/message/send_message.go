@@ -6,6 +6,7 @@ import (
 	"echo-backend/services/message-service/api/v1/dto"
 	svcmodel "echo-backend/services/message-service/internal/service/model"
 	"shared/pkg/logger"
+	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
 
@@ -21,8 +22,7 @@ import (
 //	[5] Response helper — return 201 with DTO payload.
 //
 // Every step logs request + user identifiers for traceability.
-func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
-	handler := req.NewHandler(r, w)
+func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 	requestID := handler.GetRequestID()
 	correlationID := handler.GetCorrelationID()
 
@@ -34,12 +34,12 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Extract user_id from context (set by auth middleware in API Gateway)
-	userID, ok := req.GetUserIDFromContext(r.Context())
+	userID, ok := req.GetUserIDFromContext(handler.Context())
 	if !ok {
 		h.log.Warn("User not authenticated",
 			logger.String("request_id", requestID),
 		)
-		response.UnauthorizedError(r.Context(), r, w, "User not authenticated", nil)
+		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call service layer
-	message, err := h.messageService.SendMessage(r.Context(), &svcmodel.SendMessageInput{
+	message, err := h.messageService.SendMessage(handler.Context(), &svcmodel.SendMessageInput{
 		ConversationID:  uuid.MustParse(request.ConversationID),
 		SenderUserID:    uuid.MustParse(userID),
 		Content:         request.Content,
@@ -88,7 +88,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			logger.String("conversation_id", request.ConversationID),
 			logger.Error(err),
 		)
-		response.InternalServerError(r.Context(), r, w, "Failed to send message", err)
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Failed to send message", err)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Send response
-	response.JSONWithMessage(r.Context(), r, w, http.StatusCreated, "Message sent successfully",
+	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), http.StatusCreated, "Message sent successfully",
 		dto.NewSendMessageResponse(message),
 	)
 }

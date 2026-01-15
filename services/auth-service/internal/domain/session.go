@@ -45,3 +45,17 @@ func (s *Session) TimeToExpiry() time.Duration {
 func (s *Session) Refreshable(threshold time.Duration) bool {
 	return s.TimeToExpiry() <= threshold
 }
+
+type SessionRecord struct {
+	ID           string
+	SessionToken string
+	AccessToken  string
+	RefreshToken string
+}
+
+type SessionType string
+
+const (
+	SessionTypeWeb    SessionType = "web"
+	SessionTypeMobile SessionType = "mobile"
+)

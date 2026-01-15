@@ -4,17 +4,27 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
-	authErrors "auth-service/internal/errors"
-	serviceModels "auth-service/internal/service/model"
+	authErrors "auth-service/internal/error"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
 )
 
+// Login flow at a glance:
+//
+//	[1] Request helper — parse & validate JSON.
+//	[2] LocationService.Lookup — GeoIP timezone/country for metadata.
+//	[3] AuthService.GetUserByEmail — fetch user by email.
+//	[4] User status check — ensure account is active and not locked.
+//	[5] AuthService.Login — validate credentials and generate tokens.
+//	[6] SessionService.GetSessionByUserId — check for existing active session.
+//	[7] SessionService.CreateSession — create new session if none exists.
+//	[8] Response helper — return 200 JSON body with tokens.
+//
+// Failures short-circuit immediately with structured error payloads.
 func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	requestID := handler.GetRequestID()
@@ -47,13 +57,13 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("browser", browserInfo.Name),
 	)
 
-	locationInfo, err := h.locationService.Lookup(clientIP)
-	if err != nil {
+	locationInfo, locationErr := h.locationService.Lookup(clientIP)
+	if locationErr != nil {
 		h.log.Error("Failed to lookup location",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
 			logger.String("ip_address", clientIP),
-			logger.Error(err),
+			logger.Error(locationErr),
 		)
 	}
 	if locationInfo == nil {
@@ -62,8 +72,8 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 
 	user, authErr := h.authService.GetUserByEmail(ctx, loginRequest.Email)
 	if authErr != nil {
-		h.log.Error("Failed to fetch user during login", logger.Error(authErr))
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", authErr)
+		h.log.Error("Failed to fetch user during login", logger.Error(authErr.Error))
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
 		return
 	}
 	if user == nil {
@@ -81,17 +91,15 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	userResult, authErr := h.authService.Login(ctx, serviceModels.LoginInput{
+	userResult, authErr := h.authService.Login(ctx, domain.LoginInput{
 		Email:    loginRequest.Email,
 		Password: loginRequest.Password,
 	})
 	if authErr != nil {
-		if authErr.Code() == authErrors.CodeInvalidCredentials {
-			h.recordFailedLogin(ctx, deviceInfo, locationInfo, user.ID, userAgent, authErr.Message())
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
-		} else {
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
+		if authErr.Code == authErrors.CodeInvalidCredentials {
+			h.recordFailedLogin(ctx, deviceInfo, locationInfo, user.ID, userAgent, authErr.Message)
 		}
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
 		return
 	}
 	if userResult == nil {
@@ -99,7 +107,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	session := &serviceModels.CreateSessionOutput{}
+	session := &domain.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID)
 	if sessErr != nil {
 		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
@@ -109,9 +117,9 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 
 	if activeSession == nil {
 		isMobile := deviceInfo.IsMobile()
-		createdSession, err := h.sessionService.CreateSession(ctx, serviceModels.CreateSessionInput{
+		createdSession, err := h.sessionService.CreateSession(ctx, domain.CreateSessionInput{
 			UserID:          userResult.User.ID,
-			RefreshToken:    userResult.Session.RefreshToken,
+			RefreshToken:    userResult.RefreshToken,
 			Device:          deviceInfo,
 			Browser:         browserInfo,
 			UserAgent:       userAgent,
@@ -122,14 +130,13 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			IsTrustedDevice: false,
 			FCMToken:        loginRequest.FCMToken,
 			APNSToken:       loginRequest.APNSToken,
-			SessionType: func() serviceModels.SessionType {
+			SessionType: func() domain.SessionType {
 				if isMobile {
-					return serviceModels.SessionTypeMobile
+					return domain.SessionTypeMobile
 				}
-				return serviceModels.SessionTypeWeb
+				return domain.SessionTypeWeb
 			}(),
-			ExpiresAt: time.Unix(userResult.Session.ExpiresAt, 0),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
 			},
@@ -144,7 +151,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		session.SessionId = activeSession.ID
 		session.SessionToken = activeSession.SessionToken
 		if activeSession.RefreshToken != "" {
-			userResult.Session.RefreshToken = activeSession.RefreshToken
+			userResult.RefreshToken = activeSession.RefreshToken
 		}
 	}
 
@@ -156,14 +163,14 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	)
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusOK, "Login successful",
-		map[string]any{
-			"user":          userResult.User,
-			"access_token":  userResult.Session.AccessToken,
-			"expires_at":    userResult.Session.ExpiresAt,
-			"refresh_token": userResult.Session.RefreshToken,
-			"session_token": session.SessionToken,
-			"session_id":    session.SessionId,
-		},
+		dto.NewLoginResponse(
+			*userResult.User,
+			session.SessionId,
+			session.SessionToken,
+			userResult.AccessToken,
+			userResult.RefreshToken,
+			userResult.ExpiresAt,
+		),
 	)
 }
 
@@ -199,7 +206,7 @@ func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceIn
 		locationInfo = &req.IpAddressInfo{}
 	}
 
-	input := serviceModels.FailedLoginAttemptInput{
+	input := domain.FailedLoginAttemptInput{
 		UserID:        userID,
 		Device:        device,
 		Location:      locationInfo,
@@ -211,6 +218,6 @@ func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceIn
 	}
 
 	if err := h.authService.RecordFailedLoginAttempt(ctx, input); err != nil {
-		h.log.Error("Failed to record failed login attempt", logger.Error(err))
+		h.log.Error("Failed to record failed login attempt", logger.Error(err.Error))
 	}
 }

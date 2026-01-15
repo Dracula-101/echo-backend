@@ -2,9 +2,9 @@ package service
 
 import (
 	"auth-service/internal/config"
-	authErrors "auth-service/internal/errors"
+	"auth-service/internal/domain"
+	authErrors "auth-service/internal/error"
 	repository "auth-service/internal/repo"
-	serviceModels "auth-service/internal/service/model"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -20,6 +20,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// SessionServiceInterface defines the contract for session service operations
+type SessionServiceInterface interface {
+	// Session management
+	CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError)
+	GetSessionByUserId(ctx context.Context, userID string) (*domain.SessionRecord, pkgErrors.AppError)
+	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
+}
+
 type SessionService struct {
 	repo         repository.SessionRepositoryInterface
 	tokenService token.JWTTokenService
@@ -28,9 +36,9 @@ type SessionService struct {
 	log          logger.Logger
 }
 
-func toDBSessionType(t serviceModels.SessionType) models.SessionType {
+func toDBSessionType(t domain.SessionType) models.SessionType {
 	switch t {
-	case serviceModels.SessionTypeMobile:
+	case domain.SessionTypeMobile:
 		return models.SessionTypeMobile
 	default:
 		return models.SessionTypeWeb
@@ -80,7 +88,7 @@ func (s *SessionService) generateSessionToken(userID string) (string, pkgErrors.
 	return token, nil
 }
 
-func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, pkgErrors.AppError) {
+func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError) {
 	s.log.Info("Creating session",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", input.UserID),
@@ -187,13 +195,13 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		logger.String("user_id", input.UserID),
 	)
 
-	return &serviceModels.CreateSessionOutput{
+	return &domain.CreateSessionOutput{
 		SessionId:    sessionID,
 		SessionToken: sessionToken,
 	}, nil
 }
 
-func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*serviceModels.SessionRecord, pkgErrors.AppError) {
+func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*domain.SessionRecord, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by user ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -220,7 +228,7 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 		logger.String("session_id", session.ID),
 	)
 
-	return &serviceModels.SessionRecord{
+	return &domain.SessionRecord{
 		ID:           session.ID,
 		SessionToken: session.SessionToken,
 		RefreshToken: func() string {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"shared/pkg/database/postgres/models"
+	"shared/pkg/utils"
 )
 
 // User represents the core user entity in the authentication domain
@@ -62,5 +63,33 @@ func (u *User) CanLogin() error {
 		return nil
 	default:
 		return ErrUnknownAccountStatus
+	}
+}
+
+func toUserFromModel(m *models.AuthUser) *User {
+	if m == nil {
+		return nil
+	}
+	return &User{
+		ID:                     m.ID,
+		Email:                  m.Email,
+		PhoneNumber:            utils.DerefString(m.PhoneNumber),
+		PhoneCountryCode:       utils.DerefString(m.PhoneCountryCode),
+		EmailVerified:          m.EmailVerified,
+		PhoneVerified:          m.PhoneVerified,
+		AccountStatus:          m.AccountStatus,
+		TwoFactorEnabled:       m.TwoFactorEnabled,
+		PasswordHash:           m.PasswordHash,
+		PasswordSalt:           m.PasswordSalt,
+		PasswordAlgorithm:      m.PasswordAlgorithm,
+		PasswordLastChanged:    m.PasswordLastChangedAt,
+		AccountLockedUntil:     m.AccountLockedUntil,
+		FailedLoginAttempts:    m.FailedLoginAttempts,
+		LastFailedLoginAt:      m.LastFailedLoginAt,
+		LastSuccessfulLoginAt:  m.LastSuccessfulLoginAt,
+		RequiresPasswordChange: m.RequiresPasswordChange,
+		DeletedAt:              m.DeletedAt,
+		UpdatedAt:              m.UpdatedAt,
+		CreatedAt:              m.CreatedAt,
 	}
 }

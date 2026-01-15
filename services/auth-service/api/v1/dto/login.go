@@ -59,6 +59,17 @@ type LoginResponse struct {
 	Session LoginSession `json:"session"`
 }
 
+type AccountStatus string
+
+const (
+	AccountStatusActive      AccountStatus = "active"
+	AccountStatusPending     AccountStatus = "pending"
+	AccountStatusSuspended   AccountStatus = "suspended"
+	AccountStatusLocked      AccountStatus = "locked"
+	AccountStatusDeactivated AccountStatus = "deactivated"
+	AccountStatusDeleted     AccountStatus = "deleted"
+)
+
 // LoginUser represents the serialized user details returned to the client.
 type LoginUser struct {
 	ID               string                `json:"id"`
@@ -75,6 +86,8 @@ type LoginUser struct {
 
 // LoginSession captures the issued tokens after authentication.
 type LoginSession struct {
+	SessionId    string `json:"session_id"`
+	SessionToken string `json:"session_token"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	TokenType    string `json:"token_type"`
@@ -82,7 +95,7 @@ type LoginSession struct {
 }
 
 // NewLoginResponse builds a login response from the persisted model state.
-func NewLoginResponse(user domain.User, accessToken string, refreshToken string, expiresAt int64) *LoginResponse {
+func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, expiresAt int64) *LoginResponse {
 	return &LoginResponse{
 		User: LoginUser{
 			ID:               user.ID,
@@ -97,6 +110,8 @@ func NewLoginResponse(user domain.User, accessToken string, refreshToken string,
 			UpdatedAt:        user.UpdatedAt.Unix(),
 		},
 		Session: LoginSession{
+			SessionId:    sessionId,
+			SessionToken: sessionToken,
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 			TokenType:    "Bearer",

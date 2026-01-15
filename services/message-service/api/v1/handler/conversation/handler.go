@@ -1,19 +1,18 @@
 package conversation
 
 import (
-	"echo-backend/services/message-service/internal/service"
+	svc "echo-backend/services/message-service/internal/service"
 	"shared/pkg/logger"
 )
 
-// ConversationHandler handles conversation-related HTTP requests
 type ConversationHandler struct {
-	service service.ConversationService
-	log     logger.Logger
+	conversationService svc.ConversationServiceInterface
+	log                 logger.Logger
 }
 
-func NewConversationHandler(service service.ConversationService, log logger.Logger) *ConversationHandler {
+func NewConversationHandler(conversationService svc.ConversationServiceInterface, log logger.Logger) *ConversationHandler {
 	return &ConversationHandler{
-		service: service,
-		log:     log,
+		conversationService: conversationService,
+		log:                 log,
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	conversationHandler "echo-backend/services/message-service/api/v1/handler/conversation"
 	messageHandler "echo-backend/services/message-service/api/v1/handler/message"
 	"echo-backend/services/message-service/internal/config"
 	"echo-backend/services/message-service/internal/health"
@@ -25,6 +24,7 @@ import (
 	"shared/pkg/messaging/kafka"
 	env "shared/server/env"
 	"shared/server/middleware"
+	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
 	"shared/server/server"
@@ -131,26 +131,16 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *messageHandler.MessageHandler,
-	conversationHandler *conversationHandler.ConversationHandler,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
 
 	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/", messageHandler.SendMessage)              // Send a new message
-		r.Get("/", messageHandler.GetMessages)               // Get messages (with query params)
-		r.Put("/{id}", messageHandler.EditMessage)           // Edit a message
-		r.Delete("/{id}", messageHandler.DeleteMessage)      // Delete a message
-		r.Post("/read", messageHandler.MarkAsRead)           // Mark message as read
-		r.Post("/typing", messageHandler.SetTypingIndicator) // Set typing indicator
+		r.Post("/", request.Adapt(messageHandler.SendMessage))
 	})
 
 	// Conversation endpoints
-	builder = builder.WithRoutesGroup("/conversations", func(rg *router.RouteGroup) {
-		rg.Post("", conversationHandler.CreateConversation) // Create new conversation
-		rg.Get("", conversationHandler.GetConversations)    // Get user's conversations
-	})
 
 	log.Debug("API routes registered successfully")
 	return builder
@@ -158,7 +148,6 @@ func setupAPIRoutes(
 
 func createRouter(
 	messageHandler *messageHandler.MessageHandler,
-	conversationHandler *conversationHandler.ConversationHandler,
 	healthHandler *health.Handler,
 	cfg *config.Config,
 	log logger.Logger,
@@ -189,7 +178,7 @@ func createRouter(
 			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
-	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, log)
+	builder = setupAPIRoutes(builder, messageHandler, log)
 
 	r := builder.Build()
 	return r, nil
@@ -307,22 +296,20 @@ func main() {
 	log.Info("Health checks registered")
 
 	// Initialize repositories
-	messageRepo := repo.NewMessageRepository(dbClient)
-	conversationRepo := repo.NewConversationRepository(dbClient)
+	messageRepo := repo.NewMessageRepository(dbClient, cacheClient)
+	conversationRepo := repo.NewConversationRepository(dbClient, cacheClient)
 
 	// Initialize event publisher
 	eventPublisher := service.NewKafkaEventPublisher(kafkaProducer, log)
 
 	// Initialize services
-	messageService := service.NewMessageService(messageRepo, eventPublisher, kafkaProducer, log)
-	conversationService := service.NewConversationService(conversationRepo, log)
+	messageService := service.NewMessageService(messageRepo, conversationRepo, eventPublisher, log)
 
 	// Initialize handlers
 	messageHandler := messageHandler.NewMessageHandler(messageService, log)
-	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)
+	routerInstance, err := createRouter(messageHandler, healthHandler, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

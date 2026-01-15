@@ -9,6 +9,17 @@ import (
 	"shared/pkg/logger"
 )
 
+// LoginHistoryRepositoryInterface defines the contract for login history repository operations
+type LoginHistoryRepositoryInterface interface {
+	// Login history management
+	CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) pkgErrors.AppError
+	GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, pkgErrors.AppError)
+	GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, pkgErrors.AppError)
+	GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, pkgErrors.AppError)
+	DeleteLoginHistoryByUserID(ctx context.Context, userID string) pkgErrors.AppError
+	DeleteLoginHistoryByID(ctx context.Context, id string) pkgErrors.AppError
+}
+
 // ============================================================================
 // Repository Definition
 // ============================================================================
