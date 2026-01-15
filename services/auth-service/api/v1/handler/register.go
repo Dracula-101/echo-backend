@@ -3,7 +3,7 @@ package handler
 import (
 	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/errors"
-	serviceModels "auth-service/internal/service/models"
+	serviceModels "auth-service/internal/service/model"
 	"net/http"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -50,7 +50,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		logger.String("email", reqBody.Email),
 	)
 
-	emailTaken, dbErr := h.service.IsEmailTaken(ctx, reqBody.Email)
+	emailTaken, dbErr := h.authService.IsEmailTaken(ctx, reqBody.Email)
 	if dbErr != nil {
 		h.log.Error("Failed to check if email is taken",
 			logger.String("service", authErrors.ServiceName),
@@ -71,7 +71,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		return
 	}
 
-	output, authErr := h.service.RegisterUser(ctx, serviceModels.RegisterUserInput{
+	output, authErr := h.authService.RegisterUser(ctx, serviceModels.RegisterUserInput{
 		Email:            reqBody.Email,
 		Password:         reqBody.Password,
 		PhoneNumber:      reqBody.PhoneNumber,

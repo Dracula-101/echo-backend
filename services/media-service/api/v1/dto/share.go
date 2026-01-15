@@ -9,3 +9,7 @@ type CreateShareRequest struct {
 	MaxViews       int    `json:"max_views"`
 	Password       string `json:"password"`
 }
+
+func NewCreateShareRequest() *CreateShareRequest {
+	return &CreateShareRequest{}
+}

@@ -8,62 +8,21 @@ import (
 
 	"user-service/internal/model"
 	repository "user-service/internal/repo"
-	"user-service/internal/service/models"
+	repoModel "user-service/internal/repo/model"
+	svcmodel "user-service/internal/service/model"
 
 	"shared/pkg/cache"
-	dbmodels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
-	"shared/pkg/utils"
 )
 
 type UserService struct {
-	repo  *repository.UserRepository
+	repo  repository.UserRepositoryInterface
 	cache cache.Cache
 	log   logger.Logger
 }
 
-func NewUserServiceBuilder() *UserServiceBuilder {
-	return &UserServiceBuilder{}
-}
-
-type UserServiceBuilder struct {
-	repo  *repository.UserRepository
-	cache cache.Cache
-	log   logger.Logger
-}
-
-func (b *UserServiceBuilder) WithRepo(repo *repository.UserRepository) *UserServiceBuilder {
-	b.repo = repo
-	return b
-}
-
-func (b *UserServiceBuilder) WithCache(cache cache.Cache) *UserServiceBuilder {
-	b.cache = cache
-	return b
-}
-
-func (b *UserServiceBuilder) WithLogger(log logger.Logger) *UserServiceBuilder {
-	b.log = log
-	return b
-}
-
-func (b *UserServiceBuilder) Build() *UserService {
-	if b.repo == nil {
-		panic("UserRepository is required")
-	}
-	if b.log == nil {
-		panic("Logger is required")
-	}
-
-	b.log.Info("Building UserService",
-		logger.String("service", "user-service"),
-	)
-
-	return &UserService{
-		repo:  b.repo,
-		cache: b.cache,
-		log:   b.log,
-	}
+func newUserService(repo repository.UserRepositoryInterface, cache cache.Cache, log logger.Logger) *UserService {
+	return &UserService{repo: repo, cache: cache, log: log}
 }
 
 func (s *UserService) GenerateUsername(ctx context.Context, displayName string) (string, error) {
@@ -100,7 +59,7 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 			}
 		}
 	}
-	var repoProfile *dbmodels.Profile
+	var repoProfile *repoModel.Profile
 	var err error
 
 	repoProfile, err = s.repo.GetProfileByUserID(ctx, userID)
@@ -132,12 +91,12 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 	return user, nil
 }
 
-func (s *UserService) CreateProfile(ctx context.Context, profile *models.Profile) (*model.User, error) {
+func (s *UserService) CreateProfile(ctx context.Context, profile *svcmodel.Profile) (*model.User, error) {
 	s.log.Info("Creating user profile",
 		logger.String("user_id", profile.UserID),
 	)
 
-	var createdProfile *models.Profile
+	var createdProfile *svcmodel.Profile
 
 	repoInput := toRepoProfile(profile)
 	existingProfile, err := s.repo.GetProfileByUserID(ctx, profile.UserID)
@@ -194,7 +153,7 @@ func (s *UserService) CreateProfile(ctx context.Context, profile *models.Profile
 	return user, nil
 }
 
-func (s *UserService) profileToUser(profile *models.Profile) *model.User {
+func (s *UserService) profileToUser(profile *svcmodel.Profile) *model.User {
 	return &model.User{
 		ID:           profile.UserID,
 		Username:     profile.Username,
@@ -210,12 +169,13 @@ func (s *UserService) profileToUser(profile *models.Profile) *model.User {
 	}
 }
 
-func toRepoProfile(profile *models.Profile) dbmodels.Profile {
+func toRepoProfile(profile *svcmodel.Profile) repoModel.Profile {
 	if profile == nil {
-		return dbmodels.Profile{}
+		return repoModel.Profile{}
 	}
 
-	return dbmodels.Profile{
+	now := time.Now()
+	return repoModel.Profile{
 		UserID:            profile.UserID,
 		Username:          profile.Username,
 		DisplayName:       &profile.DisplayName,
@@ -223,28 +183,30 @@ func toRepoProfile(profile *models.Profile) dbmodels.Profile {
 		LastName:          profile.LastName,
 		Bio:               profile.Bio,
 		AvatarURL:         profile.AvatarURL,
-		LanguageCode:      *profile.LanguageCode,
+		LanguageCode:      valueOrDefault(profile.LanguageCode),
 		Timezone:          profile.Timezone,
 		CountryCode:       profile.CountryCode,
 		PhoneVisible:      false,
 		EmailVisible:      false,
-		OnlineStatus:      dbmodels.OnlineStatusOffline,
-		LastSeenAt:        utils.Ptr(time.Now()),
-		ProfileVisibility: dbmodels.ProfileVisibilityPrivate,
+		OnlineStatus:      "offline",
+		LastSeenAt:        &now,
+		ProfileVisibility: "private",
 		SearchVisibility:  false,
 		IsVerified:        profile.IsVerified,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 }
 
-func fromRepoProfile(profile *dbmodels.Profile) *models.Profile {
+func fromRepoProfile(profile *repoModel.Profile) *svcmodel.Profile {
 	if profile == nil {
 		return nil
 	}
 
-	return &models.Profile{
+	return &svcmodel.Profile{
 		UserID:       profile.UserID,
 		Username:     profile.Username,
-		DisplayName:  *profile.DisplayName,
+		DisplayName:  derefString(profile.DisplayName),
 		FirstName:    profile.FirstName,
 		LastName:     profile.LastName,
 		Bio:          profile.Bio,
@@ -254,4 +216,18 @@ func fromRepoProfile(profile *dbmodels.Profile) *models.Profile {
 		CountryCode:  profile.CountryCode,
 		IsVerified:   profile.IsVerified,
 	}
+}
+
+func valueOrDefault(val *string) string {
+	if val != nil {
+		return *val
+	}
+	return ""
+}
+
+func derefString(val *string) string {
+	if val == nil {
+		return ""
+	}
+	return *val
 }

@@ -6,13 +6,13 @@ import (
 )
 
 type MessageHandler struct {
-	service service.MessageService
-	log     logger.Logger
+	messageService service.MessageServiceInterface
+	log            logger.Logger
 }
 
-func NewMessageHandler(messageService service.MessageService, log logger.Logger) *MessageHandler {
+func NewMessageHandler(messageService service.MessageServiceInterface, log logger.Logger) *MessageHandler {
 	return &MessageHandler{
-		service: messageService,
-		log:     log,
+		messageService: messageService,
+		log:            log,
 	}
 }

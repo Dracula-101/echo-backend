@@ -11,10 +11,10 @@ import (
 	"time"
 
 	userErrors "user-service/internal/errors"
+	repoModel "user-service/internal/repo/model"
 
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
-	"shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 )
 
@@ -135,7 +135,7 @@ func randAlphaNum(n int) string {
 }
 
 // GetProfileByUserID retrieves a user profile by user ID
-func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
+func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) (*repoModel.Profile, error) {
 	r.log.Debug("Fetching profile by user ID",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -145,7 +145,7 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	query := `SELECT * FROM users.profiles WHERE user_id = $1 AND deactivated_at IS NULL`
 	row := r.db.QueryRow(ctx, query, userID)
 
-	var profile models.Profile
+	var profile repoModel.Profile
 	err := row.ScanOne(&profile)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -173,7 +173,7 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 }
 
 // GetProfileByUsername retrieves a user profile by username
-func (r *UserRepository) GetProfileByUsername(ctx context.Context, username string) (*models.Profile, error) {
+func (r *UserRepository) GetProfileByUsername(ctx context.Context, username string) (*repoModel.Profile, error) {
 	r.log.Debug("Fetching profile by username",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("username", username),
@@ -183,7 +183,7 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 	query := `SELECT * FROM users.profiles WHERE username = $1 AND deactivated_at IS NULL`
 	row := r.db.QueryRow(ctx, query, username)
 
-	var profile models.Profile
+	var profile repoModel.Profile
 	err := row.ScanOne(&profile)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -211,7 +211,7 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 }
 
 // CreateProfile creates a new user profile
-func (r *UserRepository) CreateProfile(ctx context.Context, profile models.Profile) (*models.Profile, error) {
+func (r *UserRepository) CreateProfile(ctx context.Context, profile repoModel.Profile) (*repoModel.Profile, error) {
 	r.log.Info("Creating new profile",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", profile.UserID),
@@ -267,7 +267,7 @@ type UpdateProfileParams struct {
 	CountryCode  *string
 }
 
-func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfileParams) (*models.Profile, error) {
+func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfileParams) (*repoModel.Profile, error) {
 	r.log.Info("Updating profile",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", params.UserID),
@@ -340,7 +340,7 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		logger.String("user_id", params.UserID),
 	)
 
-	var profile models.Profile
+	var profile repoModel.Profile
 	if err := r.db.FindOneAndUpdate(ctx, &profile, query, args...); err != nil {
 		if postgres.IsNoRowsError(err) {
 			r.log.Debug("No profile updated - not found",
@@ -367,7 +367,7 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 }
 
 // SearchProfiles searches for profiles by query
-func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*models.Profile, int, error) {
+func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*repoModel.Profile, int, error) {
 	r.log.Debug("Searching profiles",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("query", query),
@@ -403,9 +403,9 @@ func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit
 	}
 	defer rows.Close()
 
-	var profiles []*models.Profile
+	var profiles []*repoModel.Profile
 	for rows.Next() {
-		var profile models.Profile
+		var profile repoModel.Profile
 		if err := rows.Scan(&profile); err != nil {
 			r.log.Error("Failed to scan profile",
 				logger.String("service", userErrors.ServiceName),

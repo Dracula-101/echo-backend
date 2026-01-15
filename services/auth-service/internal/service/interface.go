@@ -1,12 +1,10 @@
 package service
 
 import (
-	"auth-service/api/v1/dto"
-	"auth-service/internal/model"
-	serviceModels "auth-service/internal/service/models"
+	"auth-service/internal/domain"
+	serviceModels "auth-service/internal/service/model"
 	"context"
 
-	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
@@ -22,9 +20,10 @@ type AuthServiceInterface interface {
 	// Email validation
 	IsEmailTaken(ctx context.Context, email string) (bool, pkgErrors.AppError)
 	// User operations
-	GetUserByEmail(ctx context.Context, email string) (*model.User, pkgErrors.AppError)
+	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)
 	RegisterUser(ctx context.Context, input serviceModels.RegisterUserInput) (*serviceModels.RegisterUserOutput, pkgErrors.AppError)
-	Login(ctx context.Context, email, password string) (*dto.LoginResponse, pkgErrors.AppError)
+	Login(ctx context.Context, input serviceModels.LoginInput) (*serviceModels.LoginResult, pkgErrors.AppError)
+	RecordFailedLoginAttempt(ctx context.Context, input serviceModels.FailedLoginAttemptInput) pkgErrors.AppError
 
 	// Service accessors
 	TokenService() token.JWTTokenService
@@ -35,7 +34,7 @@ type AuthServiceInterface interface {
 type SessionServiceInterface interface {
 	// Session management
 	CreateSession(ctx context.Context, input serviceModels.CreateSessionInput) (*serviceModels.CreateSessionOutput, pkgErrors.AppError)
-	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError)
+	GetSessionByUserId(ctx context.Context, userID string) (*serviceModels.SessionRecord, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 

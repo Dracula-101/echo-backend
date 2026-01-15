@@ -41,7 +41,7 @@ func (h *MessageHandler) MarkAsRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call service layer
-	err := h.service.MarkAsRead(r.Context(), uuid.MustParse(request.MessageID), uuid.MustParse(userID))
+	err := h.messageService.MarkAsRead(r.Context(), uuid.MustParse(request.MessageID), uuid.MustParse(userID))
 	if err != nil {
 		h.log.Error("Failed to mark message as read",
 			logger.String("user_id", userID),

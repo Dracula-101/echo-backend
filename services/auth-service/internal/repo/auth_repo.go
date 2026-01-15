@@ -2,6 +2,7 @@ package repository
 
 import (
 	authErrors "auth-service/internal/errors"
+	repoModels "auth-service/internal/repo/model"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -73,18 +74,7 @@ func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 // User Creation
 // ============================================================================
 
-type CreateUserParams struct {
-	Email             string
-	PasswordHash      string
-	PasswordSalt      string
-	PasswordAlgorithm string
-	PhoneNumber       string
-	PhoneCountryCode  string
-	IPAddress         string
-	UserAgent         string
-}
-
-func (r *AuthRepository) CreateUser(ctx context.Context, params CreateUserParams) (string, pkgErrors.AppError) {
+func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.CreateUserParams) (string, pkgErrors.AppError) {
 	if params.Email == "" {
 		return "", pkgErrors.New(pkgErrors.CodeInvalidArgument, "email is required for user creation")
 	}

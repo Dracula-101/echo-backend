@@ -1,7 +1,7 @@
 package repository
 
 import (
-	repoModels "auth-service/internal/repo/models"
+	repoModels "auth-service/internal/repo/model"
 	"context"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"

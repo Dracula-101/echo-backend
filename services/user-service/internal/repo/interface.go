@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"shared/pkg/database/postgres/models"
+	repoModel "user-service/internal/repo/model"
 )
 
 // ============================================================================
@@ -13,15 +13,16 @@ import (
 // UserRepositoryInterface defines the contract for user repository operations
 type UserRepositoryInterface interface {
 	// Profile retrieval
-	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
-	GetProfileByUsername(ctx context.Context, username string) (*models.Profile, error)
+	GetProfileByUserID(ctx context.Context, userID string) (*repoModel.Profile, error)
+	GetProfileByUsername(ctx context.Context, username string) (*repoModel.Profile, error)
+	GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, error)
 
 	// Profile management
-	CreateProfile(ctx context.Context, profile models.Profile) (*models.Profile, error)
-	UpdateProfile(ctx context.Context, params UpdateProfileParams) (*models.Profile, error)
+	CreateProfile(ctx context.Context, profile repoModel.Profile) (*repoModel.Profile, error)
+	UpdateProfile(ctx context.Context, params UpdateProfileParams) (*repoModel.Profile, error)
 
 	// Search and validation
-	SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*models.Profile, int, error)
+	SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*repoModel.Profile, int, error)
 	UsernameExists(ctx context.Context, username string) (bool, error)
 }
 

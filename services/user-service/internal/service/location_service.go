@@ -18,6 +18,10 @@ type LocationService struct {
 	log      logger.Logger
 }
 
+type LocationServiceInterface interface {
+	Lookup(ip string) (*request.IpAddressInfo, error)
+}
+
 func NewLocationService(endpoint string, log logger.Logger) *LocationService {
 	return &LocationService{
 		Endpoint: endpoint,
@@ -84,6 +88,8 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
 		IP:          locationData.IP,
 	}, nil
 }
+
+var _ LocationServiceInterface = (*LocationService)(nil)
 
 type LocationData struct {
 	Latitude      float64 `json:"latitude"`

@@ -45,7 +45,7 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call service layer
-	err := h.service.EditMessage(r.Context(), uuid.MustParse(messageID), uuid.MustParse(userID), request.Content)
+	err := h.messageService.EditMessage(r.Context(), uuid.MustParse(messageID), uuid.MustParse(userID), request.Content)
 	if err != nil {
 		h.log.Error("Failed to edit message",
 			logger.String("user_id", userID),

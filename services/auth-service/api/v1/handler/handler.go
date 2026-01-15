@@ -3,23 +3,20 @@ package handler
 import (
 	"auth-service/internal/service"
 	"shared/pkg/logger"
-	"shared/server/request"
 )
 
 type AuthHandler struct {
-	service         *service.AuthService
-	sessionService  *service.SessionService
-	locationService *service.LocationService
+	authService     service.AuthServiceInterface
+	sessionService  service.SessionServiceInterface
+	locationService service.LocationServiceInterface
 	log             logger.Logger
-	requestHandler  *request.RequestHandler
 }
 
-func NewAuthHandler(service *service.AuthService, sessionService *service.SessionService, locationService *service.LocationService, log logger.Logger) *AuthHandler {
+func NewAuthHandler(authService service.AuthServiceInterface, sessionService service.SessionServiceInterface, locationService service.LocationServiceInterface, log logger.Logger) *AuthHandler {
 	return &AuthHandler{
-		service:         service,
+		authService:     authService,
 		sessionService:  sessionService,
 		locationService: locationService,
 		log:             log,
-		requestHandler:  &request.RequestHandler{},
 	}
 }

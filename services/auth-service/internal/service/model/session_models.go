@@ -1,9 +1,15 @@
-package models
+package model
 
 import (
-	dbModels "shared/pkg/database/postgres/models"
 	"shared/server/request"
 	"time"
+)
+
+type SessionType string
+
+const (
+	SessionTypeWeb    SessionType = "web"
+	SessionTypeMobile SessionType = "mobile"
 )
 
 type CreateSessionInput struct {
@@ -19,7 +25,7 @@ type CreateSessionInput struct {
 	IsTrustedDevice bool
 	FCMToken        string
 	APNSToken       string
-	SessionType     dbModels.SessionType
+	SessionType     SessionType
 	ExpiresAt       time.Time
 	Metadata        map[string]interface{}
 }
@@ -27,4 +33,10 @@ type CreateSessionInput struct {
 type CreateSessionOutput struct {
 	SessionId    string
 	SessionToken string
+}
+
+type SessionRecord struct {
+	ID           string
+	SessionToken string
+	RefreshToken string
 }

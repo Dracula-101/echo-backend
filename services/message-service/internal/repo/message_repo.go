@@ -3,8 +3,9 @@ package repo
 import (
 	"context"
 	"database/sql"
-	"echo-backend/services/message-service/internal/models"
 	"fmt"
+
+	repoModel "echo-backend/services/message-service/internal/repo/model"
 
 	"shared/pkg/database"
 	pkgErrors "shared/pkg/errors"
@@ -15,9 +16,9 @@ import (
 
 type MessageRepository interface {
 	// Core message operations
-	CreateMessage(ctx context.Context, msg *models.Message) pkgErrors.AppError
-	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, pkgErrors.AppError)
-	GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) ([]models.Message, pkgErrors.AppError)
+	CreateMessage(ctx context.Context, msg *repoModel.Message) pkgErrors.AppError
+	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*repoModel.Message, pkgErrors.AppError)
+	GetMessages(ctx context.Context, conversationID uuid.UUID, params *repoModel.PaginationParams) ([]repoModel.Message, pkgErrors.AppError)
 	UpdateMessage(ctx context.Context, messageID uuid.UUID, content string) pkgErrors.AppError
 	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
 
@@ -26,10 +27,10 @@ type MessageRepository interface {
 	UpdateDeliveryStatus(ctx context.Context, messageID, userID uuid.UUID, status string) pkgErrors.AppError
 	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError
 	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) pkgErrors.AppError
-	GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]models.DeliveryStatus, pkgErrors.AppError)
+	GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]repoModel.DeliveryStatus, pkgErrors.AppError)
 
 	// Conversation operations
-	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationParticipant, pkgErrors.AppError)
+	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]repoModel.ConversationParticipant, pkgErrors.AppError)
 	GetParticipantUserIDs(ctx context.Context, conversationID uuid.UUID) ([]uuid.UUID, pkgErrors.AppError)
 	ValidateParticipant(ctx context.Context, conversationID, userID uuid.UUID) (bool, pkgErrors.AppError)
 	UpdateConversationLastMessage(ctx context.Context, conversationID, messageID uuid.UUID) pkgErrors.AppError
@@ -50,7 +51,7 @@ func NewMessageRepository(db database.Database) MessageRepository {
 }
 
 // CreateMessage creates a new message in the database
-func (r *messageRepository) CreateMessage(ctx context.Context, msg *models.Message) pkgErrors.AppError {
+func (r *messageRepository) CreateMessage(ctx context.Context, msg *repoModel.Message) pkgErrors.AppError {
 	query := `
 		INSERT INTO messages.messages (
 			id, conversation_id, sender_user_id, parent_message_id,
@@ -85,7 +86,7 @@ func (r *messageRepository) CreateMessage(ctx context.Context, msg *models.Messa
 }
 
 // GetMessageByID retrieves a single message by ID
-func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*models.Message, pkgErrors.AppError) {
+func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*repoModel.Message, pkgErrors.AppError) {
 	query := `
 		SELECT id, conversation_id, sender_user_id, parent_message_id,
 		       content, message_type, status, is_edited, is_deleted,
@@ -94,7 +95,7 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.U
 		WHERE id = $1 AND is_deleted = FALSE
 	`
 
-	msg := &models.Message{}
+	msg := &repoModel.Message{}
 	err := r.db.QueryRow(ctx, query, messageID).Scan(
 		&msg.ID,
 		&msg.ConversationID,
@@ -126,7 +127,7 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, messageID uuid.U
 }
 
 // GetMessages retrieves messages for a conversation with pagination
-func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) ([]models.Message, pkgErrors.AppError) {
+func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid.UUID, params *repoModel.PaginationParams) ([]repoModel.Message, pkgErrors.AppError) {
 	if params.Limit == 0 {
 		params.Limit = 50
 	}
@@ -192,9 +193,9 @@ func (r *messageRepository) GetMessages(ctx context.Context, conversationID uuid
 	}
 	defer rows.Close()
 
-	var messages []models.Message
+	var messages []repoModel.Message
 	for rows.Next() {
-		var msg models.Message
+		var msg repoModel.Message
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ConversationID,
@@ -341,7 +342,7 @@ func (r *messageRepository) MarkAsRead(ctx context.Context, messageID, userID uu
 }
 
 // GetDeliveryStatus gets all delivery statuses for a message
-func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]models.DeliveryStatus, pkgErrors.AppError) {
+func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uuid.UUID) ([]repoModel.DeliveryStatus, pkgErrors.AppError) {
 	query := `
 		SELECT id, message_id, user_id, status, delivered_at, read_at, created_at
 		FROM messages.delivery_status
@@ -356,9 +357,9 @@ func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uui
 	}
 	defer rows.Close()
 
-	var statuses []models.DeliveryStatus
+	var statuses []repoModel.DeliveryStatus
 	for rows.Next() {
-		var ds models.DeliveryStatus
+		var ds repoModel.DeliveryStatus
 		err := rows.Scan(
 			&ds.ID,
 			&ds.MessageID,
@@ -379,7 +380,7 @@ func (r *messageRepository) GetDeliveryStatus(ctx context.Context, messageID uui
 }
 
 // GetConversationParticipants gets all participants in a conversation
-func (r *messageRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]models.ConversationParticipant, pkgErrors.AppError) {
+func (r *messageRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]repoModel.ConversationParticipant, pkgErrors.AppError) {
 	query := `
 		SELECT id, conversation_id, user_id, role, can_send_messages,
 		       last_read_message_id, last_read_at, unread_count, joined_at, left_at
@@ -395,9 +396,9 @@ func (r *messageRepository) GetConversationParticipants(ctx context.Context, con
 	}
 	defer rows.Close()
 
-	var participants []models.ConversationParticipant
+	var participants []repoModel.ConversationParticipant
 	for rows.Next() {
-		var p models.ConversationParticipant
+		var p repoModel.ConversationParticipant
 		err := rows.Scan(
 			&p.ID,
 			&p.ConversationID,

@@ -4,7 +4,7 @@ import (
 	"auth-service/internal/config"
 	authErrors "auth-service/internal/errors"
 	repository "auth-service/internal/repo"
-	serviceModels "auth-service/internal/service/models"
+	serviceModels "auth-service/internal/service/model"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -21,14 +21,23 @@ import (
 )
 
 type SessionService struct {
-	repo         *repository.SessionRepo
+	repo         repository.SessionRepositoryInterface
 	tokenService token.JWTTokenService
 	cfg          config.CacheConfig
 	cache        cache.Cache
 	log          logger.Logger
 }
 
-func NewSessionService(repo *repository.SessionRepo, cache cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
+func toDBSessionType(t serviceModels.SessionType) models.SessionType {
+	switch t {
+	case serviceModels.SessionTypeMobile:
+		return models.SessionTypeMobile
+	default:
+		return models.SessionTypeWeb
+	}
+}
+
+func NewSessionService(repo repository.SessionRepositoryInterface, cache cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
 	if repo == nil {
 		panic("SessionRepo is required")
 	}
@@ -141,7 +150,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 		IsTrustedDevice:    input.IsTrustedDevice,
 		FCMToken:           &input.FCMToken,
 		APNSToken:          &input.APNSToken,
-		SessionType:        input.SessionType,
+		SessionType:        toDBSessionType(input.SessionType),
 		PushEnabled:        pushEnabled,
 		Metadata:           metadata,
 	})
@@ -184,7 +193,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input serviceModels.
 	}, nil
 }
 
-func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError) {
+func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*serviceModels.SessionRecord, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by user ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -211,7 +220,16 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 		logger.String("session_id", session.ID),
 	)
 
-	return session, nil
+	return &serviceModels.SessionRecord{
+		ID:           session.ID,
+		SessionToken: session.SessionToken,
+		RefreshToken: func() string {
+			if session.RefreshToken == nil {
+				return ""
+			}
+			return *session.RefreshToken
+		}(),
+	}, nil
 }
 
 func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {

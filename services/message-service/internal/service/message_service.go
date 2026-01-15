@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"echo-backend/services/message-service/internal/domain"
-	"echo-backend/services/message-service/internal/models"
 	"echo-backend/services/message-service/internal/repo"
+	repoModel "echo-backend/services/message-service/internal/repo/model"
+	svcmodel "echo-backend/services/message-service/internal/service/model"
 
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -16,19 +17,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-type MessageService interface {
-	SendMessage(ctx context.Context, req *models.SendMessageRequest) (*models.Message, error)
-	GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) (*models.MessagesResponse, error)
-	GetMessage(ctx context.Context, messageID uuid.UUID) (*models.Message, error)
-	EditMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, newContent string) error
-	DeleteMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
-	MarkAsDelivered(ctx context.Context, messageID, userID uuid.UUID) error
-	MarkAsRead(ctx context.Context, messageID, userID uuid.UUID) error
-	HandleReadReceipt(ctx context.Context, userID, messageID uuid.UUID) error
-	SetTypingIndicator(ctx context.Context, conversationID, userID uuid.UUID, isTyping bool) error
-	MarkConversationAsRead(ctx context.Context, conversationID, userID uuid.UUID) error
-}
 
 type messageService struct {
 	repo           repo.MessageRepository
@@ -42,7 +30,7 @@ func NewMessageService(
 	eventPublisher EventPublisher,
 	kafka messaging.Producer,
 	log logger.Logger,
-) MessageService {
+) MessageServiceInterface {
 	return &messageService{
 		repo:           repo,
 		eventPublisher: eventPublisher,
@@ -52,7 +40,7 @@ func NewMessageService(
 }
 
 // SendMessage handles the complete flow of sending a message
-func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessageRequest) (*models.Message, error) {
+func (s *messageService) SendMessage(ctx context.Context, req *svcmodel.SendMessageInput) (*svcmodel.Message, error) {
 	var canSend bool
 	var err error
 	canSend, err = s.repo.ValidateParticipant(ctx, req.ConversationID, req.SenderUserID)
@@ -79,7 +67,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 	}
 
 	now := time.Now()
-	message := &models.Message{
+	message := &repoModel.Message{
 		ID:              uuid.New(),
 		ConversationID:  req.ConversationID,
 		SenderUserID:    req.SenderUserID,
@@ -89,6 +77,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 		Status:          "sent",
 		IsEdited:        false,
 		IsDeleted:       false,
+		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
@@ -106,7 +95,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 	}
 
 	// Always set valid JSON for metadata (empty object if no metadata)
-	if req.Metadata != (models.Metadata{}) {
+	if len(req.Metadata) > 0 {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
 			return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to marshal metadata").
@@ -166,7 +155,10 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 	}
 
 	// Step 7: Publish message event for ws-service to broadcast
-	go s.publishMessageSentEvent(message, recipientIDs)
+	svcMsg := mapRepoToSvcMessage(message)
+
+	// Publish message sent event and side-effects using service model
+	go s.publishMessageSentEvent(svcMsg, recipientIDs)
 
 	// Step 8: Update unread counts for all recipients
 	go func() {
@@ -181,11 +173,11 @@ func (s *messageService) SendMessage(ctx context.Context, req *models.SendMessag
 		}
 	}()
 
-	return message, nil
+	return svcMsg, nil
 }
 
 // publishMessageSentEvent publishes message.sent event for ws-service to handle
-func (s *messageService) publishMessageSentEvent(message *models.Message, recipientIDs []uuid.UUID) {
+func (s *messageService) publishMessageSentEvent(message *svcmodel.Message, recipientIDs []uuid.UUID) {
 	event := &domain.MessageEvent{
 		EventType:      domain.MessageEventTypeSent,
 		MessageID:      message.ID,
@@ -216,7 +208,7 @@ func (s *messageService) publishMessageSentEvent(message *models.Message, recipi
 }
 
 // sendPushNotification sends a push notification for offline users via Kafka
-func (s *messageService) sendPushNotification(message *models.Message, recipientID uuid.UUID) {
+func (s *messageService) sendPushNotification(message *svcmodel.Message, recipientID uuid.UUID) {
 	notification := map[string]interface{}{
 		"type":            "new_message",
 		"user_id":         recipientID.String(),
@@ -259,8 +251,9 @@ func (s *messageService) sendPushNotification(message *models.Message, recipient
 }
 
 // GetMessages retrieves messages for a conversation
-func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UUID, params *models.PaginationParams) (*models.MessagesResponse, error) {
-	messages, err := s.repo.GetMessages(ctx, conversationID, params)
+func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UUID, params *svcmodel.PaginationParams) (*svcmodel.MessagesResponse, error) {
+	repoParams := &repoModel.PaginationParams{Limit: params.Limit, BeforeID: params.BeforeID, AfterID: params.AfterID}
+	messages, err := s.repo.GetMessages(ctx, conversationID, repoParams)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get messages").
 			WithService("message-service").
@@ -269,20 +262,20 @@ func (s *messageService) GetMessages(ctx context.Context, conversationID uuid.UU
 
 	hasMore := len(messages) == params.Limit
 
-	return &models.MessagesResponse{
-		Messages: messages,
+	return &svcmodel.MessagesResponse{
+		Messages: mapRepoMessagesToSvc(messages),
 		HasMore:  hasMore,
 	}, nil
 }
 
 // GetMessage retrieves a single message
-func (s *messageService) GetMessage(ctx context.Context, messageID uuid.UUID) (*models.Message, error) {
+func (s *messageService) GetMessage(ctx context.Context, messageID uuid.UUID) (*svcmodel.Message, error) {
 	message, err := s.repo.GetMessageByID(ctx, messageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
 
-	return message, nil
+	return mapRepoToSvcMessage(message), nil
 }
 
 // EditMessage edits an existing message
@@ -329,7 +322,7 @@ func (s *messageService) EditMessage(ctx context.Context, messageID uuid.UUID, u
 			SenderUserID:   userID,
 			RecipientIDs:   recipientIDs,
 			Timestamp:      time.Now(),
-			Payload: &models.Message{
+			Payload: &svcmodel.Message{
 				ID:      messageID,
 				Content: newContent,
 			},
@@ -469,11 +462,12 @@ func (s *messageService) notifyDeliveryStatus(messageID, readerID uuid.UUID, sta
 
 	// Determine event type
 	var eventType domain.MessageEventType
-	if status == "delivered" {
+	switch status {
+	case "delivered":
 		eventType = domain.MessageEventTypeDelivered
-	} else if status == "read" {
+	case "read":
 		eventType = domain.MessageEventTypeRead
-	} else {
+	default:
 		return
 	}
 
@@ -555,4 +549,61 @@ func (s *messageService) MarkConversationAsRead(ctx context.Context, conversatio
 	)
 
 	return nil
+}
+
+func mapRepoToSvcMessage(msg *repoModel.Message) *svcmodel.Message {
+	if msg == nil {
+		return nil
+	}
+
+	var mentions []svcmodel.Mention
+	if len(msg.Mentions) > 0 {
+		_ = json.Unmarshal(msg.Mentions, &mentions)
+	}
+
+	var metadata svcmodel.Metadata
+	if len(msg.Metadata) > 0 {
+		_ = json.Unmarshal(msg.Metadata, &metadata)
+	}
+
+	var deletedAt *time.Time
+	if msg.DeletedAt.Valid {
+		t := msg.DeletedAt.Time
+		deletedAt = &t
+	}
+
+	var editedAt *time.Time
+	if msg.EditedAt.Valid {
+		t := msg.EditedAt.Time
+		editedAt = &t
+	}
+
+	return &svcmodel.Message{
+		ID:              msg.ID,
+		ConversationID:  msg.ConversationID,
+		SenderUserID:    msg.SenderUserID,
+		ParentMessageID: msg.ParentMessageID,
+		Content:         msg.Content,
+		MessageType:     msg.MessageType,
+		Status:          msg.Status,
+		IsEdited:        msg.IsEdited,
+		IsDeleted:       msg.IsDeleted,
+		Mentions:        mentions,
+		Metadata:        metadata,
+		CreatedAt:       msg.CreatedAt,
+		UpdatedAt:       msg.UpdatedAt,
+		DeletedAt:       deletedAt,
+		EditedAt:        editedAt,
+		ReadCount:       msg.ReadCount,
+	}
+}
+
+func mapRepoMessagesToSvc(messages []repoModel.Message) []svcmodel.Message {
+	result := make([]svcmodel.Message, 0, len(messages))
+	for i := range messages {
+		if svcMsg := mapRepoToSvcMessage(&messages[i]); svcMsg != nil {
+			result = append(result, *svcMsg)
+		}
+	}
+	return result
 }

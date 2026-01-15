@@ -1,13 +1,14 @@
 package dto
 
 import (
-	"auth-service/internal/model"
+	"auth-service/internal/domain"
 	dbModel "shared/pkg/database/postgres/models"
 	"shared/server/request"
 
 	"github.com/go-playground/validator/v10"
 )
 
+// LoginRequest represents the payload required to authenticate a user.
 type LoginRequest struct {
 	Email     string `json:"email" validate:"required,email"`
 	Password  string `json:"password" validate:"required,min=8"`
@@ -15,46 +16,51 @@ type LoginRequest struct {
 	APNSToken string `json:"apns_token,omitempty" validate:"omitempty"`
 }
 
+// NewLoginRequest constructs a login request with zero values.
 func NewLoginRequest() *LoginRequest {
 	return &LoginRequest{}
 }
 
+// GetValue exposes the request for validation helpers.
 func (lr *LoginRequest) GetValue() interface{} {
 	return lr
 }
 
+// ValidateErrors maps validator errors into transport-friendly details.
 func (lr *LoginRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
+	var errs []request.ValidationErrorDetail
 	for _, err := range ve {
 		switch err.Field() {
 		case "Email":
-			errors = append(errors, request.ValidationErrorDetail{
+			errs = append(errs, request.ValidationErrorDetail{
 				Msg:  "Invalid email format",
 				Code: request.INVALID_FORMAT,
 			})
 		case "Password":
 			if err.Tag() == "required" {
-				errors = append(errors, request.ValidationErrorDetail{
+				errs = append(errs, request.ValidationErrorDetail{
 					Msg:  "Password is required",
 					Code: request.REQUIRED_FIELD,
 				})
 			} else if err.Tag() == "min" {
-				errors = append(errors, request.ValidationErrorDetail{
+				errs = append(errs, request.ValidationErrorDetail{
 					Msg:  "Password must be at least 8 characters long",
 					Code: request.INVALID_FORMAT,
 				})
 			}
 		}
 	}
-	return errors, nil
+	return errs, nil
 }
 
+// LoginResponse bundles the authenticated user and issued session tokens.
 type LoginResponse struct {
-	User    User    `json:"user"`
-	Session Session `json:"session"`
+	User    LoginUser    `json:"user"`
+	Session LoginSession `json:"session"`
 }
 
-type User struct {
+// LoginUser represents the serialized user details returned to the client.
+type LoginUser struct {
 	ID               string                `json:"id"`
 	Email            string                `json:"email"`
 	PhoneNumber      string                `json:"phone_number,omitempty"`
@@ -67,20 +73,22 @@ type User struct {
 	UpdatedAt        int64                 `json:"updated_at"`
 }
 
-type Session struct {
+// LoginSession captures the issued tokens after authentication.
+type LoginSession struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	TokenType    string `json:"token_type"`
 	ExpiresAt    int64  `json:"expires_at"`
 }
 
-func NewLoginResponse(user model.User, accessToken string, refreshToken string, expiresAt int64) *LoginResponse {
+// NewLoginResponse builds a login response from the persisted model state.
+func NewLoginResponse(user domain.User, accessToken string, refreshToken string, expiresAt int64) *LoginResponse {
 	return &LoginResponse{
-		User: User{
+		User: LoginUser{
 			ID:               user.ID,
 			Email:            user.Email,
-			PhoneNumber:      *user.PhoneNumber,
-			PhoneCountryCode: *user.PhoneCountryCode,
+			PhoneNumber:      user.PhoneNumber,
+			PhoneCountryCode: user.PhoneCountryCode,
 			EmailVerified:    user.EmailVerified,
 			PhoneVerified:    user.PhoneVerified,
 			AccountStatus:    user.AccountStatus,
@@ -88,7 +96,7 @@ func NewLoginResponse(user model.User, accessToken string, refreshToken string, 
 			CreatedAt:        user.CreatedAt.Unix(),
 			UpdatedAt:        user.UpdatedAt.Unix(),
 		},
-		Session: Session{
+		Session: LoginSession{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 			TokenType:    "Bearer",

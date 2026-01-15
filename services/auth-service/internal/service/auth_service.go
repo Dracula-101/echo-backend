@@ -1,24 +1,20 @@
 package service
 
 import (
-	"auth-service/api/v1/dto"
+	"auth-service/internal/domain"
 	authErrors "auth-service/internal/errors"
-	"auth-service/internal/model"
-	repository "auth-service/internal/repo"
+	repoModels "auth-service/internal/repo/model"
 	"context"
+	"encoding/base64"
 	"strings"
 	"time"
 
-	serviceModels "auth-service/internal/service/models"
-	"encoding/base64"
+	serviceModels "auth-service/internal/service/model"
 	"shared/pkg/database/postgres"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	"shared/server/common/token"
-)
-
-const (
-	MAX_FAILED_LOGIN_ATTEMPTS = 10
 )
 
 // ============================================================================
@@ -27,6 +23,13 @@ const (
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func stringValue(ptr *string) string {
+	if ptr == nil {
+		return ""
+	}
+	return *ptr
 }
 
 // ============================================================================
@@ -50,7 +53,7 @@ func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (bool, pkg
 // User Retrieval
 // ============================================================================
 
-func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.User, pkgErrors.AppError) {
+func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError) {
 	s.log.Info("Fetching user by email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -75,11 +78,11 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.
 		logger.String("user_id", user.ID),
 	)
 
-	return &model.User{
+	return &domain.User{
 		ID:                     user.ID,
 		Email:                  user.Email,
-		PhoneNumber:            user.PhoneNumber,
-		PhoneCountryCode:       user.PhoneCountryCode,
+		PhoneNumber:            stringValue(user.PhoneNumber),
+		PhoneCountryCode:       stringValue(user.PhoneCountryCode),
 		EmailVerified:          user.EmailVerified,
 		PhoneVerified:          user.PhoneVerified,
 		AccountStatus:          user.AccountStatus,
@@ -89,6 +92,7 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.
 		AccountLockedUntil:     user.AccountLockedUntil,
 		FailedLoginAttempts:    user.FailedLoginAttempts,
 		RequiresPasswordChange: user.RequiresPasswordChange,
+		CreatedAt:              user.CreatedAt,
 		DeletedAt:              user.DeletedAt,
 		UpdatedAt:              user.UpdatedAt,
 	}, nil
@@ -135,7 +139,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.Regi
 		logger.String("token", tokenResult.Token),
 	)
 
-	userID, err := s.repo.CreateUser(ctx, repository.CreateUserParams{
+	userID, err := s.repo.CreateUser(ctx, repoModels.CreateUserParams{
 		Email:             input.Email,
 		PasswordHash:      result.Encoded,
 		PasswordSalt:      base64.StdEncoding.EncodeToString(result.Salt),
@@ -170,7 +174,8 @@ func (s *AuthService) RegisterUser(ctx context.Context, input serviceModels.Regi
 // User Authentication
 // ============================================================================
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.LoginResponse, pkgErrors.AppError) {
+func (s *AuthService) Login(ctx context.Context, input serviceModels.LoginInput) (*serviceModels.LoginResult, pkgErrors.AppError) {
+	email := normalizeEmail(input.Email)
 	s.log.Info("User login",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -224,7 +229,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 		}
 	}
 
-	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, password, user.PasswordHash)
+	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, input.Password, user.PasswordHash)
 	if verifyErr != nil {
 		return nil, pkgErrors.FromError(verifyErr, authErrors.CodeInvalidCredentials, "password verification failed").
 			WithService(authErrors.ServiceName).
@@ -236,7 +241,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
 		)
-		
+
 		return nil, pkgErrors.New(authErrors.CodeInvalidCredentials, "Wrong email or password").
 			WithService(authErrors.ServiceName).
 			WithDetail("email", email).
@@ -276,23 +281,51 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*dto.L
 			WithDetail("purpose", "refresh_token")
 	}
 
-	return &dto.LoginResponse{
-		User: dto.User{
+	return &serviceModels.LoginResult{
+		User: serviceModels.LoginUser{
 			ID:               user.ID,
 			Email:            user.Email,
-			PhoneNumber:      *user.PhoneNumber,
-			PhoneCountryCode: *user.PhoneCountryCode,
+			PhoneNumber:      stringValue(user.PhoneNumber),
+			PhoneCountryCode: stringValue(user.PhoneCountryCode),
 			EmailVerified:    user.EmailVerified,
 			PhoneVerified:    user.PhoneVerified,
-			AccountStatus:    user.AccountStatus,
+			AccountStatus:    string(user.AccountStatus),
 			TFAEnabled:       user.TwoFactorEnabled,
+			CreatedAt:        user.CreatedAt.Unix(),
 			UpdatedAt:        user.UpdatedAt.Unix(),
 		},
-		Session: dto.Session{
+		Session: serviceModels.LoginSession{
 			AccessToken:  accessToken.Token,
 			RefreshToken: refreshToken.Token,
 			ExpiresAt:    expiresAt.Unix(),
 			TokenType:    "Bearer",
 		},
 	}, nil
+}
+
+func (s *AuthService) RecordFailedLoginAttempt(ctx context.Context, input serviceModels.FailedLoginAttemptInput) pkgErrors.AppError {
+	if s.loginHistoryRepo == nil {
+		return pkgErrors.New(pkgErrors.CodeInternal, "login history repository is not configured")
+	}
+
+	record := repoModels.CreateLoginHistoryInput{
+		DeviceInfo: input.Device,
+		UserID:     input.UserID,
+		SessionID:  nil,
+	}
+
+	if input.Location != nil {
+		record.IPInfo = *input.Location
+	}
+
+	loginMethod := input.LoginMethod
+	status := "failure"
+	record.LoginMethod = &loginMethod
+	record.Status = &status
+	record.FailureReason = utils.PtrString(input.Reason)
+	record.UserAgent = utils.PtrString(input.UserAgent)
+	record.IsNewDevice = utils.PtrBool(input.IsNewDevice)
+	record.IsNewLocation = utils.PtrBool(input.IsNewLocation)
+
+	return s.loginHistoryRepo.CreateLoginHistory(ctx, record)
 }

@@ -35,7 +35,7 @@ func (h *MessageHandler) SetTypingIndicator(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Call service layer
-	err := h.service.SetTypingIndicator(r.Context(), uuid.MustParse(request.ConversationID), uuid.MustParse(userID), request.IsTyping)
+	err := h.messageService.SetTypingIndicator(r.Context(), uuid.MustParse(request.ConversationID), uuid.MustParse(userID), request.IsTyping)
 	if err != nil {
 		h.log.Error("Failed to set typing indicator",
 			logger.String("user_id", userID),

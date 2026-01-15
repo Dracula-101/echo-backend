@@ -285,13 +285,17 @@ func main() {
 	tokenService := createTokenService(cfg, log)
 
 	userRepo := repository.NewUserRepository(dbClient, log)
-	userService := service.NewUserServiceBuilder().
-		WithRepo(userRepo).
+	services, buildErr := service.NewServiceBuilder().
+		WithUserRepo(userRepo).
 		WithCache(cacheClient).
 		WithLogger(log).
+		WithLocationEndpoint(cfg.Server.LocationServiceEndpoint).
 		Build()
-	locationService := service.NewLocationService(cfg.Server.LocationServiceEndpoint, log)
-	userHandler := handler.NewUserHandler(userService, locationService, tokenService, log)
+	if buildErr != nil {
+		log.Fatal("Failed to build services", logger.Error(buildErr))
+	}
+
+	userHandler := handler.NewUserHandler(services.User, services.Location, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

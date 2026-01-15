@@ -10,22 +10,8 @@ import (
 )
 
 type AuthService struct {
-	repo           *repository.AuthRepository
-	tokenService   token.JWTTokenService
-	hashingService hashing.HashingService
-	cache          cache.Cache
-	cfg            *config.AuthConfig
-	log            logger.Logger
-	*repository.LoginHistoryRepo
-}
-
-func NewAuthServiceBuilder() *AuthServiceBuilder {
-	return &AuthServiceBuilder{}
-}
-
-type AuthServiceBuilder struct {
-	repo             *repository.AuthRepository
-	loginHistoryRepo *repository.LoginHistoryRepo
+	repo             repository.AuthRepositoryInterface
+	loginHistoryRepo repository.LoginHistoryRepositoryInterface
 	tokenService     token.JWTTokenService
 	hashingService   hashing.HashingService
 	cache            cache.Cache
@@ -33,12 +19,26 @@ type AuthServiceBuilder struct {
 	log              logger.Logger
 }
 
-func (b *AuthServiceBuilder) WithRepo(repo *repository.AuthRepository) *AuthServiceBuilder {
+func NewAuthServiceBuilder() *AuthServiceBuilder {
+	return &AuthServiceBuilder{}
+}
+
+type AuthServiceBuilder struct {
+	repo             repository.AuthRepositoryInterface
+	loginHistoryRepo repository.LoginHistoryRepositoryInterface
+	tokenService     token.JWTTokenService
+	hashingService   hashing.HashingService
+	cache            cache.Cache
+	cfg              *config.AuthConfig
+	log              logger.Logger
+}
+
+func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepositoryInterface) *AuthServiceBuilder {
 	b.repo = repo
 	return b
 }
 
-func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo *repository.LoginHistoryRepo) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo repository.LoginHistoryRepositoryInterface) *AuthServiceBuilder {
 	b.loginHistoryRepo = repo
 	return b
 }
@@ -88,7 +88,7 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 
 	return &AuthService{
 		repo:             b.repo,
-		LoginHistoryRepo: b.loginHistoryRepo,
+		loginHistoryRepo: b.loginHistoryRepo,
 		tokenService:     b.tokenService,
 		hashingService:   b.hashingService,
 		cache:            b.cache,

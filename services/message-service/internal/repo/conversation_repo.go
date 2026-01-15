@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"echo-backend/services/message-service/api/v1/dto"
-	"echo-backend/services/message-service/internal/models"
+	"echo-backend/services/message-service/internal/domain"
 	"time"
 
 	"shared/pkg/database"
@@ -19,7 +19,7 @@ type ConversationRepository interface {
 	CreateConversation(ctx context.Context, conversationType, title, description string, creatorUserID uuid.UUID, isEncrypted, isPublic bool) (uuid.UUID, pkgErrors.AppError)
 	AddParticipants(ctx context.Context, conversationID uuid.UUID, userIDs []uuid.UUID, role string, canSendMessages bool) pkgErrors.AppError
 	GetConversationsByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]dto.ConversationResponse, int, pkgErrors.AppError)
-	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*models.Conversation, pkgErrors.AppError)
+	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError)
 }
 
 type conversationRepository struct {
@@ -184,7 +184,7 @@ func (r *conversationRepository) GetConversationsByUserID(ctx context.Context, u
 }
 
 // GetConversationByID retrieves a conversation by ID
-func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*models.Conversation, pkgErrors.AppError) {
+func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError) {
 	query := `
 		SELECT
 			id, conversation_type, title, description, avatar_url,
@@ -194,7 +194,7 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 		WHERE id = $1
 	`
 
-	var conv models.Conversation
+	var conv domain.Conversation
 	err := r.db.QueryRow(ctx, query, conversationID).Scan(
 		&conv.ID,
 		&conv.ConversationType,

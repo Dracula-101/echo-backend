@@ -1,7 +1,8 @@
 package repository
 
 import (
-	repoModels "auth-service/internal/repo/models"
+	"auth-service/internal/repo/model"
+	repoModels "auth-service/internal/repo/model"
 	"context"
 
 	"shared/pkg/database/postgres/models"
@@ -16,7 +17,7 @@ import (
 type AuthRepositoryInterface interface {
 	// User management
 	ExistsByEmail(ctx context.Context, email string) (bool, pkgErrors.AppError)
-	CreateUser(ctx context.Context, params CreateUserParams) (string, pkgErrors.AppError)
+	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*models.AuthUser, pkgErrors.AppError)
 	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError

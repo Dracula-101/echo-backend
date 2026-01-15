@@ -1,9 +1,10 @@
 package message
 
 import (
-	"echo-backend/services/message-service/api/v1/dto"
-	"echo-backend/services/message-service/internal/models"
 	"net/http"
+
+	"echo-backend/services/message-service/api/v1/dto"
+	svcmodel "echo-backend/services/message-service/internal/service/model"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -65,26 +66,13 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		parentMessageID = &parsed
 	}
 
-	// Convert metadata map to Metadata struct (simplified - can be enhanced later)
-	metadata := models.Metadata{}
+	var metadata svcmodel.Metadata
 	if request.Metadata != nil {
-		// Extract known fields from map if they exist
-		if mediaURL, ok := request.Metadata["media_url"].(string); ok {
-			metadata.MediaURL = mediaURL
-		}
-		if thumbnailURL, ok := request.Metadata["thumbnail_url"].(string); ok {
-			metadata.ThumbnailURL = thumbnailURL
-		}
-		if fileName, ok := request.Metadata["file_name"].(string); ok {
-			metadata.FileName = fileName
-		}
-		if fileSize, ok := request.Metadata["file_size"].(float64); ok {
-			metadata.FileSize = int64(fileSize)
-		}
+		metadata = svcmodel.Metadata(request.Metadata)
 	}
 
 	// Call service layer
-	message, err := h.service.SendMessage(r.Context(), &models.SendMessageRequest{
+	message, err := h.messageService.SendMessage(r.Context(), &svcmodel.SendMessageInput{
 		ConversationID:  uuid.MustParse(request.ConversationID),
 		SenderUserID:    uuid.MustParse(userID),
 		Content:         request.Content,

@@ -6,6 +6,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// RegisterRequest represents the payload required to create a new account.
 type RegisterRequest struct {
 	Email            string `json:"email" validate:"required,email"`
 	Password         string `json:"password" validate:"required,min=8,max=128"`
@@ -25,8 +26,7 @@ func (r *RegisterRequest) GetValue() interface{} {
 func (r *RegisterRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
 	var msgs []request.ValidationErrorDetail
 	for _, err := range ve {
-		field := err.Field()
-		switch field {
+		switch err.Field() {
 		case "Email":
 			if err.Tag() == "required" {
 				msgs = append(msgs, request.ValidationErrorDetail{
@@ -70,6 +70,7 @@ func (r *RegisterRequest) ValidateErrors(ve validator.ValidationErrors) ([]reque
 	return msgs, nil
 }
 
+// RegisterResponse communicates the outcome of the registration flow.
 type RegisterResponse struct {
 	UserID                string `json:"user_id"`
 	Email                 string `json:"email"`

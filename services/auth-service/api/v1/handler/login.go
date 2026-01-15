@@ -1,34 +1,20 @@
 package handler
 
 import (
-	"auth-service/api/v1/dto"
-	authErrors "auth-service/internal/errors"
-	repositoryModels "auth-service/internal/repo/models"
-	serviceModels "auth-service/internal/service/models"
 	"context"
 	"fmt"
 	"net/http"
-	dbModels "shared/pkg/database/postgres/models"
+	"time"
+
+	"auth-service/api/v1/dto"
+	"auth-service/internal/domain"
+	authErrors "auth-service/internal/errors"
+	serviceModels "auth-service/internal/service/model"
 	"shared/pkg/logger"
-	"shared/pkg/utils"
 	req "shared/server/request"
 	"shared/server/response"
-	"time"
 )
 
-// Login flow at a glance:
-//
-//	[1] Request helper — parse & validate JSON, expose request/correlation IDs.
-//	[2] AuthService.GetUserByEmail — load account + run status gates.
-//	[3] LocationService.Lookup — attach GeoIP context for session metadata.
-//	[4] AuthService.Login — verify credentials.
-//	      -> invalid creds → LoginHistoryRepo + 400
-//	      -> other auth errors → 400
-//	      -> success → continue
-//	[5] SessionService — reuse/create session, persist device/browser + FCM/APNs tokens.
-//	[6] Response helper — return 200 JSON (user, tokens, session info).
-//
-// Each step logs the same request + correlation IDs for traceability.
 func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	requestID := handler.GetRequestID()
@@ -70,8 +56,11 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			logger.Error(err),
 		)
 	}
+	if locationInfo == nil {
+		locationInfo = &req.IpAddressInfo{IP: clientIP}
+	}
 
-	user, authErr := h.service.GetUserByEmail(ctx, loginRequest.Email)
+	user, authErr := h.authService.GetUserByEmail(ctx, loginRequest.Email)
 	if authErr != nil {
 		h.log.Error("Failed to fetch user during login", logger.Error(authErr))
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", authErr)
@@ -87,39 +76,18 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	switch user.AccountStatus {
-	case dbModels.AccountStatusDeactivated:
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is deactivated. Please contact support.", nil)
-		return
-	case dbModels.AccountStatusSuspended:
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is suspended. Please contact support.", nil)
-		return
-	case dbModels.AccountStatusLocked:
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is locked due to multiple failed login attempts. Please reset your password or contact support.", nil)
-		return
-	case dbModels.AccountStatusPending:
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account is pending verification. Please verify your account before logging in.", nil)
-		return
-	case dbModels.AccountStatusDeleted:
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Account has been deleted. Please contact support for further assistance.", nil)
-		return
-	case dbModels.AccountStatusActive:
-		// Proceed with login
-	default:
-		h.log.Error("Unknown account status during login",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("user_id", user.ID),
-			logger.String("account_status", string(user.AccountStatus)),
-		)
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login due to unknown account status", nil)
+	if statusErr := user.CanLogin(); statusErr != nil {
+		h.handleAccountStatusError(ctx, handler, requestID, user, statusErr)
 		return
 	}
 
-	userResult, authErr := h.service.Login(ctx, loginRequest.Email, loginRequest.Password)
+	userResult, authErr := h.authService.Login(ctx, serviceModels.LoginInput{
+		Email:    loginRequest.Email,
+		Password: loginRequest.Password,
+	})
 	if authErr != nil {
 		if authErr.Code() == authErrors.CodeInvalidCredentials {
-			h.LogFailedLogin(ctx, deviceInfo, locationInfo, user.ID, userAgent, authErr.Message())
+			h.recordFailedLogin(ctx, deviceInfo, locationInfo, user.ID, userAgent, authErr.Message())
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
 		} else {
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message(), authErr)
@@ -141,7 +109,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 
 	if activeSession == nil {
 		isMobile := deviceInfo.IsMobile()
-		session, err = h.sessionService.CreateSession(ctx, serviceModels.CreateSessionInput{
+		createdSession, err := h.sessionService.CreateSession(ctx, serviceModels.CreateSessionInput{
 			UserID:          userResult.User.ID,
 			RefreshToken:    userResult.Session.RefreshToken,
 			Device:          deviceInfo,
@@ -154,11 +122,11 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			IsTrustedDevice: false,
 			FCMToken:        loginRequest.FCMToken,
 			APNSToken:       loginRequest.APNSToken,
-			SessionType: func() dbModels.SessionType {
+			SessionType: func() serviceModels.SessionType {
 				if isMobile {
-					return dbModels.SessionTypeMobile
+					return serviceModels.SessionTypeMobile
 				}
-				return dbModels.SessionTypeWeb
+				return serviceModels.SessionTypeWeb
 			}(),
 			ExpiresAt: time.Unix(userResult.Session.ExpiresAt, 0),
 			Metadata: map[string]interface{}{
@@ -171,10 +139,13 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to create session", err)
 			return
 		}
+		session = createdSession
 	} else {
 		session.SessionId = activeSession.ID
 		session.SessionToken = activeSession.SessionToken
-		userResult.Session.RefreshToken = *activeSession.RefreshToken
+		if activeSession.RefreshToken != "" {
+			userResult.Session.RefreshToken = activeSession.RefreshToken
+		}
 	}
 
 	h.log.Info("Login successful",
@@ -196,28 +167,50 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	)
 }
 
-func (h *AuthHandler) LogFailedLogin(ctx context.Context, device req.DeviceInfo, locationInfo *req.IpAddressInfo, userID string, userAgent string, failureReason string) {
-	h.log.Info("Logging failed login attempt",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-		logger.String("ip_address", locationInfo.IP),
-		logger.String("device_os", device.OS),
-		logger.String("reason", failureReason),
-	)
+func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req.RequestHandler, requestID string, user *domain.User, statusErr error) {
+	var message string
+	switch statusErr {
+	case domain.ErrAccountDeactivated:
+		message = "Account is deactivated. Please contact support."
+	case domain.ErrAccountSuspended:
+		message = "Account is suspended. Please contact support."
+	case domain.ErrAccountLocked:
+		message = "Account is locked due to multiple failed login attempts. Please reset your password or contact support."
+	case domain.ErrAccountPending:
+		message = "Account is pending verification. Please verify your account before logging in."
+	case domain.ErrAccountDeleted:
+		message = "Account has been deleted. Please contact support for further assistance."
+	default:
+		h.log.Error("Unknown account status during login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", user.ID),
+			logger.Error(statusErr),
+		)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login due to unknown account status", nil)
+		return
+	}
 
-	err := h.service.LoginHistoryRepo.CreateLoginHistory(ctx, repositoryModels.CreateLoginHistoryInput{
-		DeviceInfo:    device,
-		IPInfo:        *locationInfo,
-		FailureReason: &failureReason,
+	response.BadRequestError(ctx, handler.Request(), handler.Writer(), message, nil)
+}
+
+func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceInfo, locationInfo *req.IpAddressInfo, userID string, userAgent string, failureReason string) {
+	if locationInfo == nil {
+		locationInfo = &req.IpAddressInfo{}
+	}
+
+	input := serviceModels.FailedLoginAttemptInput{
 		UserID:        userID,
-		SessionID:     nil,
-		LoginMethod:   utils.PtrString("password"),
-		Status:        utils.PtrString("failure"),
-		UserAgent:     &userAgent,
-		IsNewDevice:   utils.PtrBool(false),
-		IsNewLocation: utils.PtrBool(false),
-	})
-	if err != nil {
-		h.log.Error("Failed to create login history record", logger.Error(err))
+		Device:        device,
+		Location:      locationInfo,
+		UserAgent:     userAgent,
+		Reason:        failureReason,
+		LoginMethod:   "password",
+		IsNewDevice:   false,
+		IsNewLocation: false,
+	}
+
+	if err := h.authService.RecordFailedLoginAttempt(ctx, input); err != nil {
+		h.log.Error("Failed to record failed login attempt", logger.Error(err))
 	}
 }

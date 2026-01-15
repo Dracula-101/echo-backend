@@ -27,9 +27,9 @@ type Conversation struct {
 	DeletedAt        *time.Time
 
 	// Enriched fields (from joins)
-	Participants     []ConversationParticipant
-	UnreadCount      int
-	LastMessage      *Message
+	Participants []ConversationParticipant
+	UnreadCount  int
+	LastMessage  *Message
 }
 
 // ConversationType represents the type of conversation
@@ -57,9 +57,9 @@ type ConversationParticipant struct {
 	IsArchived     bool
 
 	// Permissions
-	CanSendMessages bool
-	CanAddMembers   bool
-	CanEditInfo     bool
+	CanSendMessages   bool
+	CanAddMembers     bool
+	CanEditInfo       bool
 	CanDeleteMessages bool
 
 	// Enriched fields

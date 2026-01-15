@@ -1,9 +1,10 @@
 package message
 
 import (
-	"echo-backend/services/message-service/api/v1/dto"
-	"echo-backend/services/message-service/internal/models"
 	"net/http"
+
+	"echo-backend/services/message-service/api/v1/dto"
+	svcmodel "echo-backend/services/message-service/internal/service/model"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -40,7 +41,7 @@ func (h *MessageHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := h.service.GetMessages(r.Context(), uuid.MustParse(request.ConversationID), &models.PaginationParams{
+	messages, err := h.messageService.GetMessages(r.Context(), uuid.MustParse(request.ConversationID), &svcmodel.PaginationParams{
 		Limit: request.Limit,
 	})
 	if err != nil {
@@ -53,9 +54,7 @@ func (h *MessageHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	responseDTO := dto.GetMessagesResponse{
-		MessagesResponse: *messages,
-	}
+	responseDTO := dto.GetMessagesResponse{MessagesResponse: *messages}
 
 	response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Messages retrieved successfully", responseDTO)
 }

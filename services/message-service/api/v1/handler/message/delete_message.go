@@ -37,7 +37,7 @@ func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	messageID := handler.PathParam("id")
 
 	// Call service layer
-	err := h.service.DeleteMessage(r.Context(), uuid.MustParse(messageID), uuid.MustParse(userID))
+	err := h.messageService.DeleteMessage(r.Context(), uuid.MustParse(messageID), uuid.MustParse(userID))
 	if err != nil {
 		h.log.Error("Failed to delete message",
 			logger.String("user_id", userID),

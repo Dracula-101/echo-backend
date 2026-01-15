@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"user-service/internal/model"
-	"user-service/internal/service/models"
+	svcmodel "user-service/internal/service/model"
 )
 
 // ============================================================================
@@ -14,7 +14,8 @@ import (
 type UserServiceInterface interface {
 	// Profile operations
 	GetProfile(ctx context.Context, userID string) (*model.User, error)
-	CreateProfile(ctx context.Context, profile *models.Profile) (*model.User, error)
+	CreateProfile(ctx context.Context, profile *svcmodel.Profile) (*model.User, error)
+	GenerateUsername(ctx context.Context, displayName string) (string, error)
 }
 
 // Compile-time interface compliance check
