@@ -17,7 +17,7 @@ type Message struct {
 	Status          MessageStatus
 	IsEdited        bool
 	IsDeleted       bool
-	Mentions        []uuid.UUID
+	Mentions        []Mention
 	Metadata        MessageMetadata
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -56,14 +56,14 @@ const (
 // MessageMetadata contains additional message information
 type MessageMetadata struct {
 	// Media information
-	MediaURL      string  `json:"media_url,omitempty"`
-	ThumbnailURL  string  `json:"thumbnail_url,omitempty"`
-	MediaSize     int64   `json:"media_size,omitempty"`
-	MediaDuration int     `json:"media_duration,omitempty"`
-	MimeType      string  `json:"mime_type,omitempty"`
-	FileName      string  `json:"file_name,omitempty"`
-	Width         int     `json:"width,omitempty"`
-	Height        int     `json:"height,omitempty"`
+	MediaURL      string `json:"media_url,omitempty"`
+	ThumbnailURL  string `json:"thumbnail_url,omitempty"`
+	MediaSize     int64  `json:"media_size,omitempty"`
+	MediaDuration int    `json:"media_duration,omitempty"`
+	MimeType      string `json:"mime_type,omitempty"`
+	FileName      string `json:"file_name,omitempty"`
+	Width         int    `json:"width,omitempty"`
+	Height        int    `json:"height,omitempty"`
 
 	// Location information
 	Latitude  float64 `json:"latitude,omitempty"`
@@ -72,15 +72,6 @@ type MessageMetadata struct {
 
 	// Other metadata
 	LinkPreview *LinkPreview `json:"link_preview,omitempty"`
-}
-
-// LinkPreview contains URL preview information
-type LinkPreview struct {
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Image       string `json:"image"`
-	SiteName    string `json:"site_name"`
 }
 
 // CanBeEditedBy checks if a message can be edited by the given user
@@ -116,28 +107,6 @@ func (m *Message) IsExpired(retentionDays int) bool {
 // HasMedia checks if message contains media
 func (m *Message) HasMedia() bool {
 	return m.MessageType != MessageTypeText
-}
-
-// DeliveryStatus represents message delivery status per recipient
-type DeliveryStatus struct {
-	ID          uuid.UUID
-	MessageID   uuid.UUID
-	RecipientID uuid.UUID
-	Status      MessageStatus
-	DeliveredAt *time.Time
-	ReadAt      *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-// IsRead checks if message has been read
-func (d *DeliveryStatus) IsRead() bool {
-	return d.Status == MessageStatusRead && d.ReadAt != nil
-}
-
-// IsDelivered checks if message has been delivered
-func (d *DeliveryStatus) IsDelivered() bool {
-	return d.Status == MessageStatusDelivered || d.Status == MessageStatusRead
 }
 
 // TypingIndicator represents a user typing in a conversation

@@ -342,8 +342,6 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 			EmailVerified:          user.EmailVerified,
 			PhoneVerified:          user.PhoneVerified,
 			AccountStatus:          user.AccountStatus,
-			CreatedAt:              user.CreatedAt,
-			UpdatedAt:              user.UpdatedAt,
 			TwoFactorEnabled:       user.TwoFactorEnabled,
 			PasswordHash:           user.PasswordHash,
 			PasswordSalt:           user.PasswordSalt,
@@ -354,11 +352,13 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 			RequiresPasswordChange: user.RequiresPasswordChange,
 			LastFailedLoginAt:      user.LastFailedLoginAt,
 			LastSuccessfulLoginAt:  user.LastSuccessfulLoginAt,
+			CreatedAt:              user.CreatedAt,
+			UpdatedAt:              user.UpdatedAt,
 			DeletedAt:              user.DeletedAt,
 		},
 		AccessToken:  accessToken.Token,
 		RefreshToken: refreshToken.Token,
-		ExpiresAt:    expiresAt.Unix(),
+		ExpiresAt:    expiresAt,
 	}, nil
 }
 

@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
+	"echo-backend/services/message-service/internal/domain"
 	"echo-backend/services/message-service/internal/repo"
-	svcmodel "echo-backend/services/message-service/internal/service/model"
 
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -32,7 +32,7 @@ func NewMessageService(
 }
 
 // SendMessage handles the complete flow of sending a message
-func (s *messageService) SendMessage(ctx context.Context, req *svcmodel.SendMessageInput) (*svcmodel.Message, pkgErrors.AppError) {
-	
+func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessageInput) (*domain.Message, pkgErrors.AppError) {
+
 	return nil, nil
 }

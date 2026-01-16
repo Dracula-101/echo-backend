@@ -2,8 +2,8 @@ package dto
 
 import (
 	"auth-service/internal/domain"
-	dbModel "shared/pkg/database/postgres/models"
 	"shared/server/request"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -72,30 +72,30 @@ const (
 
 // LoginUser represents the serialized user details returned to the client.
 type LoginUser struct {
-	ID               string                `json:"id"`
-	Email            string                `json:"email"`
-	PhoneNumber      string                `json:"phone_number,omitempty"`
-	PhoneCountryCode string                `json:"phone_country_code,omitempty"`
-	EmailVerified    bool                  `json:"email_verified"`
-	PhoneVerified    bool                  `json:"phone_verified,omitempty"`
-	AccountStatus    dbModel.AccountStatus `json:"account_status"`
-	TFAEnabled       bool                  `json:"tfa_enabled"`
-	CreatedAt        int64                 `json:"created_at"`
-	UpdatedAt        int64                 `json:"updated_at"`
+	ID               string        `json:"id"`
+	Email            string        `json:"email"`
+	PhoneNumber      string        `json:"phone_number,omitempty"`
+	PhoneCountryCode string        `json:"phone_country_code,omitempty"`
+	EmailVerified    bool          `json:"email_verified"`
+	PhoneVerified    bool          `json:"phone_verified,omitempty"`
+	AccountStatus    AccountStatus `json:"account_status"`
+	TFAEnabled       bool          `json:"tfa_enabled"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
 }
 
 // LoginSession captures the issued tokens after authentication.
 type LoginSession struct {
-	SessionId    string `json:"session_id"`
-	SessionToken string `json:"session_token"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	TokenType    string `json:"token_type"`
-	ExpiresAt    int64  `json:"expires_at"`
+	SessionId    string    `json:"session_id"`
+	SessionToken string    `json:"session_token"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token,omitempty"`
+	TokenType    string    `json:"token_type"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 // NewLoginResponse builds a login response from the persisted model state.
-func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, expiresAt int64) *LoginResponse {
+func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, expiresAt time.Time) *LoginResponse {
 	return &LoginResponse{
 		User: LoginUser{
 			ID:               user.ID,
@@ -104,17 +104,17 @@ func NewLoginResponse(user domain.User, sessionId string, sessionToken string, a
 			PhoneCountryCode: user.PhoneCountryCode,
 			EmailVerified:    user.EmailVerified,
 			PhoneVerified:    user.PhoneVerified,
-			AccountStatus:    user.AccountStatus,
+			AccountStatus:    AccountStatus(user.AccountStatus),
 			TFAEnabled:       user.TwoFactorEnabled,
-			CreatedAt:        user.CreatedAt.Unix(),
-			UpdatedAt:        user.UpdatedAt.Unix(),
+			CreatedAt:        user.CreatedAt,
+			UpdatedAt:        user.UpdatedAt,
 		},
 		Session: LoginSession{
 			SessionId:    sessionId,
 			SessionToken: sessionToken,
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
-			TokenType:    "Bearer",
+			TokenType:    string("Bearer"),
 			ExpiresAt:    expiresAt,
 		},
 	}

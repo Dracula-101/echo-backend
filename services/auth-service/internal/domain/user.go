@@ -5,6 +5,8 @@ import (
 
 	"shared/pkg/database/postgres/models"
 	"shared/pkg/utils"
+
+	authError "auth-service/internal/error"
 )
 
 // User represents the core user entity in the authentication domain
@@ -47,22 +49,22 @@ func (u *User) IsActive() bool {
 // CanLogin validates if user can proceed with login
 func (u *User) CanLogin() error {
 	if u.IsLocked() {
-		return ErrAccountLocked
+		return authError.ErrAccountLocked
 	}
 
 	switch u.AccountStatus {
 	case models.AccountStatusDeactivated:
-		return ErrAccountDeactivated
+		return authError.ErrAccountDeactivated
 	case models.AccountStatusSuspended:
-		return ErrAccountSuspended
+		return authError.ErrAccountSuspended
 	case models.AccountStatusPending:
-		return ErrAccountPending
+		return authError.ErrAccountPending
 	case models.AccountStatusDeleted:
-		return ErrAccountDeleted
+		return authError.ErrAccountDeleted
 	case models.AccountStatusActive:
 		return nil
 	default:
-		return ErrUnknownAccountStatus
+		return authError.ErrUnknownAccountStatus
 	}
 }
 

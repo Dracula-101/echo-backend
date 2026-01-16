@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"echo-backend/services/message-service/api/v1/dto"
-	svcmodel "echo-backend/services/message-service/internal/service/model"
+	"echo-backend/services/message-service/internal/domain"
 	"shared/pkg/logger"
 	"shared/server/request"
 	req "shared/server/request"
@@ -56,7 +56,7 @@ func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 	h.log.Debug("Sending message",
 		logger.String("user_id", userID),
 		logger.String("conversation_id", request.ConversationID),
-		logger.String("message_type", request.MessageType),
+		logger.String("message_type", string(request.MessageType)),
 	)
 
 	// Parse parent message ID if provided
@@ -66,20 +66,15 @@ func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 		parentMessageID = &parsed
 	}
 
-	var metadata svcmodel.Metadata
-	if request.Metadata != nil {
-		metadata = svcmodel.Metadata(request.Metadata)
-	}
-
 	// Call service layer
-	message, err := h.messageService.SendMessage(handler.Context(), &svcmodel.SendMessageInput{
+	message, err := h.messageService.SendMessage(handler.Context(), &domain.SendMessageInput{
 		ConversationID:  uuid.MustParse(request.ConversationID),
 		SenderUserID:    uuid.MustParse(userID),
 		Content:         request.Content,
-		MessageType:     request.MessageType,
+		MessageType:     domain.MessageType(request.MessageType),
 		ParentMessageID: parentMessageID,
 		Mentions:        request.Mentions,
-		Metadata:        metadata,
+		Metadata:        *request.Metadata,
 	})
 
 	if err != nil {

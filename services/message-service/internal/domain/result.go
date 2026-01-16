@@ -2,6 +2,11 @@ package domain
 
 import "github.com/google/uuid"
 
+type MessagesResponse struct {
+	Messages []Message `json:"messages"`
+	HasMore  bool      `json:"has_more"`
+}
+
 // SendMessageResult contains the result of sending a message
 type SendMessageResult struct {
 	Message           *Message

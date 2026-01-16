@@ -1,11 +1,13 @@
 package domain
 
+import "time"
+
 // LoginResult contains the result of a successful login
 type LoginResult struct {
 	User         *User
 	AccessToken  string
 	RefreshToken string
-	ExpiresAt    int64
+	ExpiresAt    time.Time
 }
 
 type RegisterUserOutput struct {

@@ -177,15 +177,15 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req.RequestHandler, requestID string, user *domain.User, statusErr error) {
 	var message string
 	switch statusErr {
-	case domain.ErrAccountDeactivated:
+	case authErrors.ErrAccountDeactivated:
 		message = "Account is deactivated. Please contact support."
-	case domain.ErrAccountSuspended:
+	case authErrors.ErrAccountSuspended:
 		message = "Account is suspended. Please contact support."
-	case domain.ErrAccountLocked:
+	case authErrors.ErrAccountLocked:
 		message = "Account is locked due to multiple failed login attempts. Please reset your password or contact support."
-	case domain.ErrAccountPending:
+	case authErrors.ErrAccountPending:
 		message = "Account is pending verification. Please verify your account before logging in."
-	case domain.ErrAccountDeleted:
+	case authErrors.ErrAccountDeleted:
 		message = "Account has been deleted. Please contact support for further assistance."
 	default:
 		h.log.Error("Unknown account status during login",

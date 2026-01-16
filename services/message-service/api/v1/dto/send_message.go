@@ -1,7 +1,7 @@
 package dto
 
 import (
-	svcmodel "echo-backend/services/message-service/internal/service/model"
+	"echo-backend/services/message-service/internal/domain"
 	"shared/server/request"
 
 	"github.com/go-playground/validator/v10"
@@ -9,12 +9,12 @@ import (
 
 // SendMessageRequest represents the request to send a new message
 type SendMessageRequest struct {
-	ConversationID  string                 `json:"conversation_id" validate:"required,uuid4"`
-	Content         string                 `json:"content" validate:"required,min=1,max=10000"`
-	MessageType     string                 `json:"message_type" validate:"required,oneof=text image video audio document location contact poll"`
-	ParentMessageID *string                `json:"parent_message_id,omitempty" validate:"omitempty,uuid4"`
-	Mentions        []svcmodel.Mention     `json:"mentions,omitempty"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	ConversationID  string                  `json:"conversation_id" validate:"required,uuid4"`
+	Content         string                  `json:"content" validate:"required,min=1,max=10000"`
+	MessageType     domain.MessageType      `json:"message_type" validate:"required,oneof=text image video audio document location contact poll"`
+	ParentMessageID *string                 `json:"parent_message_id,omitempty" validate:"omitempty,uuid4"`
+	Mentions        []domain.Mention        `json:"mentions,omitempty"`
+	Metadata        *domain.MessageMetadata `json:"metadata,omitempty"`
 }
 
 func NewSendMessageRequest() *SendMessageRequest {
@@ -88,16 +88,16 @@ type SendMessageResponse struct {
 	ConversationID  string                 `json:"conversation_id"`
 	SenderUserID    string                 `json:"sender_user_id"`
 	Content         string                 `json:"content"`
-	MessageType     string                 `json:"message_type"`
-	Status          string                 `json:"status"`
+	MessageType     domain.MessageType     `json:"message_type"`
+	Status          domain.MessageStatus   `json:"status"`
 	ParentMessageID *string                `json:"parent_message_id,omitempty"`
-	Mentions        []svcmodel.Mention     `json:"mentions,omitempty"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	Mentions        []domain.Mention       `json:"mentions,omitempty"`
+	Metadata        domain.MessageMetadata `json:"metadata,omitempty"`
 	CreatedAt       int64                  `json:"created_at"`
 	UpdatedAt       int64                  `json:"updated_at"`
 }
 
-func NewSendMessageResponse(msg *svcmodel.Message) *SendMessageResponse {
+func NewSendMessageResponse(msg *domain.Message) *SendMessageResponse {
 	var parentMsgID *string
 	if msg.ParentMessageID != nil {
 		id := msg.ParentMessageID.String()
@@ -113,7 +113,7 @@ func NewSendMessageResponse(msg *svcmodel.Message) *SendMessageResponse {
 		Status:          msg.Status,
 		ParentMessageID: parentMsgID,
 		Mentions:        msg.Mentions,
-		Metadata:        map[string]interface{}(msg.Metadata),
+		Metadata:        msg.Metadata,
 		CreatedAt:       msg.CreatedAt.Unix(),
 		UpdatedAt:       msg.UpdatedAt.Unix(),
 	}

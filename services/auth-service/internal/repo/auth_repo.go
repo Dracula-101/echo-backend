@@ -16,6 +16,7 @@ import (
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 // AuthRepositoryInterface defines the contract for authentication repository operations
@@ -218,8 +219,8 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	return &domain.User{
 		ID:                     user.ID,
 		Email:                  user.Email,
-		PhoneNumber:            derefString(user.PhoneNumber),
-		PhoneCountryCode:       derefString(user.PhoneCountryCode),
+		PhoneNumber:            utils.DerefString(user.PhoneNumber),
+		PhoneCountryCode:       utils.DerefString(user.PhoneCountryCode),
 		PasswordHash:           user.PasswordHash,
 		PasswordSalt:           user.PasswordSalt,
 		PasswordAlgorithm:      user.PasswordAlgorithm,
@@ -231,17 +232,12 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 		FailedLoginAttempts:    user.FailedLoginAttempts,
 		LastFailedLoginAt:      user.LastFailedLoginAt,
 		RequiresPasswordChange: user.RequiresPasswordChange,
+		PasswordLastChanged:    user.PasswordLastChangedAt,
+		LastSuccessfulLoginAt:  user.LastSuccessfulLoginAt,
+		CreatedAt:              user.CreatedAt,
 		DeletedAt:              user.DeletedAt,
 		UpdatedAt:              user.UpdatedAt,
 	}, nil
-}
-
-// Helper to dereference *string to string
-func derefString(s *string) string {
-	if s != nil {
-		return *s
-	}
-	return ""
 }
 
 // ============================================================================

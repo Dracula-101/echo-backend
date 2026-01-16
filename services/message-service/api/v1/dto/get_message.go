@@ -1,7 +1,6 @@
 package dto
 
 import (
-	svcmodel "echo-backend/services/message-service/internal/service/model"
 	"shared/server/request"
 
 	"github.com/go-playground/validator/v10"
@@ -67,8 +66,4 @@ func (r *GetMessagesRequest) ValidateErrors(ve validator.ValidationErrors) ([]re
 		}
 	}
 	return errors, nil
-}
-
-type GetMessagesResponse struct {
-	svcmodel.MessagesResponse
 }

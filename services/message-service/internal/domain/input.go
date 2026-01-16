@@ -13,7 +13,7 @@ type SendMessageInput struct {
 	Content         string
 	MessageType     MessageType
 	ParentMessageID *uuid.UUID
-	Mentions        []uuid.UUID
+	Mentions        []Mention
 	Metadata        MessageMetadata
 }
 
