@@ -303,3 +303,10 @@ func ListenAndServe(cfg *Config, log logger.Logger) error {
 
 	return srv.ListenAndServe()
 }
+
+func IsServerDownErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return err == http.ErrServerClosed
+}

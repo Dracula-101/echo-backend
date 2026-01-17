@@ -8,8 +8,8 @@ import (
 type RegisterUserInput struct {
 	Email            string
 	Password         string
-	PhoneNumber      string
-	PhoneCountryCode string
+	PhoneNumber      *string
+	PhoneCountryCode *string
 	IPAddress        string
 	UserAgent        string
 	AcceptTerms      bool

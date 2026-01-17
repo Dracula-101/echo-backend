@@ -7,13 +7,12 @@ import (
 	"shared/pkg/logger"
 	"shared/pkg/logger/adapter"
 	"shared/server/middleware"
+	"shared/server/request"
 
 	"github.com/gorilla/mux"
 )
 
 type Middleware func(http.Handler) http.Handler
-
-type Handler func(http.ResponseWriter, *http.Request)
 
 type Builder struct {
 	router             *Router
@@ -22,8 +21,8 @@ type Builder struct {
 	systemEndpoints    []Endpoint
 	routes             []func(*Router)
 	routeGroups        []routeGroupRegistration
-	notFoundHandler    Handler
-	notAllowedHandler  Handler
+	notFoundHandler    request.RequestHandlerFunc
+	notAllowedHandler  request.RequestHandlerFunc
 	enableSystemRoutes bool
 	systemPrefix       string
 	logger             logger.Logger
@@ -79,55 +78,67 @@ func (b *Builder) WithMiddlewareChain(chain *middleware.Chain) *Builder {
 	return b
 }
 
-func (b *Builder) WithHealthEndpoint(path string, handler Handler) *Builder {
+func (b *Builder) WithHealthEndpoint(path string, handler request.RequestHandlerFunc) *Builder {
 	b.systemEndpoints = append(b.systemEndpoints, Endpoint{
 		Path:    path,
-		Handler: http.HandlerFunc(handler),
-		Method:  http.MethodGet,
+		Handler: http.HandlerFunc(handler.ServeHTTP),
+		Method:  request.MethodGet,
 	})
 	b.logger.Debug("Health endpoint queued", logger.String("path", path))
 	return b
 }
 
-func (b *Builder) WithMetricsEndpoint(path string, handler Handler) *Builder {
+func (b *Builder) WithMetricsEndpoint(path string, handler request.RequestHandlerFunc) *Builder {
 	b.systemEndpoints = append(b.systemEndpoints, Endpoint{
 		Path:    path,
-		Handler: http.HandlerFunc(handler),
+		Handler: http.HandlerFunc(handler.ServeHTTP),
 		Method:  http.MethodGet,
 	})
 	b.logger.Debug("Metrics endpoint queued", logger.String("path", path))
 	return b
 }
 
-func (b *Builder) WithVersionEndpoint(path string, handler Handler) *Builder {
+func (b *Builder) WithVersionEndpoint(path string, handler request.RequestHandlerFunc) *Builder {
 	b.systemEndpoints = append(b.systemEndpoints, Endpoint{
 		Path:    path,
-		Handler: http.HandlerFunc(handler),
+		Handler: http.HandlerFunc(handler.ServeHTTP),
 		Method:  http.MethodGet,
 	})
 	b.logger.Debug("Version endpoint queued", logger.String("path", path))
 	return b
 }
 
-func (b *Builder) WithStatusEndpoint(path string, handler Handler) *Builder {
+func (b *Builder) WithStatusEndpoint(path string, handler request.RequestHandlerFunc) *Builder {
 	b.systemEndpoints = append(b.systemEndpoints, Endpoint{
 		Path:    path,
-		Handler: http.HandlerFunc(handler),
+		Handler: http.HandlerFunc(handler.ServeHTTP),
 		Method:  http.MethodGet,
 	})
 	b.logger.Debug("Status endpoint queued", logger.String("path", path))
 	return b
 }
 
-func (b *Builder) WithNotFoundHandler(handler Handler) *Builder {
+func (b *Builder) WithNotFoundHandler(handler request.RequestHandlerFunc) *Builder {
 	b.notFoundHandler = handler
 	b.logger.Debug("Not Found handler queued")
 	return b
 }
 
-func (b *Builder) WithMethodNotAllowedHandler(handler Handler) *Builder {
+func (b *Builder) WithNotFoundHandlerRequest(handler request.RequestHandlerFunc) *Builder {
+	b.notFoundHandler = handler
+	b.logger.Debug("Not Found handler queued (request handler)")
+	return b
+}
+
+func (b *Builder) WithMethodNotAllowedHandler(handler request.RequestHandlerFunc) *Builder {
 	b.notAllowedHandler = handler
 	b.logger.Debug("Method Not Allowed handler queued")
+	return b
+}
+
+func (b *Builder) WithMethodNotAllowedHandlerRequest(handler request.RequestHandlerFunc) *Builder {
+	b.notAllowedHandler = handler
+	b.logger.Debug("Method Not Allowed handler queued (request handler)")
 	return b
 }
 
@@ -190,11 +201,11 @@ func (b *Builder) Build() *Router {
 	}
 
 	if b.notFoundHandler != nil {
-		mainMux.NotFoundHandler = http.HandlerFunc(b.notFoundHandler)
+		mainMux.NotFoundHandler = http.HandlerFunc(b.notFoundHandler.ServeHTTP)
 	}
 
 	if b.notAllowedHandler != nil {
-		mainMux.MethodNotAllowedHandler = http.HandlerFunc(b.notAllowedHandler)
+		mainMux.MethodNotAllowedHandler = http.HandlerFunc(b.notAllowedHandler.ServeHTTP)
 	}
 
 	b.logger.Info("Router built",
@@ -213,12 +224,12 @@ type SystemEndpointsConfig struct {
 	MetricsPath      string
 	VersionPath      string
 	StatusPath       string
-	HealthHandler    Handler
-	LivenessHandler  Handler
-	ReadinessHandler Handler
-	MetricsHandler   Handler
-	VersionHandler   Handler
-	StatusHandler    Handler
+	HealthHandler    request.RequestHandlerFunc
+	LivenessHandler  request.RequestHandlerFunc
+	Readinesshandler request.RequestHandlerFunc
+	MetricsHandler   request.RequestHandlerFunc
+	VersionHandler   request.RequestHandlerFunc
+	StatusHandler    request.RequestHandlerFunc
 }
 
 func DefaultSystemEndpointsConfig() *SystemEndpointsConfig {

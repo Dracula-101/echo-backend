@@ -877,7 +877,7 @@ func (t *transactionWrapper) Query(ctx context.Context, query string, args ...in
 func (t *transactionWrapper) QueryRow(ctx context.Context, query string, args ...interface{}) database.Row {
 	nargs := normalizeArgs(args)
 	t.logger.Debug("TX QueryRow", logger.String("query", query))
-	return &rowWrapper{row: t.tx.QueryRowContext(ctx, query, nargs...)}
+	return &rowWrapper{row: t.tx.QueryRowContext(ctx, query, nargs...), log: t.logger}
 }
 
 func (t *transactionWrapper) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, error) {
@@ -958,7 +958,7 @@ type rowWrapper struct {
 	log logger.Logger
 }
 
-func (r *rowWrapper) Scan(dest ...interface{}) error {
+func (r *rowWrapper) Scan(dest ...any) error {
 	r.log.Debug("Scanning single row", logger.Int("num_fields", len(dest)))
 	return r.row.Scan(dest...)
 }

@@ -46,6 +46,10 @@ func String(key, val string) Field {
 	return &field{key: key, value: val}
 }
 
+func Strings(key string, val []string) Field {
+	return &field{key: key, value: val}
+}
+
 func Int(key string, val int) Field {
 	return &field{key: key, value: val}
 }

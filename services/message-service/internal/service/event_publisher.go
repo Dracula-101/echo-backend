@@ -13,6 +13,7 @@ import (
 // EventPublisher publishes domain events to message broker
 type EventPublisher interface {
 	PublishMessageEvent(ctx context.Context, event *domain.MessageEvent) error
+	PublishChatMessage(ctx context.Context, event *domain.ChatMessageEvent) error
 	PublishConversationEvent(ctx context.Context, event *domain.ConversationEvent) error
 }
 
@@ -64,6 +65,11 @@ func (p *KafkaEventPublisher) PublishMessageEvent(ctx context.Context, event *do
 		logger.String("message_id", event.MessageID.String()),
 	)
 
+	return nil
+}
+
+func (p *KafkaEventPublisher) PublishChatMessage(ctx context.Context, event *domain.ChatMessageEvent) error {
+	// Implementation for publishing chat message events can be added here
 	return nil
 }
 

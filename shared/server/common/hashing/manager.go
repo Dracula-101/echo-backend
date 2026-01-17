@@ -83,6 +83,15 @@ func NewManager(cfg Config) (*Manager, error) {
 	return &Manager{cfg: cfg}, nil
 }
 
+func DefaultManager() (*Manager, error) {
+	cfg := Config{}
+	cfg = applyDefaults(cfg)
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &Manager{cfg: cfg}, nil
+}
+
 func applyDefaults(cfg Config) Config {
 	if cfg.Default == "" {
 		cfg.Default = AlgorithmArgon2id

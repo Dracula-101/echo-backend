@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
+	conversationHandler "echo-backend/services/message-service/api/v1/handler/conversation"
 	messageHandler "echo-backend/services/message-service/api/v1/handler/message"
 	"echo-backend/services/message-service/internal/config"
 	"echo-backend/services/message-service/internal/health"
@@ -131,6 +130,7 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *messageHandler.MessageHandler,
+	conversationHandler *conversationHandler.ConversationHandler,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
@@ -141,25 +141,30 @@ func setupAPIRoutes(
 	})
 
 	// Conversation endpoints
-
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Post("/conversations", request.Adapt(conversationHandler.CreateConversation))
+	})
 	log.Debug("API routes registered successfully")
 	return builder
 }
 
 func createRouter(
 	messageHandler *messageHandler.MessageHandler,
+	conversationHandler *conversationHandler.ConversationHandler,
 	healthHandler *health.Handler,
 	cfg *config.Config,
 	log logger.Logger,
 ) (*router.Router, error) {
 
 	builder := router.NewBuilder().
-		WithHealthEndpoint("/health", healthHandler.Health).
-		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.RouteNotFoundError(r.Context(), r, w, log)
+		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
+			healthHandler.Health(rh.Writer(), rh.Request())
 		}).
-		WithMethodNotAllowedHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.MethodNotAllowedError(r.Context(), r, w)
+		WithNotFoundHandler(func(rh request.RequestHandler) {
+			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("Endpoint %s not found", rh.Request().URL.Path))
+		}).
+		WithMethodNotAllowedHandler(func(rh request.RequestHandler) {
+			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(middleware.Timeout(30*time.Second)),
@@ -178,7 +183,7 @@ func createRouter(
 			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
-	builder = setupAPIRoutes(builder, messageHandler, log)
+	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, log)
 
 	r := builder.Build()
 	return r, nil
@@ -297,19 +302,22 @@ func main() {
 
 	// Initialize repositories
 	messageRepo := repo.NewMessageRepository(dbClient, cacheClient)
-	conversationRepo := repo.NewConversationRepository(dbClient, cacheClient)
+	conversationRepo := repo.NewConversationRepository(dbClient, cacheClient, log)
+	userRepo := repo.NewUserRepository(dbClient)
 
 	// Initialize event publisher
 	eventPublisher := service.NewKafkaEventPublisher(kafkaProducer, log)
 
 	// Initialize services
-	messageService := service.NewMessageService(messageRepo, conversationRepo, eventPublisher, log)
+	messageService := service.NewMessageService(messageRepo, conversationRepo, userRepo, eventPublisher, cacheClient, log)
+	conversationService := service.NewConversationService(conversationRepo, log)
 
 	// Initialize handlers
 	messageHandler := messageHandler.NewMessageHandler(messageService, log)
+	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(messageHandler, healthHandler, cfg, log)
+	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}
@@ -342,7 +350,7 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && !server.IsServerDownErr(err) {
 			log.Fatal("Server error", logger.Error(err))
 		}
 		log.Info("Server stopped")

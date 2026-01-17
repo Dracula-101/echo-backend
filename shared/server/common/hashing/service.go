@@ -16,8 +16,25 @@ func NewService(cfg Config) (*HashingService, error) {
 	return service, nil
 }
 
+func DefaultService() (*HashingService, error) {
+	mgr, err := DefaultManager()
+	if err != nil {
+		return nil, err
+	}
+	service := &HashingService{manager: mgr}
+	return service, nil
+}
+
 func (s *HashingService) DefaultAlgorithm() Algorithm {
 	return s.manager.cfg.Default
+}
+
+func (s *HashingService) HashString(input string) string {
+	hashResult, err := s.manager.Hash(input)
+	if err != nil {
+		panic("Failed to hash string: " + err.Error())
+	}
+	return hashResult.Encoded
 }
 
 func (s *HashingService) HashPassword(ctx context.Context, password string) (*HashResult, error) {

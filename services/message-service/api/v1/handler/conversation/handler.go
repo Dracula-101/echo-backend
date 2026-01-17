@@ -6,11 +6,11 @@ import (
 )
 
 type ConversationHandler struct {
-	conversationService svc.ConversationServiceInterface
+	conversationService svc.ConversationService
 	log                 logger.Logger
 }
 
-func NewConversationHandler(conversationService svc.ConversationServiceInterface, log logger.Logger) *ConversationHandler {
+func NewConversationHandler(conversationService svc.ConversationService, log logger.Logger) *ConversationHandler {
 	return &ConversationHandler{
 		conversationService: conversationService,
 		log:                 log,

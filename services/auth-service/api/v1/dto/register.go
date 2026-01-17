@@ -8,11 +8,11 @@ import (
 
 // RegisterRequest represents the payload required to create a new account.
 type RegisterRequest struct {
-	Email            string `json:"email" validate:"required,email"`
-	Password         string `json:"password" validate:"required,min=8,max=128"`
-	PhoneNumber      string `json:"phone_number,omitempty" validate:"omitempty,e164"`
-	PhoneCountryCode string `json:"phone_country_code,omitempty"`
-	AcceptTerms      bool   `json:"accept_terms" validate:"required"`
+	Email            string  `json:"email" validate:"required,email"`
+	Password         string  `json:"password" validate:"required,min=8,max=128"`
+	PhoneNumber      *string `json:"phone_number,omitempty" validate:"omitempty,e164"`
+	PhoneCountryCode *string `json:"phone_country_code,omitempty"`
+	AcceptTerms      bool    `json:"accept_terms" validate:"required"`
 }
 
 func NewRegisterRequest() *RegisterRequest {

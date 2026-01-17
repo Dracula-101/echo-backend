@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"echo-backend/services/api-gateway/internal/config"
@@ -17,6 +15,7 @@ import (
 	env "shared/server/env"
 	"shared/server/headers"
 	coreMiddleware "shared/server/middleware"
+	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
 	"shared/server/server"
@@ -163,12 +162,12 @@ func setupRoutes(builder *router.Builder, cfg *config.Config, proxyManager *prox
 		methods := routeGroup.Methods
 		if len(methods) == 0 {
 			methods = []string{
-				http.MethodGet,
-				http.MethodPost,
-				http.MethodPut,
-				http.MethodDelete,
-				http.MethodPatch,
-				http.MethodOptions,
+				request.MethodGet,
+				request.MethodPost,
+				request.MethodPut,
+				request.MethodDelete,
+				request.MethodPatch,
+				request.MethodOptions,
 			}
 		}
 
@@ -183,15 +182,17 @@ func createRouter(cfg *config.Config, proxyManager *proxy.Manager, tokenService 
 	healthHandler := healthHandler.NewHandler(healthHandler.NewManager(cfg.Service.Name, cfg.Service.Version))
 	builder := router.NewBuilder().
 		WithSystemPrefix(cfg.Server.PrefixPath).
-		WithHealthEndpoint("/health", healthHandler.Health).
-		WithMetricsEndpoint("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			response.JSONWithMessage(r.Context(), r, w, http.StatusOK, "Metrics endpoint", nil)
+		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
+			healthHandler.Health(rh.Writer(), rh.Request())
 		}).
-		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.RouteNotFoundError(r.Context(), r, w, log)
+		WithMetricsEndpoint("/metrics", func(rh request.RequestHandler) {
+			response.JSONWithMessage(rh.Context(), rh.Request(), rh.Writer(), response.StatusOK, "OK", nil)
 		}).
-		WithMethodNotAllowedHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.MethodNotAllowedError(r.Context(), r, w)
+		WithNotFoundHandlerRequest(func(rh request.RequestHandler) {
+			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("The requested URL %s was not found on this server.", rh.Request().URL.Path))
+		}).
+		WithMethodNotAllowedHandlerRequest(func(rh request.RequestHandler) {
+			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestID(headers.XRequestID)),
@@ -206,8 +207,8 @@ func createRouter(cfg *config.Config, proxyManager *proxy.Manager, tokenService 
 					}
 					return claims.Subject, nil
 				},
-				OnAuthFailed: func(w http.ResponseWriter, r *http.Request, err error) {
-					response.UnauthorizedError(r.Context(), r, w, fmt.Sprintf("Authentication failed: %v", err), err)
+				OnAuthFailed: func(handler request.RequestHandler, err error) {
+					response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), fmt.Sprintf("Authentication failed: %v", err), err)
 				},
 				SkipPaths: cfg.Server.JWTConfig.SkipPaths,
 			})),
@@ -341,7 +342,7 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && !server.IsServerDownErr(err) {
 			log.Fatal("Server error", logger.Error(err))
 		}
 		log.Info("Server stopped")

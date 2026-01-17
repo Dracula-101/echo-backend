@@ -14,7 +14,7 @@ type SendMessageInput struct {
 	MessageType     MessageType
 	ParentMessageID *uuid.UUID
 	Mentions        []Mention
-	Metadata        MessageMetadata
+	Metadata        *MessageMetadata
 }
 
 // EditMessageInput contains data for editing a message

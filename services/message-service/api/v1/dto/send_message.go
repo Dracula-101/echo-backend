@@ -3,8 +3,10 @@ package dto
 import (
 	"echo-backend/services/message-service/internal/domain"
 	"shared/server/request"
+	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 )
 
 // SendMessageRequest represents the request to send a new message
@@ -84,37 +86,39 @@ func (r *SendMessageRequest) ValidateErrors(ve validator.ValidationErrors) ([]re
 
 // SendMessageResponse represents the response after sending a message
 type SendMessageResponse struct {
-	ID              string                 `json:"id"`
-	ConversationID  string                 `json:"conversation_id"`
-	SenderUserID    string                 `json:"sender_user_id"`
-	Content         string                 `json:"content"`
-	MessageType     domain.MessageType     `json:"message_type"`
-	Status          domain.MessageStatus   `json:"status"`
-	ParentMessageID *string                `json:"parent_message_id,omitempty"`
-	Mentions        []domain.Mention       `json:"mentions,omitempty"`
-	Metadata        domain.MessageMetadata `json:"metadata,omitempty"`
-	CreatedAt       int64                  `json:"created_at"`
-	UpdatedAt       int64                  `json:"updated_at"`
+	ID              uuid.UUID               `json:"id"`
+	ConversationID  uuid.UUID               `json:"conversation_id"`
+	SenderUserID    uuid.UUID               `json:"sender_user_id"`
+	ParentMessageID *uuid.UUID              `json:"parent_message_id,omitempty"`
+	Content         string                  `json:"content"`
+	MessageType     domain.MessageType      `json:"message_type"`
+	Status          domain.MessageStatus    `json:"status"`
+	IsEdited        bool                    `json:"is_edited"`
+	IsDeleted       bool                    `json:"is_deleted"`
+	Mentions        []domain.Mention        `json:"mentions"`
+	Metadata        *domain.MessageMetadata `json:"metadata"`
+	CreatedAt       time.Time               `json:"created_at"`
+	UpdatedAt       time.Time               `json:"updated_at"`
+	DeletedAt       *time.Time              `json:"deleted_at,omitempty"`
+	EditedAt        *time.Time              `json:"edited_at,omitempty"`
 }
 
-func NewSendMessageResponse(msg *domain.Message) *SendMessageResponse {
-	var parentMsgID *string
-	if msg.ParentMessageID != nil {
-		id := msg.ParentMessageID.String()
-		parentMsgID = &id
-	}
-
+func NewSendMessageResponse(message *domain.Message) *SendMessageResponse {
 	return &SendMessageResponse{
-		ID:              msg.ID.String(),
-		ConversationID:  msg.ConversationID.String(),
-		SenderUserID:    msg.SenderUserID.String(),
-		Content:         msg.Content,
-		MessageType:     msg.MessageType,
-		Status:          msg.Status,
-		ParentMessageID: parentMsgID,
-		Mentions:        msg.Mentions,
-		Metadata:        msg.Metadata,
-		CreatedAt:       msg.CreatedAt.Unix(),
-		UpdatedAt:       msg.UpdatedAt.Unix(),
+		ID:              message.ID,
+		ConversationID:  message.ConversationID,
+		SenderUserID:    message.SenderUserID,
+		ParentMessageID: message.ParentMessageID,
+		Content:         message.Content,
+		MessageType:     message.MessageType,
+		Status:          message.Status,
+		IsEdited:        message.IsEdited,
+		IsDeleted:       message.IsDeleted,
+		Mentions:        message.Mentions,
+		Metadata:        message.Metadata,
+		CreatedAt:       message.CreatedAt,
+		UpdatedAt:       message.UpdatedAt,
+		DeletedAt:       message.DeletedAt,
+		EditedAt:        message.EditedAt,
 	}
 }

@@ -18,7 +18,7 @@ type Message struct {
 	IsEdited        bool
 	IsDeleted       bool
 	Mentions        []Mention
-	Metadata        MessageMetadata
+	Metadata        *MessageMetadata
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       *time.Time

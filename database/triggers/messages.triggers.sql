@@ -403,7 +403,13 @@ BEGIN
     INSERT INTO messages.conversation_participants (
         conversation_id, user_id, role, joined_at
     ) VALUES (
-        NEW.id, NEW.creator_user_id, 'owner', NOW()
+        NEW.id, 
+        NEW.creator_user_id, 
+        CASE 
+            WHEN NEW.conversation_type = 'direct' THEN 'member'
+            ELSE 'owner'
+        END, 
+        NOW()
     );
     
     RETURN NEW;

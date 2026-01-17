@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 
 	"media-service/api/v1/handler"
 	"media-service/api/v1/middleware"
@@ -199,12 +197,14 @@ func setupRoutes(builder *router.Builder, h *handler.Handler, cfg *config.Config
 func createRouter(h *handler.Handler, healthHandler *health.Handler, cfg *config.Config, log logger.Logger) (*router.Router, error) {
 
 	builder := router.NewBuilder().
-		WithHealthEndpoint("/health", healthHandler.Health).
-		WithNotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.RouteNotFoundError(r.Context(), r, w, log)
+		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
+			healthHandler.Health(rh.Writer(), rh.Request())
 		}).
-		WithMethodNotAllowedHandler(func(w http.ResponseWriter, r *http.Request) {
-			response.MethodNotAllowedError(r.Context(), r, w)
+		WithNotFoundHandler(func(rh request.RequestHandler) {
+			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("Endpoint %s not found", rh.Request().URL.Path))
+		}).
+		WithMethodNotAllowedHandler(func(rh request.RequestHandler) {
+			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
@@ -376,7 +376,7 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && !server.IsServerDownErr(err) {
 			log.Fatal("Server error", logger.Error(err))
 		}
 		log.Info("Server stopped")

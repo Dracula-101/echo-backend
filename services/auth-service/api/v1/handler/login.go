@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
@@ -136,6 +135,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 				}
 				return domain.SessionTypeWeb
 			}(),
+			ExpiresAt: userResult.ExpiresAt,
 			Metadata: map[string]any{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
@@ -162,7 +162,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("session_id", session.SessionId),
 	)
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusOK, "Login successful",
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Login successful",
 		dto.NewLoginResponse(
 			*userResult.User,
 			session.SessionId,

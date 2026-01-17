@@ -21,6 +21,13 @@ type RequestHandler struct {
 	writer    http.ResponseWriter
 }
 
+type RequestHandlerFunc func(RequestHandler)
+
+func (f RequestHandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	handler := NewHandler(r, w)
+	f(*handler)
+}
+
 func NewHandler(req *http.Request, writer http.ResponseWriter) *RequestHandler {
 	return &RequestHandler{
 		config: &Config{

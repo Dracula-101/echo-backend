@@ -16,6 +16,7 @@ import (
 	cache "shared/pkg/cache"
 	"shared/pkg/logger"
 	sContext "shared/server/context"
+	"shared/server/request"
 	"shared/server/response"
 )
 
@@ -824,7 +825,7 @@ func CacheControl(maxAge int, public bool) Handler {
 
 type AuthConfig struct {
 	ValidateToken func(token string) (userID string, err error)
-	OnAuthFailed  func(w http.ResponseWriter, r *http.Request, err error)
+	OnAuthFailed  func(handler request.RequestHandler, err error)
 	SkipPaths     []string
 }
 
@@ -840,10 +841,10 @@ func Auth(config AuthConfig) Handler {
 	}
 
 	if config.OnAuthFailed == nil {
-		config.OnAuthFailed = func(w http.ResponseWriter, r *http.Request, err error) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			response.UnauthorizedError(r.Context(), r, w, "Authentication failed", err)
+		config.OnAuthFailed = func(handler request.RequestHandler, err error) {
+			handler.Writer().Header().Set("Content-Type", "application/json")
+			handler.Writer().WriteHeader(http.StatusUnauthorized)
+			response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "Authentication failed", err)
 		}
 	}
 
@@ -857,21 +858,22 @@ func Auth(config AuthConfig) Handler {
 			}
 
 			authHeader := r.Header.Get("Authorization")
+			handler := request.NewHandler(r, w)
 			if authHeader == "" {
-				config.OnAuthFailed(w, r, errors.New("missing authorization header"))
+				config.OnAuthFailed(*handler, errors.New("missing authorization header"))
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				config.OnAuthFailed(w, r, errors.New("invalid authorization format"))
+				config.OnAuthFailed(*handler, errors.New("invalid authorization format"))
 				return
 			}
 
 			token := parts[1]
 			userID, err := config.ValidateToken(token)
 			if err != nil {
-				config.OnAuthFailed(w, r, err)
+				config.OnAuthFailed(*handler, err)
 				return
 			}
 

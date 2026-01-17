@@ -14,6 +14,7 @@ type CreateConversationRequest struct {
 	Title            string   `json:"title,omitempty" validate:"omitempty,max=255"`
 	Description      string   `json:"description,omitempty" validate:"omitempty,max=1000"`
 	IsEncrypted      bool     `json:"is_encrypted"`
+	AvatarURL        *string  `json:"avatar_url,omitempty"`
 	IsPublic         bool     `json:"is_public"`
 }
 
@@ -84,9 +85,9 @@ type CreateConversationResponse struct {
 	CreatorUserID    string   `json:"creator_user_id"`
 	IsEncrypted      bool     `json:"is_encrypted"`
 	IsPublic         bool     `json:"is_public"`
+	AvatarURL        *string  `json:"avatar_url,omitempty"`
 	MemberCount      int      `json:"member_count"`
 	ParticipantIDs   []string `json:"participant_ids"`
-	CreatedAt        int64    `json:"created_at"`
 }
 
 func NewCreateConversationResponse(
@@ -115,6 +116,5 @@ func NewCreateConversationResponse(
 		IsPublic:         isPublic,
 		MemberCount:      len(participantIDs),
 		ParticipantIDs:   pIDs,
-		CreatedAt:        createdAt,
 	}
 }

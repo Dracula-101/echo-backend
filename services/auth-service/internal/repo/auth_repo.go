@@ -120,8 +120,8 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 
 	id, err := r.db.Insert(ctx, &models.AuthUser{
 		Email:                  params.Email,
-		PhoneNumber:            &params.PhoneNumber,
-		PhoneCountryCode:       &params.PhoneCountryCode,
+		PhoneNumber:            params.PhoneNumber,
+		PhoneCountryCode:       params.PhoneCountryCode,
 		PasswordHash:           params.PasswordHash,
 		PasswordSalt:           params.PasswordSalt,
 		PasswordAlgorithm:      params.PasswordAlgorithm,
