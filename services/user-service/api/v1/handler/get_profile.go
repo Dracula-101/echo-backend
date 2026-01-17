@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -65,5 +64,5 @@ func (h *UserHandler) GetProfile(handler *req.RequestHandler) {
 		UpdatedAt:    user.UpdatedAt,
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusOK, "Profile retrieved successfully", resp)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Profile retrieved successfully", resp)
 }

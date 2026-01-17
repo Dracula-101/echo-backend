@@ -6,11 +6,12 @@ import (
 	"presence-service/internal/errors"
 	"presence-service/internal/model"
 
-	"github.com/google/uuid"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
+
+	"github.com/google/uuid"
 )
 
 func (h *PresenceHandler) GetBulkPresence(w http.ResponseWriter, r *http.Request) {
@@ -63,5 +64,5 @@ func (h *PresenceHandler) GetBulkPresence(w http.ResponseWriter, r *http.Request
 		resp.Presences[userID] = *presence
 	}
 
-	response.JSONWithContext(r.Context(), r, w, http.StatusOK, resp)
+	response.JSONWithContext(r.Context(), r, w, response.StatusOK, resp)
 }

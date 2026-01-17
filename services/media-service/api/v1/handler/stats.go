@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"net/http"
 
 	"media-service/internal/service/models"
 	req "shared/server/request"
@@ -28,5 +27,5 @@ func (h *Handler) GetStorageStats(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, output)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, output)
 }

@@ -4,7 +4,6 @@ import (
 	"echo-backend/services/message-service/api/v1/dto"
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
-	"net/http"
 	"shared/pkg/logger"
 	"shared/server/request"
 	req "shared/server/request"
@@ -110,6 +109,6 @@ func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 
 	// Send response
 	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(),
-		http.StatusOK, "Message sent successfully", dto.NewSendMessageResponse(msg),
+		response.StatusOK, "Message sent successfully", dto.NewSendMessageResponse(msg),
 	)
 }

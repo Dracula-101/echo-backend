@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"net/http"
 
 	"media-service/api/v1/dto"
 	mediaErrors "media-service/internal/errors"
@@ -56,7 +55,7 @@ func (h *Handler) GetFile(handler *req.RequestHandler) {
 		ViewCount:        output.ViewCount,
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, responseDTO)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, responseDTO)
 }
 
 // DeleteFile handles file deletion
@@ -107,5 +106,5 @@ func (h *Handler) DeleteFile(handler *req.RequestHandler) {
 		FileID:  fileID,
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, responseDTO)
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, responseDTO)
 }

@@ -43,7 +43,7 @@ func (h *PresenceHandler) GetActiveDevices(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	response.JSONWithContext(r.Context(), r, w, http.StatusOK, map[string]any{
+	response.JSONWithContext(r.Context(), r, w, response.StatusOK, map[string]any{
 		"devices": devices,
 		"count":   len(devices),
 	})

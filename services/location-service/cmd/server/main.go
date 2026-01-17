@@ -13,6 +13,7 @@ import (
 	"shared/pkg/logger/adapter"
 	"shared/pkg/utils"
 	"shared/server/env"
+	"shared/server/response"
 	"time"
 )
 
@@ -206,7 +207,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(response.StatusOK)
 			return
 		}
 

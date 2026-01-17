@@ -84,5 +84,5 @@ func (h *Handler) RevokeShare(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusOK, map[string]string{"message": "share revoked successfully"})
+	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, map[string]string{"message": "share revoked successfully"})
 }

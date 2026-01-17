@@ -84,7 +84,7 @@ func (h *PresenceHandler) GetTypingIndicators(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	response.JSONWithContext(r.Context(), r, w, http.StatusOK, map[string]any{
+	response.JSONWithContext(r.Context(), r, w, response.StatusOK, map[string]any{
 		"typing_users": indicators,
 		"count":        len(indicators),
 	})

@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"net/http"
+	"shared/server/response"
 	"sync"
 	"time"
 )
@@ -134,9 +135,9 @@ func (m *Manager) runChecks(ctx context.Context) map[string]CheckResult {
 func (m *Manager) HTTPStatus(status Status) int {
 	switch status {
 	case StatusHealthy:
-		return http.StatusOK
+		return response.StatusOK
 	case StatusDegraded:
-		return http.StatusOK // Still accepting traffic but with issues
+		return response.StatusOK // Still accepting traffic but with issues
 	case StatusUnhealthy:
 		return http.StatusServiceUnavailable
 	default:

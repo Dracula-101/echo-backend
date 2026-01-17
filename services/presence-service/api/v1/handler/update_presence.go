@@ -62,5 +62,5 @@ func (h *PresenceHandler) UpdatePresence(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	response.JSONWithContext(r.Context(), r, w, http.StatusOK, presence)
+	response.JSONWithContext(r.Context(), r, w, response.StatusOK, presence)
 }

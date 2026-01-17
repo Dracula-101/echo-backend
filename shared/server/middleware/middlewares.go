@@ -91,7 +91,7 @@ func Cache(duration time.Duration, client cache.Cache) Handler {
 			cacheKey := fmt.Sprintf("server-cache:%s", r.URL.String())
 			if cachedResponse, err := client.Get(r.Context(), cacheKey); err == nil && cachedResponse != nil {
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
+				w.WriteHeader(response.StatusOK)
 				w.Write(cachedResponse)
 				return
 			}
@@ -161,7 +161,7 @@ func RequestCompletedLogger(log logger.Logger) Handler {
 
 			wrapped := &responseWriterWithSize{
 				ResponseWriter: w,
-				statusCode:     http.StatusOK,
+				statusCode:     response.StatusOK,
 				bodySize:       0,
 			}
 
@@ -218,7 +218,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if !rw.written {
-		rw.WriteHeader(http.StatusOK)
+		rw.WriteHeader(response.StatusOK)
 	}
 	return rw.ResponseWriter.Write(b)
 }
@@ -240,7 +240,7 @@ func (rw *responseWriterWithSize) WriteHeader(code int) {
 
 func (rw *responseWriterWithSize) Write(b []byte) (int, error) {
 	if !rw.written {
-		rw.WriteHeader(http.StatusOK)
+		rw.WriteHeader(response.StatusOK)
 	}
 	size, err := rw.ResponseWriter.Write(b)
 	rw.bodySize += int64(size)
@@ -419,7 +419,7 @@ func Metrics(recorder MetricsRecorder) Handler {
 
 			wrapped := &responseWriter{
 				ResponseWriter: w,
-				statusCode:     http.StatusOK,
+				statusCode:     response.StatusOK,
 			}
 
 			next.ServeHTTP(wrapped, r)

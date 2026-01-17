@@ -10,6 +10,7 @@ import (
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/request"
+	"shared/server/response"
 	"time"
 )
 
@@ -62,7 +63,7 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, pkgErrors.A
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != response.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, pkgErrors.New(pkgErrors.CodeServiceUnavailable, "location lookup request failed").
 			WithDetail("status_code", resp.StatusCode).

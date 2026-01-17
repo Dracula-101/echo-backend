@@ -3,6 +3,7 @@ package health
 import (
 	"encoding/json"
 	"net/http"
+	"shared/server/response"
 )
 
 type Handler struct {
@@ -25,7 +26,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	if status == StatusUnhealthy {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	} else {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(response.StatusOK)
 	}
 
 	json.NewEncoder(w).Encode(result)
@@ -36,7 +37,7 @@ func (h *Handler) Liveness(w http.ResponseWriter, r *http.Request) {
 	result := h.manager.Liveness(ctx)
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(response.StatusOK)
 	json.NewEncoder(w).Encode(result)
 }
 
@@ -50,7 +51,7 @@ func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	if status == StatusUnhealthy {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	} else {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(response.StatusOK)
 	}
 
 	json.NewEncoder(w).Encode(result)

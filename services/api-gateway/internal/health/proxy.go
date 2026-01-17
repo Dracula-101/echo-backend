@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"shared/server/response"
 	"sync"
 	"time"
 
@@ -84,7 +85,7 @@ func (p *ProxyHealthChecker) checkService(ctx context.Context, name string, svc 
 
 	responseTime := time.Since(start).Seconds() * 1000
 
-	if resp.StatusCode == http.StatusOK {
+	if resp.StatusCode == response.StatusOK {
 		return CheckResult{
 			Status:       StatusHealthy,
 			Message:      "Service is healthy",

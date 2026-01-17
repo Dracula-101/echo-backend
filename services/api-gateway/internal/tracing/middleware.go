@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"net/http"
+	"shared/server/response"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -81,7 +82,7 @@ func Middleware(config Config) func(http.Handler) http.Handler {
 			// Wrap response writer to capture status code
 			wrapped := &responseWriter{
 				ResponseWriter: w,
-				statusCode:     http.StatusOK,
+				statusCode:     response.StatusOK,
 			}
 
 			// Track request start time

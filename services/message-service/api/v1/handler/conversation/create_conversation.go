@@ -3,7 +3,6 @@ package conversation
 import (
 	"echo-backend/services/message-service/api/v1/dto"
 	"echo-backend/services/message-service/internal/domain"
-	"net/http"
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
@@ -76,7 +75,7 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 	}
 
 	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(),
-		http.StatusOK,
+		response.StatusOK,
 		"Conversation created successfully",
 		dto.CreateConversationResponse{
 			ID:               conversation.ID.String(),
