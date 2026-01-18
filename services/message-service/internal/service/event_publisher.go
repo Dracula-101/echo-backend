@@ -69,7 +69,36 @@ func (p *KafkaEventPublisher) PublishMessageEvent(ctx context.Context, event *do
 }
 
 func (p *KafkaEventPublisher) PublishChatMessage(ctx context.Context, event *domain.ChatMessageEvent) error {
-	// Implementation for publishing chat message events can be added here
+	topic := "chat-messages"
+	key := event.ConversationID.String()
+
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		p.log.Error("Failed to marshal chat message event",
+			logger.Error(err),
+			logger.String("conversation_id", event.ConversationID.String()),
+		)
+		return err
+	}
+
+	kafkaMsg := messaging.NewMessage(eventJSON).
+		WithKey([]byte(key)).
+		WithHeader("type", "chat_message").
+		WithHeader("conversation_id", event.ConversationID.String())
+
+	err = p.producer.Send(ctx, topic, kafkaMsg)
+	if err != nil {
+		p.log.Error("Failed to publish chat message event",
+			logger.Error(err),
+			logger.String("conversation_id", event.ConversationID.String()),
+		)
+		return err
+	}
+
+	p.log.Debug("Published chat message event",
+		logger.String("conversation_id", event.ConversationID.String()),
+	)
+
 	return nil
 }
 

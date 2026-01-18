@@ -28,6 +28,13 @@ type Handler interface {
 	Handle(ctx context.Context, message *Message) error
 }
 
+// BatchHandler is an optional interface for handlers that want batched delivery.
+// When implemented, the consumer will deliver messages in batches and commit
+// offsets only after the batch is processed successfully.
+type BatchHandler interface {
+	HandleBatch(ctx context.Context, messages []*Message) error
+}
+
 type HandlerFunc func(ctx context.Context, message *Message) error
 
 func (f HandlerFunc) Handle(ctx context.Context, message *Message) error {

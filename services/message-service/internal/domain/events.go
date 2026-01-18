@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
+	dbModels "shared/pkg/database/postgres/models"
+	"shared/pkg/utils"
+
 	"github.com/google/uuid"
 )
 
@@ -58,6 +61,38 @@ type ChatMessageEvent struct {
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 	Metadata               json.RawMessage
+}
+
+func (e *ChatMessageEvent) ToDBModel() *dbModels.Message {
+	return &dbModels.Message{
+		ID:                     e.ID.String(),
+		ConversationID:         e.ConversationID.String(),
+		SenderUserID:           e.SenderUserID.String(),
+		ParentMessageID:        utils.PtrString(e.ParentMessageID.String()),
+		MessageType:            dbModels.MessageType(e.MessageType),
+		Content:                &e.Content,
+		ContentEncrypted:       e.ContentEncrypted,
+		ContentHash:            &e.ContentHash,
+		FormatType:             dbModels.MessageFormatType(e.FormatType),
+		Mentions:               e.Mentions,
+		Hashtags:               e.Hashtags,
+		Links:                  e.Links,
+		Status:                 dbModels.MessageStatus(e.Status),
+		DeliveredAt:            e.DeliveredAt,
+		DeliveryCount:          e.DeliveryCount,
+		ReadCount:              e.ReadCount,
+		ReplyCount:             e.ReplyCount,
+		LastReplyAt:            e.LastReplyAt,
+		ReactionCount:          e.ReactionCount,
+		IsForwarded:            e.IsForwarded,
+		ForwardedFromMessageID: e.ForwardedFromMessageID,
+		ForwardCount:           e.ForwardCount,
+		SentFromDeviceID:       utils.PtrString(e.SentFromDeviceID),
+		SentFromIP:             utils.PtrString(e.SentFromIP),
+		CreatedAt:              e.CreatedAt,
+		UpdatedAt:              e.UpdatedAt,
+		Metadata:               e.Metadata,
+	}
 }
 
 // ConversationEvent represents a conversatio

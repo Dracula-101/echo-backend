@@ -8,6 +8,7 @@ import (
 	conversationHandler "echo-backend/services/message-service/api/v1/handler/conversation"
 	messageHandler "echo-backend/services/message-service/api/v1/handler/message"
 	"echo-backend/services/message-service/internal/config"
+	"echo-backend/services/message-service/internal/consumer"
 	"echo-backend/services/message-service/internal/health"
 	healthCheckers "echo-backend/services/message-service/internal/health/checkers"
 	"echo-backend/services/message-service/internal/repo"
@@ -127,6 +128,42 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 	return producer, nil
 }
 
+func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.Consumer, error) {
+	log.Debug("Creating Kafka consumer",
+		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("group_id", cfg.GroupID),
+	)
+	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+		Brokers:  cfg.Brokers,
+		ClientID: cfg.ClientID,
+		GroupID:  cfg.GroupID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Kafka consumer created successfully",
+		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("group_id", cfg.GroupID),
+	)
+	return kafkaConsumer, nil
+}
+
+func startChatMessageConsumer(
+	ctx context.Context,
+	kafkaConsumer messaging.Consumer,
+	chatMessageConsumer *consumer.ChatMessageConsumer,
+	topic string,
+	log logger.Logger,
+) {
+	consumerTopics := []string{topic}
+	if err := kafkaConsumer.Consume(ctx, consumerTopics, chatMessageConsumer); err != nil {
+		log.Fatal("Failed to start Kafka consumer", logger.Error(err))
+	}
+	log.Info("Kafka consumer started",
+		logger.Strings("topics", consumerTopics),
+	)
+}
+
 func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *messageHandler.MessageHandler,
@@ -189,10 +226,19 @@ func createRouter(
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, kafkaConsumer messaging.Consumer, consumerCancel context.CancelFunc, cfg *config.Config, log logger.Logger) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
+	)
+
+	shutdownMgr.RegisterWithPriority(
+		"kafka-consumer",
+		shutdown.Hook(func(ctx context.Context) error {
+			consumerCancel()
+			return kafkaConsumer.Close()
+		}),
+		shutdown.PriorityHigh,
 	)
 
 	shutdownMgr.RegisterWithPriority(
@@ -293,6 +339,20 @@ func main() {
 		}
 	}()
 
+	// Create Kafka consumer
+	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
+	if err != nil {
+		log.Fatal("Failed to create Kafka consumer", logger.Error(err))
+	}
+	defer func() {
+		if kafkaConsumer != nil {
+			log.Info("Closing Kafka consumer")
+			if err := kafkaConsumer.Close(); err != nil {
+				log.Error("Failed to close Kafka consumer", logger.Error(err))
+			}
+		}
+	}()
+
 	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
 	healthMgr.RegisterChecker(healthCheckers.NewDatabaseChecker(dbClient))
 	if cfg.Cache.Enabled && cacheClient != nil {
@@ -301,7 +361,7 @@ func main() {
 	log.Info("Health checks registered")
 
 	// Initialize repositories
-	messageRepo := repo.NewMessageRepository(dbClient, cacheClient)
+	messageRepo := repo.NewMessageRepository(dbClient, cacheClient, log)
 	conversationRepo := repo.NewConversationRepository(dbClient, cacheClient, log)
 	userRepo := repo.NewUserRepository(dbClient)
 
@@ -316,6 +376,7 @@ func main() {
 	messageHandler := messageHandler.NewMessageHandler(messageService, log)
 	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
 	healthHandler := health.NewHandler(healthMgr)
+	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)
 
 	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)
 	if err != nil {
@@ -338,7 +399,10 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, log, cfg)
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+
+	shutdownMgr := setupShutdownManager(srv, kafkaConsumer, consumerCancel, cfg, log)
 
 	serverErrors := make(chan error, 1)
 	go func() {

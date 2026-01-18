@@ -10,6 +10,7 @@ import (
 	msgError "echo-backend/services/message-service/internal/error"
 	"echo-backend/services/message-service/internal/repo"
 	"shared/pkg/cache"
+	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/utils"
 	"shared/server/common/hashing"
@@ -25,6 +26,10 @@ import (
 type MessageServiceInterface interface {
 	// Core message operations
 	SendMessage(ctx context.Context, req *domain.SendMessageInput, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MessageError)
+
+	// Event processing
+	ProcessChatMessage(ctx context.Context, event *domain.ChatMessageEvent) pkgErrors.AppError
+	ProcessChatMessages(ctx context.Context, events []*domain.ChatMessageEvent) pkgErrors.AppError
 }
 
 type messageService struct {
@@ -293,5 +298,48 @@ func (s *messageService) validateMessage(rawMsgType string, metadata *domain.Mes
 			Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "unsupported message type"),
 		}
 	}
+	return nil
+}
+
+func (s *messageService) ProcessChatMessage(ctx context.Context, event *domain.ChatMessageEvent) pkgErrors.AppError {
+	dbErr := s.messageRepo.InsertMessage(ctx, event.ToDBModel())
+	if dbErr != nil {
+		s.logger.Error("Failed to insert chat message into database",
+			logger.String("service", msgError.ServiceName),
+			logger.String("message_id", event.ID.String()),
+			logger.String("conversation_id", event.ConversationID.String()),
+			logger.Error(dbErr),
+		)
+		return pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to insert chat message")
+	}
+
+	s.logger.Debug("Chat message inserted into database",
+		logger.String("service", msgError.ServiceName),
+		logger.String("message_id", event.ID.String()),
+		logger.String("conversation_id", event.ConversationID.String()),
+	)
+	return nil
+}
+
+// ProcessChatMessage processes a ChatMessageEvent by persisting it to the database
+func (s *messageService) ProcessChatMessages(ctx context.Context, event []*domain.ChatMessageEvent) pkgErrors.AppError {
+	messages := make([]*dbModels.Message, 0, len(event))
+	for _, e := range event {
+		messages = append(messages, e.ToDBModel())
+	}
+
+	dbErr := s.messageRepo.InsertMessages(ctx, messages)
+	if dbErr != nil {
+		s.logger.Error("Failed to insert chat messages into database",
+			logger.String("service", msgError.ServiceName),
+			logger.Error(dbErr),
+		)
+		return pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to insert chat messages")
+	}
+
+	s.logger.Debug("Chat messages inserted into database",
+		logger.String("service", msgError.ServiceName),
+		logger.Int("batch_size", len(messages)),
+	)
 	return nil
 }
