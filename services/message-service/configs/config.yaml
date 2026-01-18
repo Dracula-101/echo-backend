@@ -40,9 +40,9 @@ kafka:
   brokers:
     - ${KAFKA_BROKERS}
   topic: ${KAFKA_TOPIC:chat-messages}
-  client_id: ${KAFKA_CLIENT_ID:message-service}
+  client_id: ${KAKFA_CLIENT_ID:message-service}
   group_id: ${KAFKA_GROUP_ID:database-writers}
-  compression: ${KAFKA_COMPRESSION:snappy}
+  compression: ${KAFKA_COMPRESSION_TYPE:snappy}
   batch_size: ${KAFKA_BATCH_SIZE:16384}
   linger_ms: ${KAFKA_LINGER_MS:10}
   acks: ${KAFKA_ACKS:all}

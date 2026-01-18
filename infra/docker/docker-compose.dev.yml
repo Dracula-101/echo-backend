@@ -434,7 +434,7 @@ services:
 
       # Kafka Configuration
       KAFKA_BROKERS: kafka:29092
-      KAFKA_TOPIC: messages
+      KAFKA_TOPIC: chat-messages
       KAFKA_NOTIFICATION_TOPIC: notifications
       KAFKA_CONSUMER_GROUP: message-service-dev
       KAFKA_SESSION_TIMEOUT: 10s

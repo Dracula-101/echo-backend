@@ -2,7 +2,9 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -44,6 +46,9 @@ func (c *consumer) Consume(ctx context.Context, topics []string, handler messagi
 		defer c.wg.Done()
 		for {
 			if err := c.group.Consume(ctx, topics, c); err != nil {
+				if ctx.Err() != nil || isExpectedShutdownError(err) {
+					return
+				}
 				fmt.Printf("Consumer error: %v\n", err)
 			}
 
@@ -57,6 +62,9 @@ func (c *consumer) Consume(ctx context.Context, topics []string, handler messagi
 	go func() {
 		defer c.wg.Done()
 		for err := range c.group.Errors() {
+			if ctx.Err() != nil || isExpectedShutdownError(err) {
+				continue
+			}
 			fmt.Printf("Consumer group error: %v\n", err)
 		}
 	}()
@@ -67,6 +75,10 @@ func (c *consumer) Consume(ctx context.Context, topics []string, handler messagi
 func (c *consumer) Close() error {
 	c.wg.Wait()
 	return c.group.Close()
+}
+
+func isExpectedShutdownError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, io.EOF)
 }
 func (c *consumer) Setup(sarama.ConsumerGroupSession) error {
 	return nil

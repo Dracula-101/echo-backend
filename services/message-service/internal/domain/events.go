@@ -64,11 +64,15 @@ type ChatMessageEvent struct {
 }
 
 func (e *ChatMessageEvent) ToDBModel() *dbModels.Message {
+	var parentMessageID *string
+	if e.ParentMessageID != nil {
+		parentMessageID = utils.PtrString(e.ParentMessageID.String())
+	}
 	return &dbModels.Message{
 		ID:                     e.ID.String(),
 		ConversationID:         e.ConversationID.String(),
 		SenderUserID:           e.SenderUserID.String(),
-		ParentMessageID:        utils.PtrString(e.ParentMessageID.String()),
+		ParentMessageID:        parentMessageID,
 		MessageType:            dbModels.MessageType(e.MessageType),
 		Content:                &e.Content,
 		ContentEncrypted:       e.ContentEncrypted,

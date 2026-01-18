@@ -39,22 +39,70 @@ func PtrString(s string) *string {
 	return &s
 }
 
+func SafePtrString(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	str := *s
+	return &str
+}
+
 func PtrInt(i int) *int {
 	return &i
+}
+
+func SafePtrInt(i *int) *int {
+	if i == nil {
+		return nil
+	}
+	val := *i
+	return &val
 }
 
 func PtrBool(b bool) *bool {
 	return &b
 }
 
+func SafePtrBool(b *bool) *bool {
+	if b == nil {
+		return nil
+	}
+	val := *b
+	return &val
+}
+
 func PtrFloat64(f float64) *float64 {
 	return &f
+}
+
+func SafePtrFloat64(f *float64) *float64 {
+	if f == nil {
+		return nil
+	}
+	val := *f
+	return &val
 }
 
 func PtrInt64(i int64) *int64 {
 	return &i
 }
 
+func SafePtrInt64(i *int64) *int64 {
+	if i == nil {
+		return nil
+	}
+	val := *i
+	return &val
+}
+
 func Ptr[T any](v T) *T {
 	return &v
+}
+
+func SafePtr[T any](v *T) *T {
+	if v == nil {
+		return nil
+	}
+	val := *v
+	return &val
 }

@@ -115,11 +115,16 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
 	)
 	producer, err := kafka.NewProducer(messaging.Config{
-		Brokers:    cfg.Brokers,
-		ClientID:   "message-service",
-		MaxRetries: 3,
+		Brokers:           cfg.Brokers,
+		ClientID:          cfg.ClientID,
+		GroupID:           cfg.GroupID,
+		RetryBackoff:      100,
+		SessionTimeout:    30000,
+		HeartbeatInterval: 10000,
+		MaxRetries:        5,
 	})
 	if err != nil {
+		log.Error("Failed to create Kafka producer", logger.Error(err))
 		return nil, err
 	}
 	log.Info("Kafka producer created successfully",
@@ -134,11 +139,16 @@ func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.C
 		logger.String("group_id", cfg.GroupID),
 	)
 	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
-		Brokers:  cfg.Brokers,
-		ClientID: cfg.ClientID,
-		GroupID:  cfg.GroupID,
+		Brokers:           cfg.Brokers,
+		ClientID:          cfg.ClientID,
+		GroupID:           cfg.GroupID,
+		RetryBackoff:      100,
+		SessionTimeout:    30000,
+		HeartbeatInterval: 10000,
+		MaxRetries:        5,
 	})
 	if err != nil {
+		log.Error("Failed to create Kafka consumer", logger.Error(err))
 		return nil, err
 	}
 	log.Info("Kafka consumer created successfully",
@@ -155,13 +165,13 @@ func startChatMessageConsumer(
 	topic string,
 	log logger.Logger,
 ) {
+	log.Info("Starting Kafka consumer for chat messages",
+		logger.String("topic", topic),
+	)
 	consumerTopics := []string{topic}
 	if err := kafkaConsumer.Consume(ctx, consumerTopics, chatMessageConsumer); err != nil {
 		log.Fatal("Failed to start Kafka consumer", logger.Error(err))
 	}
-	log.Info("Kafka consumer started",
-		logger.Strings("topics", consumerTopics),
-	)
 }
 
 func setupAPIRoutes(
