@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"ws-service/internal/config"
+	"ws-service/internal/consumer"
 	"ws-service/internal/health"
 	healthCheckers "ws-service/internal/health/checkers"
 	"ws-service/internal/service"
@@ -17,6 +18,8 @@ import (
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
+	"shared/pkg/messaging"
+	"shared/pkg/messaging/kafka"
 	env "shared/server/env"
 	"shared/server/middleware"
 	"shared/server/request"
@@ -117,6 +120,47 @@ func createCacheClient(cfg config.RedisConfig, log logger.Logger) (cache.Cache, 
 
 	log.Info("Cache client created successfully")
 	return cacheClient, nil
+}
+
+func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.Consumer, error) {
+	log.Debug("Creating Kafka consumer",
+		logger.Strings("brokers", cfg.Brokers),
+		logger.String("group_id", cfg.GroupID),
+		logger.String("topic", cfg.Topic),
+	)
+
+	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+		Brokers:           cfg.Brokers,
+		ClientID:          cfg.ClientID,
+		GroupID:           cfg.GroupID,
+		RetryBackoff:      100,
+		SessionTimeout:    30000,
+		HeartbeatInterval: 10000,
+		MaxRetries:        5,
+	})
+	if err != nil {
+		log.Error("Failed to create Kafka consumer", logger.Error(err))
+		return nil, err
+	}
+
+	log.Info("Kafka consumer created successfully")
+	return kafkaConsumer, nil
+}
+
+func startChatMessageConsumer(
+	ctx context.Context,
+	kafkaConsumer messaging.Consumer,
+	chatMessageConsumer *consumer.ChatMessageConsumer,
+	topic string,
+	log logger.Logger,
+) {
+	log.Info("Starting Kafka consumer for chat messages",
+		logger.String("topic", topic),
+	)
+
+	if err := kafkaConsumer.Consume(ctx, []string{topic}, chatMessageConsumer); err != nil {
+		log.Error("Kafka consumer stopped with error", logger.Error(err))
+	}
 }
 
 func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
@@ -249,7 +293,7 @@ func setupShutdownManager(
 		shutdown.WithLogger(log),
 	)
 
-	// Shutdown HTTP server first
+	// Shutdown HTTP server
 	shutdownMgr.RegisterWithPriority(
 		"http-server",
 		shutdown.ServerShutdownHook(srv),
@@ -372,6 +416,32 @@ func main() {
 		log.Fatal("Failed to start WebSocket manager", logger.Error(err))
 	}
 	log.Info("WebSocket engine started")
+
+	// Create Kafka consumer for chat messages (optional)
+	if cfg.Kafka.Enabled {
+		kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
+		if err != nil {
+			log.Fatal("Failed to create Kafka consumer", logger.Error(err))
+		}
+
+		// Create chat message consumer handler
+		chatMessageConsumer := consumer.NewChatMessageConsumer(manager, log)
+
+		// Start Kafka consumer in background
+		consumerCtx, consumerCancel := context.WithCancel(context.Background())
+		go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+
+		// Register Kafka consumer shutdown
+		defer func() {
+			log.Info("Shutting down Kafka consumer")
+			consumerCancel()
+			if err := kafkaConsumer.Close(); err != nil {
+				log.Error("Failed to close Kafka consumer", logger.Error(err))
+			}
+		}()
+	} else {
+		log.Info("Kafka consumer is disabled in configuration")
+	}
 
 	// Initialize service with hub
 	wsService := service.NewWSService(dbClient, cacheClient, manager.GetHub(), log)

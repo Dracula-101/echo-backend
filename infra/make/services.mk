@@ -72,7 +72,7 @@ logs:
 	@echo ""
 	@echo "$(BOLD)$(BRIGHT_CYAN)$(STAR) Service Logs$(NC) $(DIM)(Press Ctrl+C to exit)$(NC)"
 	@echo ""
-	@$(DOCKER_COMPOSE) logs -f --no-log-prefix
+	@$(DOCKER_COMPOSE) logs
 
 ps:
 	@echo ""

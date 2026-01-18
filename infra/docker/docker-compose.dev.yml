@@ -834,6 +834,13 @@ services:
       WS_MAX_MESSAGE_SIZE: 10485760
       WS_CLIENT_BUFFER_SIZE: 256
 
+      # Kafka Configuration
+      KAFKA_ENABLED: "true"
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_TOPIC: chat-messages
+      KAFKA_CLIENT_ID: ws-service
+      KAFKA_GROUP_ID: ws-delivery-group
+
       # Development Features
       ENABLE_HOT_RELOAD: "true"
       ENABLE_DEBUG: "true"
@@ -856,6 +863,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8087/health" ]

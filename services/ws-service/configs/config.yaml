@@ -60,6 +60,14 @@ websocket:
   unregister_buffer: ${WS_UNREGISTER_BUFFER:256}
   broadcast_buffer: ${WS_BROADCAST_BUFFER:1024}
 
+kafka:
+  enabled: ${KAFKA_ENABLED:false}
+  brokers:
+    - ${KAFKA_BROKERS:localhost:9092}
+  topic: ${KAFKA_TOPIC:chat-messages}
+  client_id: ${KAFKA_CLIENT_ID:ws-service}
+  group_id: ${KAFKA_GROUP_ID:ws-delivery-group}
+
 logging:
   level: ${LOG_LEVEL:info}
   format: ${LOG_FORMAT:json}

@@ -8,6 +8,7 @@ type Config struct {
 	Database  DatabaseConfig  `yaml:"database" mapstructure:"database"`
 	Cache     CacheConfig     `yaml:"cache" mapstructure:"cache"`
 	WebSocket WebSocketConfig `yaml:"websocket" mapstructure:"websocket"`
+	Kafka     KafkaConfig     `yaml:"kafka" mapstructure:"kafka"`
 	Logging   LoggingConfig   `yaml:"logging" mapstructure:"logging"`
 	Shutdown  ShutdownConfig  `yaml:"shutdown" mapstructure:"shutdown"`
 }
@@ -96,4 +97,12 @@ type ShutdownConfig struct {
 	Timeout            time.Duration `yaml:"timeout" mapstructure:"timeout"`
 	WaitForConnections bool          `yaml:"wait_for_connections" mapstructure:"wait_for_connections"`
 	DrainTimeout       time.Duration `yaml:"drain_timeout" mapstructure:"drain_timeout"`
+}
+
+type KafkaConfig struct {
+	Enabled  bool     `yaml:"enabled" mapstructure:"enabled"`
+	Brokers  []string `yaml:"brokers" mapstructure:"brokers"`
+	Topic    string   `yaml:"topic" mapstructure:"topic"`
+	ClientID string   `yaml:"client_id" mapstructure:"client_id"`
+	GroupID  string   `yaml:"group_id" mapstructure:"group_id"`
 }
