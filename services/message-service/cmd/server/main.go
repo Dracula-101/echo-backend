@@ -410,7 +410,7 @@ func main() {
 	}
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
 
 	shutdownMgr := setupShutdownManager(srv, kafkaConsumer, consumerCancel, cfg, log)
 

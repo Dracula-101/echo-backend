@@ -73,30 +73,64 @@ type ChatMessageEvent struct {
 
 // MessagePayload is the WebSocket payload sent to clients
 type MessagePayload struct {
-	ID              uuid.UUID       `json:"id"`
-	ConversationID  uuid.UUID       `json:"conversation_id"`
-	SenderUserID    uuid.UUID       `json:"sender_user_id"`
-	ParentMessageID *uuid.UUID      `json:"parent_message_id,omitempty"`
-	Content         string          `json:"content"`
-	MessageType     MessageType     `json:"message_type"`
-	Status          MessageStatus   `json:"status"`
-	Mentions        json.RawMessage `json:"mentions,omitempty"`
-	Metadata        json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
+	ID                     uuid.UUID         `json:"id"`
+	ConversationID         uuid.UUID         `json:"conversation_id"`
+	SenderUserID           uuid.UUID         `json:"sender_user_id"`
+	ParentMessageID        *uuid.UUID        `json:"parent_message_id,omitempty"`
+	MessageType            MessageType       `json:"message_type"`
+	Content                string            `json:"content"`
+	ContentEncrypted       bool              `json:"content_encrypted"`
+	ContentHash            string            `json:"content_hash,omitempty"`
+	FormatType             MessageFormatType `json:"format_type,omitempty"`
+	Mentions               json.RawMessage   `json:"mentions,omitempty"`
+	Hashtags               []string          `json:"hashtags,omitempty"`
+	Links                  json.RawMessage   `json:"links,omitempty"`
+	Status                 MessageStatus     `json:"status"`
+	DeliveredAt            *time.Time        `json:"delivered_at,omitempty"`
+	DeliveryCount          int               `json:"delivery_count"`
+	ReadCount              int               `json:"read_count"`
+	ReplyCount             int               `json:"reply_count"`
+	LastReplyAt            *time.Time        `json:"last_reply_at,omitempty"`
+	ReactionCount          int               `json:"reaction_count"`
+	IsForwarded            bool              `json:"is_forwarded"`
+	ForwardedFromMessageID *string           `json:"forwarded_from_message_id,omitempty"`
+	ForwardCount           int               `json:"forward_count"`
+	SentFromDeviceID       string            `json:"sent_from_device_id,omitempty"`
+	SentFromIP             string            `json:"sent_from_ip,omitempty"`
+	CreatedAt              time.Time         `json:"created_at"`
+	UpdatedAt              time.Time         `json:"updated_at"`
+	Metadata               json.RawMessage   `json:"metadata,omitempty"`
 }
 
 // ToPayload converts ChatMessageEvent to MessagePayload for WebSocket delivery
 func (e *ChatMessageEvent) ToPayload() *MessagePayload {
 	return &MessagePayload{
-		ID:              e.ID,
-		ConversationID:  e.ConversationID,
-		SenderUserID:    e.SenderUserID,
-		ParentMessageID: e.ParentMessageID,
-		Content:         e.Content,
-		MessageType:     e.MessageType,
-		Status:          e.Status,
-		Mentions:        e.Mentions,
-		Metadata:        e.Metadata,
-		CreatedAt:       e.CreatedAt,
+		ID:                     e.ID,
+		ConversationID:         e.ConversationID,
+		SenderUserID:           e.SenderUserID,
+		ParentMessageID:        e.ParentMessageID,
+		MessageType:            e.MessageType,
+		Content:                e.Content,
+		ContentEncrypted:       e.ContentEncrypted,
+		ContentHash:            e.ContentHash,
+		FormatType:             e.FormatType,
+		Mentions:               e.Mentions,
+		Hashtags:               e.Hashtags,
+		Links:                  e.Links,
+		Status:                 e.Status,
+		DeliveredAt:            e.DeliveredAt,
+		DeliveryCount:          e.DeliveryCount,
+		ReadCount:              e.ReadCount,
+		ReplyCount:             e.ReplyCount,
+		LastReplyAt:            e.LastReplyAt,
+		ReactionCount:          e.ReactionCount,
+		IsForwarded:            e.IsForwarded,
+		ForwardedFromMessageID: e.ForwardedFromMessageID,
+		ForwardCount:           e.ForwardCount,
+		SentFromDeviceID:       e.SentFromDeviceID,
+		SentFromIP:             e.SentFromIP,
+		CreatedAt:              e.CreatedAt,
+		UpdatedAt:              e.UpdatedAt,
+		Metadata:               e.Metadata,
 	}
 }

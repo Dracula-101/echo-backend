@@ -3,35 +3,15 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
-	"ws-service/internal/model"
-
 	"shared/pkg/cache"
 	"shared/pkg/database"
 	"shared/pkg/logger"
 	"shared/server/websocket/hub"
+	"time"
+	"ws-service/internal/domain"
 
 	"github.com/google/uuid"
 )
-
-type WSService interface {
-	// User validation
-	ValidateUserExists(ctx context.Context, userID uuid.UUID) (bool, error)
-
-	// Connection lifecycle
-	HandleClientConnect(ctx context.Context, userID uuid.UUID, deviceID string) error
-	HandleClientDisconnect(ctx context.Context, userID uuid.UUID, deviceID string) error
-
-	// Broadcasting
-	BroadcastEvent(ctx context.Context, req *model.BroadcastRequest) (*model.BroadcastResponse, error)
-
-	// Presence queries
-	IsUserOnline(ctx context.Context, userID uuid.UUID) (bool, error)
-	GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error)
-
-	// Statistics
-	GetStats(ctx context.Context) (*model.StatsResponse, error)
-}
 
 type wsService struct {
 	db    database.Database
@@ -47,6 +27,25 @@ func NewWSService(db database.Database, cache cache.Cache, h *hub.Hub, log logge
 		hub:   h,
 		log:   log,
 	}
+}
+
+type WSService interface {
+	// User validation
+	ValidateUserExists(ctx context.Context, userID uuid.UUID) (bool, error)
+
+	// Connection lifecycle
+	HandleClientConnect(ctx context.Context, userID uuid.UUID, deviceID string) error
+	HandleClientDisconnect(ctx context.Context, userID uuid.UUID, deviceID string) error
+
+	// Broadcasting
+	BroadcastEvent(ctx context.Context, req *domain.BroadcastRequest) (*domain.BroadcastResponse, error)
+
+	// Presence queries
+	IsUserOnline(ctx context.Context, userID uuid.UUID) (bool, error)
+	GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error)
+
+	// Statistics
+	GetStats(ctx context.Context) (*domain.StatsResponse, error)
 }
 
 // ValidateUserExists checks if a user exists in the database with caching
@@ -163,14 +162,14 @@ func (s *wsService) HandleClientDisconnect(ctx context.Context, userID uuid.UUID
 }
 
 // BroadcastEvent broadcasts an event to specified recipients
-func (s *wsService) BroadcastEvent(ctx context.Context, req *model.BroadcastRequest) (*model.BroadcastResponse, error) {
+func (s *wsService) BroadcastEvent(ctx context.Context, req *domain.BroadcastRequest) (*domain.BroadcastResponse, error) {
 	// Validate request
 	if len(req.Recipients) == 0 {
 		return nil, fmt.Errorf("no recipients specified")
 	}
 
 	// Create event
-	event := &model.RealtimeEvent{
+	event := &domain.RealtimeEvent{
 		ID:         uuid.New(),
 		Type:       req.EventType,
 		Category:   s.getEventCategory(req.EventType),
@@ -215,7 +214,7 @@ func (s *wsService) BroadcastEvent(ctx context.Context, req *model.BroadcastRequ
 		logger.Int("online_recipients", onlineCount),
 	)
 
-	return &model.BroadcastResponse{
+	return &domain.BroadcastResponse{
 		EventID:          event.ID,
 		Recipients:       len(req.Recipients),
 		OnlineRecipients: onlineCount,
@@ -224,7 +223,7 @@ func (s *wsService) BroadcastEvent(ctx context.Context, req *model.BroadcastRequ
 }
 
 // marshalEvent marshals an event to JSON bytes
-func (s *wsService) marshalEvent(event *model.RealtimeEvent) ([]byte, error) {
+func (s *wsService) marshalEvent(event *domain.RealtimeEvent) ([]byte, error) {
 	// You can use encoding/json or your preferred JSON library
 	// For now, using a simple approach
 	return []byte(fmt.Sprintf(`{"id":"%s","type":"%s","payload":%v}`,
@@ -260,8 +259,8 @@ func (s *wsService) GetOnlineUsers(ctx context.Context) ([]uuid.UUID, error) {
 }
 
 // GetStats returns WebSocket hub statistics
-func (s *wsService) GetStats(ctx context.Context) (*model.StatsResponse, error) {
-	stats := &model.StatsResponse{
+func (s *wsService) GetStats(ctx context.Context) (*domain.StatsResponse, error) {
+	stats := &domain.StatsResponse{
 		TotalUsers:   s.hub.ClientCount(),
 		TotalDevices: s.hub.ConnectionCount(),
 	}
@@ -275,23 +274,23 @@ func (s *wsService) GetStats(ctx context.Context) (*model.StatsResponse, error) 
 }
 
 // getEventCategory determines the category from event type
-func (s *wsService) getEventCategory(eventType model.EventType) model.EventCategory {
+func (s *wsService) getEventCategory(eventType domain.EventType) domain.EventCategory {
 	switch {
-	case eventType >= model.EventPresenceOnline && eventType <= model.EventPresenceUpdate:
-		return model.CategoryPresence
-	case eventType >= model.EventMessageNew && eventType <= model.EventMessageDeleted:
-		return model.CategoryMessaging
-	case eventType >= model.EventTypingStart && eventType <= model.EventTypingStop:
-		return model.CategoryTyping
-	case eventType >= model.EventCallIncoming && eventType <= model.EventCallMissed:
-		return model.CategoryCall
-	case eventType >= model.EventNotificationNew && eventType <= model.EventNotificationRead:
-		return model.CategoryNotification
-	case eventType >= model.EventUserProfileUpdated && eventType <= model.EventUserUnblocked:
-		return model.CategoryUser
-	case eventType >= model.EventSystemMaintenance && eventType <= model.EventSystemAnnouncement:
-		return model.CategorySystem
+	case eventType >= domain.EventPresenceOnline && eventType <= domain.EventPresenceUpdate:
+		return domain.CategoryPresence
+	case eventType >= domain.EventMessageNew && eventType <= domain.EventMessageDeleted:
+		return domain.CategoryMessaging
+	case eventType >= domain.EventTypingStart && eventType <= domain.EventTypingStop:
+		return domain.CategoryTyping
+	case eventType >= domain.EventCallIncoming && eventType <= domain.EventCallMissed:
+		return domain.CategoryCall
+	case eventType >= domain.EventNotificationNew && eventType <= domain.EventNotificationRead:
+		return domain.CategoryNotification
+	case eventType >= domain.EventUserProfileUpdated && eventType <= domain.EventUserUnblocked:
+		return domain.CategoryUser
+	case eventType >= domain.EventSystemMaintenance && eventType <= domain.EventSystemAnnouncement:
+		return domain.CategorySystem
 	default:
-		return model.CategorySystem
+		return domain.CategorySystem
 	}
 }

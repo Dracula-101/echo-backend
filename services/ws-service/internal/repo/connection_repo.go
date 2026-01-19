@@ -3,7 +3,8 @@ package repo
 import (
 	"context"
 	"time"
-	"ws-service/internal/model"
+
+	"ws-service/internal/domain"
 
 	"shared/pkg/database"
 	"shared/pkg/logger"
@@ -14,13 +15,13 @@ import (
 // ConnectionRepository handles persistence of connection records
 type ConnectionRepository interface {
 	// CreateConnection records a new WebSocket connection
-	CreateConnection(ctx context.Context, conn *model.ConnectionRecord) error
+	CreateConnection(ctx context.Context, conn *domain.ConnectionRecord) error
 
 	// UpdateConnectionStatus updates the status of a connection
 	UpdateConnectionStatus(ctx context.Context, connectionID uuid.UUID, status string) error
 
 	// GetActiveConnections retrieves all active connections for a user
-	GetActiveConnections(ctx context.Context, userID uuid.UUID) ([]*model.ConnectionRecord, error)
+	GetActiveConnections(ctx context.Context, userID uuid.UUID) ([]*domain.ConnectionRecord, error)
 
 	// DeleteConnection removes a connection record
 	DeleteConnection(ctx context.Context, connectionID uuid.UUID) error
@@ -43,7 +44,7 @@ func NewConnectionRepository(db database.Database, log logger.Logger) Connection
 }
 
 // CreateConnection records a new WebSocket connection
-func (r *connectionRepository) CreateConnection(ctx context.Context, conn *model.ConnectionRecord) error {
+func (r *connectionRepository) CreateConnection(ctx context.Context, conn *domain.ConnectionRecord) error {
 	query := `
 		INSERT INTO websocket.connections (
 			id, user_id, device_id, client_id, ip_address,
@@ -109,7 +110,7 @@ func (r *connectionRepository) UpdateConnectionStatus(ctx context.Context, conne
 }
 
 // GetActiveConnections retrieves all active connections for a user
-func (r *connectionRepository) GetActiveConnections(ctx context.Context, userID uuid.UUID) ([]*model.ConnectionRecord, error) {
+func (r *connectionRepository) GetActiveConnections(ctx context.Context, userID uuid.UUID) ([]*domain.ConnectionRecord, error) {
 	query := `
 		SELECT id, user_id, device_id, client_id, ip_address,
 		       user_agent, platform, app_version, connected_at,
@@ -129,9 +130,9 @@ func (r *connectionRepository) GetActiveConnections(ctx context.Context, userID 
 	}
 	defer rows.Close()
 
-	connections := make([]*model.ConnectionRecord, 0)
+	connections := make([]*domain.ConnectionRecord, 0)
 	for rows.Next() {
-		conn := &model.ConnectionRecord{}
+		conn := &domain.ConnectionRecord{}
 		err := rows.Scan(
 			&conn.ID,
 			&conn.UserID,

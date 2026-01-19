@@ -77,13 +77,17 @@ type WebSocketConfig struct {
 	ClientBufferSize int `yaml:"client_buffer_size" mapstructure:"client_buffer_size"`
 
 	// Cleanup and maintenance
-	CleanupInterval         time.Duration `yaml:"cleanup_interval" mapstructure:"cleanup_interval"`
-	StaleConnectionTimeout  time.Duration `yaml:"stale_connection_timeout" mapstructure:"stale_connection_timeout"`
+	CleanupInterval        time.Duration `yaml:"cleanup_interval" mapstructure:"cleanup_interval"`
+	StaleConnectionTimeout time.Duration `yaml:"stale_connection_timeout" mapstructure:"stale_connection_timeout"`
 
 	// Hub channels
 	RegisterBuffer   int `yaml:"register_buffer" mapstructure:"register_buffer"`
 	UnregisterBuffer int `yaml:"unregister_buffer" mapstructure:"unregister_buffer"`
 	BroadcastBuffer  int `yaml:"broadcast_buffer" mapstructure:"broadcast_buffer"`
+
+	// Security - allowed origins for WebSocket connections
+	// Empty list means all origins are allowed (not recommended for production)
+	AllowedOrigins []string `yaml:"allowed_origins" mapstructure:"allowed_origins"`
 }
 
 type LoggingConfig struct {
@@ -100,7 +104,6 @@ type ShutdownConfig struct {
 }
 
 type KafkaConfig struct {
-	Enabled  bool     `yaml:"enabled" mapstructure:"enabled"`
 	Brokers  []string `yaml:"brokers" mapstructure:"brokers"`
 	Topic    string   `yaml:"topic" mapstructure:"topic"`
 	ClientID string   `yaml:"client_id" mapstructure:"client_id"`

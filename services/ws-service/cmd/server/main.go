@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"ws-service/internal/config"
 	"ws-service/internal/consumer"
+	codes "ws-service/internal/domain"
 	"ws-service/internal/health"
 	healthCheckers "ws-service/internal/health/checkers"
 	"ws-service/internal/service"
@@ -154,12 +157,14 @@ func startChatMessageConsumer(
 	topic string,
 	log logger.Logger,
 ) {
-	log.Info("Starting Kafka consumer for chat messages",
-		logger.String("topic", topic),
-	)
+	err := kafkaConsumer.Consume(ctx, []string{topic}, chatMessageConsumer)
+	if err == nil {
+		return
+	}
 
-	if err := kafkaConsumer.Consume(ctx, []string{topic}, chatMessageConsumer); err != nil {
-		log.Error("Kafka consumer stopped with error", logger.Error(err))
+	if ctx.Err() != nil {
+		log.Info("Kafka consumer stopped due to context cancellation")
+		return
 	}
 }
 
@@ -177,6 +182,53 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 	return healthMgr
 }
 
+func createOriginChecker(allowedOrigins []string, log logger.Logger) func(r *http.Request) bool {
+	if len(allowedOrigins) == 0 {
+		log.Warn("No allowed origins configured - accepting all origins (not recommended for production)")
+		return func(r *http.Request) bool { return true }
+	}
+
+	if slices.Contains(allowedOrigins, "*") {
+		log.Warn("Wildcard origin configured - accepting all origins (not recommended for production)")
+		return func(r *http.Request) bool { return true }
+	}
+
+	normalized := make([]string, 0, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			normalized = append(normalized, strings.ToLower(origin))
+		}
+	}
+
+	if len(normalized) == 0 {
+		log.Warn("No valid allowed origins after normalization - accepting all origins")
+		return func(r *http.Request) bool { return true }
+	}
+
+	log.Info("WebSocket origin validation enabled",
+		logger.Strings("allowed_origins", normalized),
+	)
+
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+
+		originLower := strings.ToLower(origin)
+		allowed := slices.Contains(normalized, originLower)
+
+		if !allowed {
+			log.Warn("Rejected WebSocket connection from disallowed origin",
+				logger.String("origin", origin),
+			)
+		}
+
+		return allowed
+	}
+}
+
 func createWebSocketHandler(
 	manager *wsManager.Manager,
 	wsService service.WSService,
@@ -184,14 +236,13 @@ func createWebSocketHandler(
 	log logger.Logger,
 ) *handler.Handler {
 	handlerCfg := &handler.Config{
-		// Connection settings from config
 		SendBufferSize:    cfg.WebSocket.ClientBufferSize,
 		MaxMessageSize:    int64(cfg.WebSocket.MaxMessageSize),
 		PingInterval:      cfg.WebSocket.PingPeriod,
 		WriteTimeout:      cfg.WebSocket.WriteWait,
 		ReadTimeout:       cfg.WebSocket.PongWait,
 		StaleTimeout:      cfg.WebSocket.StaleConnectionTimeout,
-		CheckOrigin:       func(r *http.Request) bool { return true },
+		CheckOrigin:       createOriginChecker(cfg.WebSocket.AllowedOrigins, log),
 		ReadBufferSize:    cfg.WebSocket.ReadBufferSize,
 		WriteBufferSize:   cfg.WebSocket.WriteBufferSize,
 		EnableCompression: false,
@@ -205,7 +256,7 @@ func createWebSocketHandler(
 		},
 		ExtractMetadata: handler.DefaultMetadataExtractor,
 		OnConnected: func(conn *handler.Connection) {
-			userID, _ := conn.GetMetadata("user_id")
+			userID, _ := conn.GetMetadata(codes.UserIdMetaKey)
 			deviceID, _ := conn.GetMetadata("device_id")
 			if uid, ok := userID.(uuid.UUID); ok {
 				if did, ok := deviceID.(string); ok {
@@ -214,7 +265,7 @@ func createWebSocketHandler(
 			}
 		},
 		OnDisconnected: func(conn *handler.Connection) {
-			userID, _ := conn.GetMetadata("user_id")
+			userID, _ := conn.GetMetadata(codes.UserIdMetaKey)
 			deviceID, _ := conn.GetMetadata("device_id")
 			if uid, ok := userID.(uuid.UUID); ok {
 				if did, ok := deviceID.(string); ok {
@@ -266,7 +317,6 @@ func createRouter(
 			router.Middleware(middleware.RequestCompletedLogger(log)),
 		)
 
-	// Health check endpoints
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/live", healthHandler.Liveness)
 		r.Get("/ready", healthHandler.Readiness)
@@ -283,6 +333,8 @@ func createRouter(
 func setupShutdownManager(
 	srv *server.Server,
 	manager *wsManager.Manager,
+	kafkaConsumer messaging.Consumer,
+	consumerCancel context.CancelFunc,
 	dbClient database.Database,
 	cacheClient cache.Cache,
 	log logger.Logger,
@@ -293,14 +345,24 @@ func setupShutdownManager(
 		shutdown.WithLogger(log),
 	)
 
-	// Shutdown HTTP server
+	if kafkaConsumer != nil {
+		shutdownMgr.RegisterWithPriority(
+			"kafka-consumer",
+			shutdown.Hook(func(ctx context.Context) error {
+				log.Info("Shutting down Kafka consumer")
+				consumerCancel()
+				return kafkaConsumer.Close()
+			}),
+			shutdown.PriorityHigh,
+		)
+	}
+
 	shutdownMgr.RegisterWithPriority(
 		"http-server",
 		shutdown.ServerShutdownHook(srv),
 		shutdown.PriorityHigh,
 	)
 
-	// Then shutdown WebSocket manager
 	shutdownMgr.RegisterWithPriority(
 		"websocket-manager",
 		shutdown.Hook(func(ctx context.Context) error {
@@ -310,7 +372,6 @@ func setupShutdownManager(
 		shutdown.PriorityHigh,
 	)
 
-	// Close database
 	if dbClient != nil {
 		shutdownMgr.RegisterWithPriority(
 			"database",
@@ -322,7 +383,6 @@ func setupShutdownManager(
 		)
 	}
 
-	// Close cache
 	if cacheClient != nil {
 		shutdownMgr.RegisterWithPriority(
 			"cache",
@@ -334,7 +394,6 @@ func setupShutdownManager(
 		)
 	}
 
-	// Sync logger
 	shutdownMgr.RegisterWithPriority(
 		"logger-sync",
 		shutdown.Hook(func(ctx context.Context) error {
@@ -351,8 +410,7 @@ func waitForShutdown(shutdownMgr *shutdown.Manager) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := shutdownMgr.Wait(); err != nil {
-		}
+		_ = shutdownMgr.Wait()
 	}()
 	return done
 }
@@ -374,7 +432,6 @@ func main() {
 		logger.String("environment", cfg.Service.Environment),
 	)
 
-	// Create database client
 	dbClient, err := createDBClient(cfg.Database.Postgres, log)
 	if err != nil {
 		log.Fatal("Failed to create database client", logger.Error(err))
@@ -388,7 +445,6 @@ func main() {
 		}
 	}()
 
-	// Create cache client (optional)
 	var cacheClient cache.Cache
 	if cfg.Cache.Enabled {
 		cacheClient, err = createCacheClient(cfg.Cache.Redis, log)
@@ -407,54 +463,32 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
-	// Initialize WebSocket manager
 	manager := wsManager.NewManager(log)
 	log.Info("WebSocket manager initialized")
 
-	// Start WebSocket engine
 	if err := manager.Start(); err != nil {
 		log.Fatal("Failed to start WebSocket manager", logger.Error(err))
 	}
 	log.Info("WebSocket engine started")
 
-	// Create Kafka consumer for chat messages (optional)
-	if cfg.Kafka.Enabled {
-		kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
-		if err != nil {
-			log.Fatal("Failed to create Kafka consumer", logger.Error(err))
-		}
-
-		// Create chat message consumer handler
-		chatMessageConsumer := consumer.NewChatMessageConsumer(manager, log)
-
-		// Start Kafka consumer in background
-		consumerCtx, consumerCancel := context.WithCancel(context.Background())
-		go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
-
-		// Register Kafka consumer shutdown
-		defer func() {
-			log.Info("Shutting down Kafka consumer")
-			consumerCancel()
-			if err := kafkaConsumer.Close(); err != nil {
-				log.Error("Failed to close Kafka consumer", logger.Error(err))
-			}
-		}()
-	} else {
-		log.Info("Kafka consumer is disabled in configuration")
+	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
+	if err != nil {
+		log.Fatal("Failed to create Kafka consumer", logger.Error(err))
 	}
 
-	// Initialize service with hub
+	chatMessageConsumer := consumer.NewChatMessageConsumer(manager, log)
+
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+
 	wsService := service.NewWSService(dbClient, cacheClient, manager.GetHub(), log)
 
-	// Setup health checks
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 	log.Info("Health checks registered")
 
-	// Initialize WebSocket handler with config
 	wsHandler := createWebSocketHandler(manager, wsService, cfg, log)
 
-	// Create HTTP server
 	routerInstance, err := createRouter(wsHandler, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
@@ -476,10 +510,8 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	// Setup graceful shutdown
-	shutdownMgr := setupShutdownManager(srv, manager, dbClient, cacheClient, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, manager, kafkaConsumer, consumerCancel, dbClient, cacheClient, log, cfg)
 
-	// Start server
 	serverErrors := make(chan error, 1)
 	go func() {
 		log.Info("Starting WebSocket Service",
@@ -489,7 +521,6 @@ func main() {
 		serverErrors <- srv.Start()
 	}()
 
-	// Wait for shutdown signal or error
 	select {
 	case err := <-serverErrors:
 		if err != nil && !server.IsServerDownErr(err) {

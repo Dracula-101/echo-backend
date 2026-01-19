@@ -60,8 +60,13 @@ websocket:
   unregister_buffer: ${WS_UNREGISTER_BUFFER:256}
   broadcast_buffer: ${WS_BROADCAST_BUFFER:1024}
 
+  # Security - allowed origins for WebSocket connections
+  # In production, set WS_ALLOWED_ORIGINS to your domain(s)
+  # Example: "https://example.com,https://app.example.com"
+  # Empty or "*" allows all origins (not recommended for production)
+  allowed_origins: ${WS_ALLOWED_ORIGINS:}
+
 kafka:
-  enabled: ${KAFKA_ENABLED:false}
   brokers:
     - ${KAFKA_BROKERS:localhost:9092}
   topic: ${KAFKA_TOPIC:chat-messages}

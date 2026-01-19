@@ -7,6 +7,7 @@ import (
 	"shared/pkg/logger"
 	"shared/pkg/messaging"
 	"ws-service/internal/domain"
+	"ws-service/internal/protocol"
 	"ws-service/internal/websocket"
 )
 
@@ -42,16 +43,12 @@ func (c *ChatMessageConsumer) Handle(ctx context.Context, message *messaging.Mes
 		logger.String("sender_id", event.SenderUserID.String()),
 	)
 
-	// Convert to WebSocket payload
 	payload := event.ToPayload()
 
-	// Broadcast to conversation participants, excluding the sender
-	// (sender already has the message from their own send action)
 	if err := c.manager.BroadcastToConversation(
 		event.ConversationID,
-		"message.new",
+		string(protocol.MsgTypeMessageNew),
 		payload,
-		event.SenderUserID, // exclude sender
 	); err != nil {
 		c.logger.Error("failed to broadcast message to conversation",
 			logger.String("message_id", event.ID.String()),
