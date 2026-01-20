@@ -1,11 +1,45 @@
 # Echo Backend - Base Docker Compose Configuration
 # =============================================================================
-# This file contains the base infrastructure services for local development
-# For production deployment, use docker-compose.prod.yml
-# For full development environment, use docker-compose.dev.yml
+# Base infrastructure services for local development
+# For production: docker-compose.prod.yml | For dev: docker-compose.dev.yml
+# =============================================================================
+name: echo-backend
+
+# =============================================================================
+# EXTENSION FIELDS (Shared Configuration)
 # =============================================================================
 
-name: echo-backend
+# Logging Configurations
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Healthcheck Templates
+x-healthcheck-fast: &healthcheck-fast
+  interval: 10s
+  timeout: 3s
+  retries: 5
+  start_period: 5s
+
+x-healthcheck-db: &healthcheck-db
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 10s
+
+x-healthcheck-slow: &healthcheck-slow
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
+# Base Service Template
+x-service-base: &service-base
+  restart: unless-stopped
+  networks: [ echo-network ]
+  logging: *logging
 
 # =============================================================================
 # NETWORKS
@@ -21,73 +55,29 @@ networks:
 # VOLUMES
 # =============================================================================
 volumes:
-  # Core Infrastructure
   postgres_data:
-    driver: local
-    labels:
-      com.echo.description: "PostgreSQL main database storage"
-
   redis_data:
-    driver: local
-    labels:
-      com.echo.description: "Redis cache storage"
-
-  # Message Broker
   zookeeper_data:
-    driver: local
-    labels:
-      com.echo.description: "Zookeeper data storage"
-
   zookeeper_logs:
-    driver: local
-    labels:
-      com.echo.description: "Zookeeper log storage"
-
   kafka_data:
-    driver: local
-    labels:
-      com.echo.description: "Kafka message storage"
-
-  # Analytics & Search
   timescaledb_data:
-    driver: local
-    labels:
-      com.echo.description: "TimescaleDB analytics storage"
-
   meilisearch_data:
-    driver: local
-    labels:
-      com.echo.description: "Meilisearch full-text search index"
-
-  # Monitoring
   prometheus_data:
-    driver: local
-    labels:
-      com.echo.description: "Prometheus metrics storage"
-
   grafana_data:
-    driver: local
-    labels:
-      com.echo.description: "Grafana dashboard configuration"
 
-# =============================================================================
-# SERVICES
-# =============================================================================
+    # =============================================================================
+    # SERVICES
+    # =============================================================================
 services:
 
-  # ===========================================================================
-  # CORE INFRASTRUCTURE
-  # ===========================================================================
-
   # ---------------------------------------------------------------------------
-  # PostgreSQL - Primary Database
+  # Core Infrastructure
   # ---------------------------------------------------------------------------
   postgres:
+    <<: *service-base
     image: postgres:15-alpine
     container_name: echo-postgres
-    restart: unless-stopped
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    ports: [ "${POSTGRES_PORT:-5432}:5432" ]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-echo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echo_password}
@@ -99,69 +89,45 @@ services:
       - ./database/init:/docker-entrypoint-initdb.d:ro
     networks:
       echo-network:
-        aliases:
-          - postgres.echo.local
+        aliases: [ postgres.echo.local ]
     healthcheck:
+      <<: *healthcheck-db
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echo} -d ${POSTGRES_DB:-echo_db}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "database"
-      com.echo.tier: "infrastructure"
+    labels: { com.echo.service: database, com.echo.tier: infrastructure }
 
-  # ---------------------------------------------------------------------------
-  # Redis - Cache & Session Store
-  # ---------------------------------------------------------------------------
   redis:
+    <<: *service-base
     image: redis:7-alpine
     container_name: echo-redis
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: >
-      redis-server  --appendonly yes  --requirepass ${REDIS_PASSWORD:-redis_password} --maxmemory ${REDIS_MAX_MEMORY:-256mb} --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000
+    ports: [ "${REDIS_PORT:-6379}:6379" ]
+    command: |
+      redis-server
+        --appendonly yes
+        --requirepass ${REDIS_PASSWORD:-redis_password}
+        --maxmemory ${REDIS_MAX_MEMORY:-256mb}
+        --maxmemory-policy allkeys-lru
+        --save 900 1
+        --save 300 10
+        --save 60 10000
     volumes:
       - redis_data:/data
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       echo-network:
-        aliases:
-          - redis.echo.local
+        aliases: [ redis.echo.local ]
     healthcheck:
+      <<: *healthcheck-fast
       test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "cache"
-      com.echo.tier: "infrastructure"
-
-  # ===========================================================================
-  # MESSAGE BROKER
-  # ===========================================================================
+    labels: { com.echo.service: cache, com.echo.tier: infrastructure }
 
   # ---------------------------------------------------------------------------
-  # Zookeeper - Kafka Coordination
+  # Message Broker
   # ---------------------------------------------------------------------------
   zookeeper:
+    <<: *service-base
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: echo-zookeeper
-    restart: unless-stopped
-    ports:
-      - "2181:2181"
+    ports: [ "2181:2181" ]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -174,51 +140,32 @@ services:
       - zookeeper_logs:/var/lib/zookeeper/log
     networks:
       echo-network:
-        aliases:
-          - zookeeper.echo.local
+        aliases: [ zookeeper.echo.local ]
     healthcheck:
-      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      <<: *healthcheck-db
       start_period: 15s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "zookeeper"
-      com.echo.tier: "infrastructure"
+      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
+    labels: { com.echo.service: zookeeper, com.echo.tier: infrastructure }
 
-  # ---------------------------------------------------------------------------
-  # Kafka - Message Broker
-  # ---------------------------------------------------------------------------
   kafka:
+    <<: *service-base
     image: confluentinc/cp-kafka:7.5.0
     container_name: echo-kafka
-    restart: unless-stopped
     depends_on:
-      zookeeper:
-        condition: service_healthy
-    ports:
-      - "9092:9092"
-      - "9093:9093"
+      zookeeper: { condition: service_healthy }
+    ports: [ "9092:9092", "9093:9093" ]
     environment:
       # Basic Configuration
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-
-      # Listeners - Simplified for reliability
+      # Listeners
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
-      # Zookeeper Connection - Increased timeouts
+      # Zookeeper Connection
       KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: 30000
       KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 30000
-
       # Topic Configuration
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -227,7 +174,6 @@ services:
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
       KAFKA_MIN_INSYNC_REPLICAS: 1
       KAFKA_NUM_PARTITIONS: 3
-
       # Performance & Storage
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
@@ -236,50 +182,30 @@ services:
       KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
       KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
       KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
-
-      # Cleanup
+      # Cleanup & Misc
       KAFKA_LOG_CLEANUP_POLICY: delete
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
-
-      # Group Coordinator Settings
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-
-      # Compression
       KAFKA_COMPRESSION_TYPE: producer
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:
       echo-network:
-        aliases:
-          - kafka.echo.local
+        aliases: [ kafka.echo.local ]
     healthcheck:
+      <<: *healthcheck-slow
       test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "kafka"
-      com.echo.tier: "infrastructure"
-  # ===========================================================================
-  # ANALYTICS & SEARCH (OPTIONAL SERVICES)
-  # ===========================================================================
+    labels: { com.echo.service: kafka, com.echo.tier: infrastructure }
 
   # ---------------------------------------------------------------------------
-  # TimescaleDB - Time-Series Analytics
+  # Analytics & Search (Optional)
   # ---------------------------------------------------------------------------
   timescaledb:
+    <<: *service-base
     image: timescale/timescaledb:latest-pg15
     container_name: echo-timescaledb
-    restart: unless-stopped
     profiles: [ "analytics" ]
-    ports:
-      - "${TIMESCALE_PORT:-5433}:5432"
+    ports: [ "${TIMESCALE_PORT:-5433}:5432" ]
     environment:
       POSTGRES_USER: ${TIMESCALE_USER:-echo_analytics}
       POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-analytics_password}
@@ -290,33 +216,18 @@ services:
       - timescaledb_data:/var/lib/postgresql/data
     networks:
       echo-network:
-        aliases:
-          - timescaledb.echo.local
+        aliases: [ timescaledb.echo.local ]
     healthcheck:
+      <<: *healthcheck-db
       test: [ "CMD-SHELL", "pg_isready -U ${TIMESCALE_USER:-echo_analytics}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "timescaledb"
-      com.echo.tier: "analytics"
+    labels: { com.echo.service: timescaledb, com.echo.tier: analytics }
 
-  # ---------------------------------------------------------------------------
-  # Meilisearch - Full-Text Search
-  # ---------------------------------------------------------------------------
   meilisearch:
+    <<: *service-base
     image: getmeili/meilisearch:v1.5
     container_name: echo-meilisearch
-    restart: unless-stopped
     profiles: [ "search" ]
-    ports:
-      - "${MEILI_PORT:-7700}:7700"
+    ports: [ "${MEILI_PORT:-7700}:7700" ]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-echo_search_key}
       MEILI_ENV: ${MEILI_ENV:-development}
@@ -328,79 +239,47 @@ services:
       - meilisearch_data:/meili_data
     networks:
       echo-network:
-        aliases:
-          - meilisearch.echo.local
+        aliases: [ meilisearch.echo.local ]
     healthcheck:
+      <<: *healthcheck-fast
       test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:7700/health" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "meilisearch"
-      com.echo.tier: "search"
-
-  # ===========================================================================
-  # MONITORING & OBSERVABILITY
-  # ===========================================================================
+    labels: { com.echo.service: meilisearch, com.echo.tier: search }
 
   # ---------------------------------------------------------------------------
-  # Prometheus - Metrics Collection
+  # Monitoring & Observability (Optional)
   # ---------------------------------------------------------------------------
   prometheus:
+    <<: *service-base
     image: prom/prometheus:latest
     container_name: echo-prometheus
-    restart: unless-stopped
     profiles: [ "monitoring" ]
-    ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+    ports: [ "${PROMETHEUS_PORT:-9090}:9090" ]
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--storage.tsdb.retention.size=10GB'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=10GB
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     networks:
       echo-network:
-        aliases:
-          - prometheus.echo.local
+        aliases: [ prometheus.echo.local ]
     healthcheck:
+      <<: *healthcheck-fast
       test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:9090/-/healthy" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "prometheus"
-      com.echo.tier: "monitoring"
+    labels: { com.echo.service: prometheus, com.echo.tier: monitoring }
 
-  # ---------------------------------------------------------------------------
-  # Grafana - Metrics Visualization
-  # ---------------------------------------------------------------------------
   grafana:
+    <<: *service-base
     image: grafana/grafana:latest
     container_name: echo-grafana
-    restart: unless-stopped
     profiles: [ "monitoring" ]
-    depends_on:
-      - prometheus
-    ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on: [ prometheus ]
+    ports: [ "${GRAFANA_PORT:-3000}:3000" ]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
@@ -414,30 +293,16 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       echo-network:
-        aliases:
-          - grafana.echo.local
+        aliases: [ grafana.echo.local ]
     healthcheck:
+      <<: *healthcheck-db
       test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:3000/api/health" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "grafana"
-      com.echo.tier: "monitoring"
+    labels: { com.echo.service: grafana, com.echo.tier: monitoring }
 
-  # ---------------------------------------------------------------------------
-  # Jaeger - Distributed Tracing
-  # ---------------------------------------------------------------------------
   jaeger:
+    <<: *service-base
     image: jaegertracing/all-in-one:latest
     container_name: echo-jaeger
-    restart: unless-stopped
     profiles: [ "monitoring" ]
     ports:
       - "5775:5775/udp"
@@ -449,24 +314,13 @@ services:
       - "14250:14250"
       - "9411:9411"
     environment:
-      COLLECTOR_OTLP_ENABLED: true
+      COLLECTOR_OTLP_ENABLED: "true"
       SPAN_STORAGE_TYPE: memory
       QUERY_MAX_CLOCK_SKEW_ADJUSTMENT: 30s
     networks:
       echo-network:
-        aliases:
-          - jaeger.echo.local
+        aliases: [ jaeger.echo.local ]
     healthcheck:
+      <<: *healthcheck-fast
       test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:14269/" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      com.echo.service: "jaeger"
-      com.echo.tier: "monitoring"
+    labels: { com.echo.service: jaeger, com.echo.tier: monitoring }
