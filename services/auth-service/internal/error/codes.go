@@ -13,6 +13,7 @@ const (
 	CodeEmailAlreadyExists      = "AUTH_EMAIL_EXISTS"
 	CodePasswordHashingFailed   = "AUTH_PASSWORD_HASH_FAILED"
 	CodeTokenGenerationFailed   = "AUTH_TOKEN_GEN_FAILED"
+	CodeInvalidToken            = "AUTH_INVALID_TOKEN"
 	CodeTokenValidationFailed   = "AUTH_TOKEN_VALIDATE_FAILED"
 	CodeSessionNotFound         = "AUTH_SESSION_NOT_FOUND"
 	CodeSessionExpired          = "AUTH_SESSION_EXPIRED"

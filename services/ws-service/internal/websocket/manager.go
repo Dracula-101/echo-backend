@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"shared/pkg/database"
 	"shared/pkg/logger"
 	"shared/server/websocket"
 	"shared/server/websocket/connection"
@@ -23,6 +24,7 @@ import (
 
 type Manager struct {
 	engine *websocket.Engine
+	db     *database.Database
 	hub    *hub.Hub
 	log    logger.Logger
 	config *Config
@@ -56,7 +58,7 @@ const (
 	StateStopped
 )
 
-func NewManager(log logger.Logger, opts ...Option) *Manager {
+func NewManager(log logger.Logger, db *database.Database, opts ...Option) *Manager {
 	cfg := DefaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
@@ -106,6 +108,7 @@ func NewManager(log logger.Logger, opts ...Option) *Manager {
 
 	mgr := &Manager{
 		engine:        engine,
+		db:            db,
 		hub:           hubInstance,
 		log:           log,
 		config:        cfg,

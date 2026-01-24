@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"user-service/internal/model"
+	"user-service/internal/domain"
 	repository "user-service/internal/repo"
-	repoModel "user-service/internal/repo/model"
-	svcmodel "user-service/internal/service/model"
 
 	"shared/pkg/cache"
 	"shared/pkg/logger"
@@ -42,7 +40,7 @@ func (s *UserService) GenerateUsername(ctx context.Context, displayName string) 
 	return *username, nil
 }
 
-func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
+func (s *UserService) GetProfile(ctx context.Context, userID string) (*domain.User, error) {
 	s.log.Info("Getting user profile",
 		logger.String("user_id", userID),
 	)
@@ -50,7 +48,7 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 		cacheKey := fmt.Sprintf("user:profile:%s", userID)
 		cachedData, err := s.cache.Get(ctx, cacheKey)
 		if err == nil && cachedData != nil {
-			var cachedProfile model.User
+			var cachedProfile domain.User
 			if err := json.Unmarshal(cachedData, &cachedProfile); err == nil {
 				s.log.Debug("Profile found in cache",
 					logger.String("user_id", userID),
@@ -59,11 +57,8 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 			}
 		}
 	}
-	var repoProfile *repoModel.Profile
-	var err error
 
-	repoProfile, err = s.repo.GetProfileByUserID(ctx, userID)
-
+	profile, err := s.repo.GetProfileByUserID(ctx, userID)
 	if err != nil {
 		s.log.Error("Failed to get profile",
 			logger.String("user_id", userID),
@@ -72,14 +67,25 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 		return nil, err
 	}
 
-	if repoProfile == nil {
-		return nil, nil
-	}
-	profile := fromRepoProfile(repoProfile)
 	if profile == nil {
 		return nil, nil
 	}
-	user := s.profileToUser(profile)
+
+	user := &domain.User{
+		ID:           profile.UserID,
+		Username:     profile.Username,
+		DisplayName:  profile.DisplayName,
+		FirstName:    profile.FirstName,
+		LastName:     profile.LastName,
+		Bio:          profile.Bio,
+		AvatarURL:    profile.AvatarURL,
+		LanguageCode: profile.LanguageCode,
+		Timezone:     profile.Timezone,
+		CountryCode:  profile.CountryCode,
+		IsVerified:   profile.IsVerified,
+		CreatedAt:    *profile.CreatedAt,
+		UpdatedAt:    *profile.UpdatedAt,
+	}
 
 	if s.cache != nil {
 		cacheKey := fmt.Sprintf("user:profile:%s", userID)
@@ -91,143 +97,110 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 	return user, nil
 }
 
-func (s *UserService) CreateProfile(ctx context.Context, profile *svcmodel.Profile) (*model.User, error) {
+func (s *UserService) CreateProfile(ctx context.Context, input *domain.CreateProfileInput) (*domain.User, error) {
 	s.log.Info("Creating user profile",
-		logger.String("user_id", profile.UserID),
+		logger.String("user_id", input.UserID),
 	)
 
-	var createdProfile *svcmodel.Profile
-
-	repoInput := toRepoProfile(profile)
-	existingProfile, err := s.repo.GetProfileByUserID(ctx, profile.UserID)
+	existingProfile, err := s.repo.GetProfileByUserID(ctx, input.UserID)
 	if err != nil {
 		s.log.Error("Failed to check existing profile",
-			logger.String("user_id", profile.UserID),
+			logger.String("user_id", input.UserID),
 			logger.Error(err),
 		)
 		return nil, err
 	}
+
 	if existingProfile != nil {
-		s.log.Info("Profile already exists, Updating existing profile",
-			logger.String("user_id", profile.UserID),
+		s.log.Info("Profile already exists, updating existing profile",
+			logger.String("user_id", input.UserID),
 		)
 		result, err := s.repo.UpdateProfile(ctx, repository.UpdateProfileParams{
-			UserID:       profile.UserID,
-			Username:     &repoInput.Username,
-			DisplayName:  repoInput.DisplayName,
-			FirstName:    repoInput.FirstName,
-			LastName:     repoInput.LastName,
-			Bio:          repoInput.Bio,
-			AvatarURL:    repoInput.AvatarURL,
-			LanguageCode: &repoInput.LanguageCode,
-			Timezone:     repoInput.Timezone,
-			CountryCode:  repoInput.CountryCode,
+			UserID:       input.UserID,
+			Username:     &input.Username,
+			DisplayName:  &input.DisplayName,
+			FirstName:    input.FirstName,
+			LastName:     input.LastName,
+			Bio:          input.Bio,
+			AvatarURL:    input.AvatarURL,
+			LanguageCode: input.LanguageCode,
+			Timezone:     input.Timezone,
+			CountryCode:  input.CountryCode,
 		})
 		if err != nil {
 			s.log.Error("Failed to update existing profile",
-				logger.String("user_id", profile.UserID),
+				logger.String("user_id", input.UserID),
 				logger.Error(err),
 			)
 			return nil, err
 		}
-		createdProfile = fromRepoProfile(result)
-		return s.profileToUser(createdProfile), nil
-	}
-
-	result, err := s.repo.CreateProfile(ctx, repoInput)
-	if err != nil {
-		s.log.Error("Failed to create profile",
-			logger.String("user_id", profile.UserID),
-			logger.Error(err),
-		)
-		return nil, err
-	}
-	createdProfile = fromRepoProfile(result)
-
-	if createdProfile == nil {
-		createdProfile = profile
-	}
-
-	user := s.profileToUser(createdProfile)
-
-	return user, nil
-}
-
-func (s *UserService) profileToUser(profile *svcmodel.Profile) *model.User {
-	return &model.User{
-		ID:           profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  &profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: *profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
-	}
-}
-
-func toRepoProfile(profile *svcmodel.Profile) repoModel.Profile {
-	if profile == nil {
-		return repoModel.Profile{}
+		return &domain.User{
+			ID:           result.UserID,
+			Username:     result.Username,
+			DisplayName:  result.DisplayName,
+			FirstName:    result.FirstName,
+			LastName:     result.LastName,
+			Bio:          result.Bio,
+			AvatarURL:    result.AvatarURL,
+			LanguageCode: result.LanguageCode,
+			Timezone:     result.Timezone,
+			CountryCode:  result.CountryCode,
+			IsVerified:   result.IsVerified,
+			CreatedAt:    *result.CreatedAt,
+			UpdatedAt:    *result.UpdatedAt,
+		}, nil
 	}
 
 	now := time.Now()
-	return repoModel.Profile{
-		UserID:            profile.UserID,
-		Username:          profile.Username,
-		DisplayName:       &profile.DisplayName,
-		FirstName:         profile.FirstName,
-		LastName:          profile.LastName,
-		Bio:               profile.Bio,
-		AvatarURL:         profile.AvatarURL,
-		LanguageCode:      valueOrDefault(profile.LanguageCode),
-		Timezone:          profile.Timezone,
-		CountryCode:       profile.CountryCode,
+	languageCode := "en"
+	if input.LanguageCode != nil {
+		languageCode = *input.LanguageCode
+	}
+
+	newProfile := domain.Profile{
+		UserID:            input.UserID,
+		Username:          input.Username,
+		DisplayName:       &input.DisplayName,
+		FirstName:         input.FirstName,
+		LastName:          input.LastName,
+		Bio:               input.Bio,
+		AvatarURL:         input.AvatarURL,
+		LanguageCode:      languageCode,
+		Timezone:          input.Timezone,
+		CountryCode:       input.CountryCode,
 		PhoneVisible:      false,
 		EmailVisible:      false,
 		OnlineStatus:      "offline",
 		LastSeenAt:        &now,
 		ProfileVisibility: "private",
 		SearchVisibility:  false,
-		IsVerified:        profile.IsVerified,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
-}
-
-func fromRepoProfile(profile *repoModel.Profile) *svcmodel.Profile {
-	if profile == nil {
-		return nil
+		IsVerified:        input.IsVerified,
+		CreatedAt:         &now,
+		UpdatedAt:         &now,
 	}
 
-	return &svcmodel.Profile{
-		UserID:       profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  derefString(profile.DisplayName),
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: &profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
+	result, err := s.repo.CreateProfile(ctx, newProfile)
+	if err != nil {
+		s.log.Error("Failed to create profile",
+			logger.String("user_id", input.UserID),
+			logger.Error(err),
+		)
+		return nil, err
 	}
-}
 
-func valueOrDefault(val *string) string {
-	if val != nil {
-		return *val
-	}
-	return ""
-}
-
-func derefString(val *string) string {
-	if val == nil {
-		return ""
-	}
-	return *val
+	return &domain.User{
+		ID:           result.UserID,
+		Username:     result.Username,
+		DisplayName:  result.DisplayName,
+		FirstName:    result.FirstName,
+		LastName:     result.LastName,
+		Bio:          result.Bio,
+		AvatarURL:    result.AvatarURL,
+		LanguageCode: result.LanguageCode,
+		Timezone:     result.Timezone,
+		CountryCode:  result.CountryCode,
+		IsVerified:   result.IsVerified,
+		CreatedAt:    *result.CreatedAt,
+		UpdatedAt:    *result.UpdatedAt,
+	}, nil
 }

@@ -26,6 +26,7 @@ type AuthRepositoryInterface interface {
 	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)
+	GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError)
 	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError
 	RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError
 }
@@ -212,6 +213,58 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	r.log.Debug("User fetched successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
+		logger.String("user_id", user.ID),
+		logger.Any("account_status", user.AccountStatus),
+	)
+
+	return &domain.User{
+		ID:                     user.ID,
+		Email:                  user.Email,
+		PhoneNumber:            utils.DerefString(user.PhoneNumber),
+		PhoneCountryCode:       utils.DerefString(user.PhoneCountryCode),
+		PasswordHash:           user.PasswordHash,
+		PasswordSalt:           user.PasswordSalt,
+		PasswordAlgorithm:      user.PasswordAlgorithm,
+		EmailVerified:          user.EmailVerified,
+		PhoneVerified:          user.PhoneVerified,
+		TwoFactorEnabled:       user.TwoFactorEnabled,
+		AccountStatus:          user.AccountStatus,
+		AccountLockedUntil:     user.AccountLockedUntil,
+		FailedLoginAttempts:    user.FailedLoginAttempts,
+		LastFailedLoginAt:      user.LastFailedLoginAt,
+		RequiresPasswordChange: user.RequiresPasswordChange,
+		PasswordLastChanged:    user.PasswordLastChangedAt,
+		LastSuccessfulLoginAt:  user.LastSuccessfulLoginAt,
+		CreatedAt:              user.CreatedAt,
+		DeletedAt:              user.DeletedAt,
+		UpdatedAt:              user.UpdatedAt,
+	}, nil
+}
+
+func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError) {
+	r.log.Debug("Fetching user by ID",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT * FROM auth.users WHERE id = $1 LIMIT 1`
+	row := r.db.QueryRow(ctx, query, userID)
+	var user models.AuthUser
+	err := row.ScanOne(&user)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("User not found by ID",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get user by ID").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Debug("User fetched successfully",
+		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", user.ID),
 		logger.Any("account_status", user.AccountStatus),
 	)

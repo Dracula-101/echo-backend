@@ -2,6 +2,7 @@ package dto
 
 import (
 	"shared/server/request"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -94,17 +95,17 @@ func (cpr *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) (
 }
 
 type CreateProfileResponse struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	DisplayName  string `json:"display_name"`
-	FirstName    string `json:"first_name"`
-	LastName     string `json:"last_name"`
-	Bio          string `json:"bio"`
-	AvatarURL    string `json:"avatar_url"`
-	LanguageCode string `json:"language_code"`
-	Timezone     string `json:"timezone"`
-	CountryCode  string `json:"country_code"`
-	IsVerified   bool   `json:"is_verified"`
-	CreatedAt    int64  `json:"created_at"`
-	UpdatedAt    int64  `json:"updated_at"`
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	DisplayName  string    `json:"display_name"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	Bio          string    `json:"bio"`
+	AvatarURL    string    `json:"avatar_url"`
+	LanguageCode string    `json:"language_code"`
+	Timezone     string    `json:"timezone"`
+	CountryCode  string    `json:"country_code"`
+	IsVerified   bool      `json:"is_verified"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }

@@ -463,7 +463,7 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
-	manager := wsManager.NewManager(log)
+	manager := wsManager.NewManager(log, &dbClient)
 	log.Info("WebSocket manager initialized")
 
 	if err := manager.Start(); err != nil {

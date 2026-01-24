@@ -11,6 +11,7 @@ type AuthHandlerInterface interface {
 	// Authentication endpoints
 	Register(handler *req.RequestHandler)
 	Login(handler *req.RequestHandler)
+	RefreshToken(handler *req.RequestHandler)
 }
 
 // Compile-time interface compliance check

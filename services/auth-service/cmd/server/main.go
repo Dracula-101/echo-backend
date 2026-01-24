@@ -138,6 +138,7 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/register", req.Adapt(h.Register))
 		r.Post("/login", req.Adapt(h.Login))
+		r.Post("/refresh-token", req.Adapt(h.RefreshToken))
 	})
 	log.Debug("Auth routes registered successfully")
 	return builder

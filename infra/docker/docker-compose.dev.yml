@@ -311,6 +311,7 @@ services:
       SERVER_PORT: 8082
       CONFIG_PATH: /app/services/user-service/configs/config.yaml
       REDIS_DB: 2
+      LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
     volumes:
       - ${PWD}/services/user-service:/app/services/user-service
       - ${PWD}/shared:/app/shared:ro

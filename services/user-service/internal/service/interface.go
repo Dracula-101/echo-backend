@@ -2,8 +2,7 @@ package service
 
 import (
 	"context"
-	"user-service/internal/model"
-	svcmodel "user-service/internal/service/model"
+	"user-service/internal/domain"
 )
 
 // ============================================================================
@@ -13,8 +12,8 @@ import (
 // UserServiceInterface defines the contract for user service operations
 type UserServiceInterface interface {
 	// Profile operations
-	GetProfile(ctx context.Context, userID string) (*model.User, error)
-	CreateProfile(ctx context.Context, profile *svcmodel.Profile) (*model.User, error)
+	GetProfile(ctx context.Context, userID string) (*domain.User, error)
+	CreateProfile(ctx context.Context, profile *domain.CreateProfileInput) (*domain.User, error)
 	GenerateUsername(ctx context.Context, displayName string) (string, error)
 }
 

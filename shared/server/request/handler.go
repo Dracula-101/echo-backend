@@ -10,6 +10,7 @@ import (
 	"shared/server/env"
 	"shared/server/headers"
 	"shared/server/response"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -133,6 +134,14 @@ func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 				InnerError:  err.Error(),
 				Message:     "Failed to parse and validate request",
 				Description: "Ensure the request body is valid JSON and meets all validation criteria",
+				Timestamp:   time.Now().UTC(),
+				Fields: []response.FieldError{
+					{
+						Code:    "INVALID_JSON",
+						Field:   "body",
+						Message: err.Error(),
+					},
+				},
 			}).
 			BadRequest(h.writer)
 		return false
@@ -148,6 +157,7 @@ func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 					Message:     "Request validation errors",
 					Description: "Check the validation messages for details",
 					Fields:      validationErr,
+					Timestamp:   time.Now().UTC(),
 				}).
 				BadRequest(h.writer)
 			return false

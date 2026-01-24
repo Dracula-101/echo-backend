@@ -6,7 +6,7 @@ import (
 	req "shared/server/request"
 	"shared/server/response"
 	"user-service/api/v1/dto"
-	svcmodel "user-service/internal/service/model"
+	"user-service/internal/domain"
 )
 
 // CreateProfile flow at a glance:
@@ -54,7 +54,7 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		logger.String("country", location.Country),
 		logger.String("ip", handler.GetClientIP()),
 	)
-	profile, err := h.service.CreateProfile(ctx, &svcmodel.Profile{
+	profile, err := h.service.CreateProfile(ctx, &domain.CreateProfileInput{
 		UserID:       userId,
 		Username:     userName,
 		DisplayName:  createProfileRequest.DisplayName,
@@ -85,5 +85,7 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		Timezone:     location.Timezone,
 		CountryCode:  location.Country,
 		IsVerified:   profile.IsVerified,
+		CreatedAt:    profile.CreatedAt,
+		UpdatedAt:    profile.UpdatedAt,
 	})
 }
