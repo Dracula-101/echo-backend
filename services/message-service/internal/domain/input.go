@@ -13,7 +13,6 @@ type SendMessageInput struct {
 	Content         string
 	MessageType     MessageType
 	ParentMessageID *uuid.UUID
-	Mentions        []Mention
 	Metadata        *MessageMetadata
 }
 
@@ -57,6 +56,7 @@ type CreateConversationInput struct {
 	ParticipantIDs   []uuid.UUID
 	IsEncrypted      bool
 	IsPublic         bool
+	MemberCount      int
 }
 
 // GetConversationsInput contains parameters for fetching conversations

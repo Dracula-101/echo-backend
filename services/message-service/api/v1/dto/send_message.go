@@ -15,7 +15,6 @@ type SendMessageRequest struct {
 	Content         string                  `json:"content" validate:"required,min=1,max=10000"`
 	MessageType     domain.MessageType      `json:"message_type" validate:"required,oneof=text image video audio document location contact poll"`
 	ParentMessageID *string                 `json:"parent_message_id,omitempty" validate:"omitempty,uuid4"`
-	Mentions        []domain.Mention        `json:"mentions,omitempty"`
 	Metadata        *domain.MessageMetadata `json:"metadata,omitempty"`
 }
 
@@ -95,7 +94,6 @@ type SendMessageResponse struct {
 	Status          domain.MessageStatus    `json:"status"`
 	IsEdited        bool                    `json:"is_edited"`
 	IsDeleted       bool                    `json:"is_deleted"`
-	Mentions        []domain.Mention        `json:"mentions"`
 	Metadata        *domain.MessageMetadata `json:"metadata"`
 	CreatedAt       time.Time               `json:"created_at"`
 	UpdatedAt       time.Time               `json:"updated_at"`
@@ -114,7 +112,6 @@ func NewSendMessageResponse(message *domain.Message) *SendMessageResponse {
 		Status:          message.Status,
 		IsEdited:        message.IsEdited,
 		IsDeleted:       message.IsDeleted,
-		Mentions:        message.Mentions,
 		Metadata:        message.Metadata,
 		CreatedAt:       message.CreatedAt,
 		UpdatedAt:       message.UpdatedAt,

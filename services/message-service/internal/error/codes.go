@@ -7,10 +7,12 @@ const (
 	CodeRateLimitExceeded   MessageErrorCode = "RATE_LIMIT_EXCEEDED"
 
 	// Conversation Errors
+	CodeConversationNotFound         MessageErrorCode = "CONVERSATION_NOT_FOUND"
 	CodeConversationValidationFailed MessageErrorCode = "CONVERSATION_VALIDATION_FAILED"
 	CodeConversationInactive         MessageErrorCode = "CONVERSATION_INACTIVE"
 	CodeConversationCreateFailed     MessageErrorCode = "CONVERSATION_CREATE_FAILED"
 	CodeConversationCreationFailed   MessageErrorCode = "CONVERSATION_CREATION_FAILED"
+	CodeConversationFetchFailed      MessageErrorCode = "CONVERSATION_FETCH_FAILED"
 
 	// Participant Errors
 	CodeParticipantNotInConversation        MessageErrorCode = "PARTICIPANT_NOT_IN_CONVERSATION"
@@ -22,4 +24,5 @@ const (
 	CodeEmptyMessageContent       MessageErrorCode = "EMPTY_MESSAGE_CONTENT"
 	CodeMissingMessageMetadata    MessageErrorCode = "MISSING_MESSAGE_METADATA"
 	CodeMessageEventPublishFailed MessageErrorCode = "MESSAGE_EVENT_PUBLISH_FAILED"
+	CodeMessageRetrievalFailed    MessageErrorCode = "MESSAGE_RETRIEVAL_FAILED"
 )

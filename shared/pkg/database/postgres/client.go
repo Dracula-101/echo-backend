@@ -377,7 +377,7 @@ func (c *client) FindOneAndUpdate(ctx context.Context, dest interface{}, query s
 	return nil
 }
 
-func (c *client) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
+func (c *client) FindMany(ctx context.Context, dest any, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("FindMany", logger.String("query", query))
 
@@ -925,6 +925,15 @@ func (r *rowsWrapper) Next() bool {
 func (r *rowsWrapper) Scan(dest ...interface{}) error {
 	r.log.Debug("Scanning row", logger.Int("num_fields", len(dest)))
 	return r.rows.Scan(dest...)
+}
+
+func (r *rowsWrapper) ScanAll(dest interface{}) error {
+	r.log.Debug("Scanning all rows into slice", logger.String("dest_type", fmt.Sprintf("%T", dest)))
+	if err := scanStructs(r.rows, dest, r.log); err != nil {
+		r.log.Error("Failed to scan rows", logger.Error(err))
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan rows")
+	}
+	return nil
 }
 
 func (r *rowsWrapper) ScanOne(model database.Model) *database.DBError {

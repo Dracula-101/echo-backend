@@ -1,7 +1,11 @@
 package domain
 
 import (
+	"encoding/json"
+	"shared/pkg/utils"
 	"time"
+
+	db "shared/pkg/database/postgres/models"
 
 	"github.com/google/uuid"
 )
@@ -17,7 +21,6 @@ type Message struct {
 	Status          MessageStatus
 	IsEdited        bool
 	IsDeleted       bool
-	Mentions        []Mention
 	Metadata        *MessageMetadata
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -28,6 +31,54 @@ type Message struct {
 	SenderName   string
 	SenderAvatar string
 	ReadCount    int
+}
+
+func NewMessage(model db.Message) Message {
+	msg := Message{
+		ID:              *utils.ParsePtrUUID(model.ID),
+		ConversationID:  uuid.MustParse(model.ConversationID),
+		SenderUserID:    uuid.MustParse(model.SenderUserID),
+		ParentMessageID: utils.SafeParsePtrUUID(model.ParentMessageID),
+		Content:         utils.DerefString(model.Content),
+		MessageType:     MessageType(model.MessageType),
+		Status:          MessageStatus(model.Status),
+		IsEdited:        model.IsEdited,
+		IsDeleted:       model.IsDeleted,
+		CreatedAt:       model.CreatedAt,
+		UpdatedAt:       model.UpdatedAt,
+		DeletedAt:       model.DeletedAt,
+		EditedAt:        model.EditedAt,
+		ReadCount:       int(model.ReadCount),
+	}
+
+	if model.Metadata != nil {
+		metadata := make(map[string]interface{})
+		_ = json.Unmarshal(model.Metadata, &metadata)
+		msg.Metadata = &MessageMetadata{
+			MediaURL:      utils.GetValue(metadata, "media_url", "").(string),
+			ThumbnailURL:  utils.GetValue(metadata, "thumbnail_url", "").(string),
+			MediaSize:     utils.GetValue(metadata, "media_size", 0).(int64),
+			MediaDuration: utils.GetValue(metadata, "media_duration", 0).(int),
+			MimeType:      utils.GetValue(metadata, "mime_type", "").(string),
+			FileName:      utils.GetValue(metadata, "file_name", "").(string),
+			Width:         utils.GetValue(metadata, "width", 0).(int),
+			Height:        utils.GetValue(metadata, "height", 0).(int),
+			Latitude:      utils.GetValue(metadata, "latitude", 0.0).(float64),
+			Longitude:     utils.GetValue(metadata, "longitude", 0.0).(float64),
+			Address:       utils.GetValue(metadata, "address", "").(string),
+		}
+		if lp, ok := metadata["link_preview"].(map[string]interface{}); ok {
+			msg.Metadata.LinkPreview = &LinkPreview{
+				URL:         utils.GetValue(lp, "url", "").(string),
+				Title:       utils.GetValue(lp, "title", "").(string),
+				Description: utils.GetValue(lp, "description", "").(string),
+				Image:       utils.GetValue(lp, "image", "").(string),
+				SiteName:    utils.GetValue(lp, "site_name", "").(string),
+			}
+		}
+	}
+
+	return msg
 }
 
 // MessageType represents the type of message content

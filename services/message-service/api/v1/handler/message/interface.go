@@ -9,6 +9,8 @@ import (
 // HTTP handlers may be added in the future for REST API endpoints
 type MessageHandlerInterface interface {
 	SendMessage(handler *request.RequestHandler)
+	GetMessages(handler *request.RequestHandler)
+	GetMessageByID(handler *request.RequestHandler)
 }
 
 var _ MessageHandlerInterface = (*MessageHandler)(nil)

@@ -20,6 +20,7 @@ type MessageError struct {
 }
 
 var (
+	ConversationNotFoundError                = errors.New(CodeConversationNotFound.String(), "conversation not found")
 	ParticipantNotInConversationError        = errors.New(CodeParticipantNotInConversation.String(), "participant not in conversation")
 	ParticipantLeftConversationError         = errors.New(CodeParticipantLeftConversation.String(), "participant has left the conversation")
 	ConversationInactiveError                = errors.New(CodeConversationInactive.String(), "conversation is inactive")

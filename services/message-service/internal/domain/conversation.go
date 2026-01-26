@@ -3,6 +3,9 @@ package domain
 import (
 	"time"
 
+	db "shared/pkg/database/postgres/models"
+	"shared/pkg/utils"
+
 	"github.com/google/uuid"
 )
 
@@ -32,6 +35,38 @@ type Conversation struct {
 	LastMessage  *Message
 }
 
+func NewConversation(model db.Conversation, participants []db.ConversationParticipant, lastMessage *db.Message) *Conversation {
+	conv := &Conversation{
+		ID:               uuid.MustParse(model.ID),
+		ConversationType: ConversationType(model.ConversationType),
+		Title:            utils.DerefString(model.Title),
+		Description:      utils.DerefString(model.Description),
+		AvatarURL:        model.AvatarURL,
+		CreatorUserID:    uuid.MustParse(model.CreatorUserID),
+		IsEncrypted:      model.IsEncrypted,
+		IsPublic:         model.IsPublic,
+		IsArchived:       model.IsArchived,
+		MemberCount:      model.MemberCount,
+		MessageCount:     int(model.MessageCount),
+		LastMessageID:    utils.SafeParsePtrUUID(model.LastMessageID),
+		LastMessageAt:    model.LastMessageAt,
+		LastActivityAt:   utils.Ptr(model.LastActivityAt),
+		CreatedAt:        model.CreatedAt,
+		UpdatedAt:        model.UpdatedAt,
+		DeletedAt:        model.DeletedAt,
+	}
+
+	conv.Participants = make([]ConversationParticipant, len(participants))
+	for i, p := range participants {
+		conv.Participants[i] = *NewConversationParticipant(p, "", "")
+	}
+	if lastMessage != nil {
+		conv.LastMessage = utils.Ptr(NewMessage(*lastMessage))
+	}
+
+	return conv
+}
+
 // ConversationType represents the type of conversation
 type ConversationType string
 
@@ -41,56 +76,6 @@ const (
 	ConversationTypeChannel   ConversationType = "channel"
 	ConversationTypeBroadcast ConversationType = "broadcast"
 )
-
-// ConversationParticipant represents a user in a conversation
-type ConversationParticipant struct {
-	ID             uuid.UUID
-	ConversationID uuid.UUID
-	UserID         uuid.UUID
-	Role           ParticipantRole
-	JoinedAt       time.Time
-	LeftAt         *time.Time
-	LastReadAt     *time.Time
-	UnreadCount    int
-	IsMuted        bool
-	IsPinned       bool
-	IsArchived     bool
-
-	// Permissions
-	CanSendMessages   bool
-	CanAddMembers     bool
-	CanEditInfo       bool
-	CanDeleteMessages bool
-
-	// Enriched fields
-	UserName   string
-	UserAvatar string
-}
-
-// ParticipantRole defines the role of a participant
-type ParticipantRole string
-
-const (
-	ParticipantRoleOwner  ParticipantRole = "owner"
-	ParticipantRoleAdmin  ParticipantRole = "admin"
-	ParticipantRoleMember ParticipantRole = "member"
-	ParticipantRoleViewer ParticipantRole = "viewer"
-)
-
-// IsActive checks if participant is still in conversation
-func (p *ConversationParticipant) IsActive() bool {
-	return p.LeftAt == nil
-}
-
-// HasPermissionToSend checks if participant can send messages
-func (p *ConversationParticipant) HasPermissionToSend() bool {
-	return p.IsActive() && p.CanSendMessages
-}
-
-// HasPermissionToManage checks if participant can manage conversation
-func (p *ConversationParticipant) HasPermissionToManage() bool {
-	return p.IsActive() && (p.Role == ParticipantRoleOwner || p.Role == ParticipantRoleAdmin)
-}
 
 // Conversation business logic methods
 

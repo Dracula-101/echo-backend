@@ -185,11 +185,14 @@ func setupAPIRoutes(
 	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/", request.Adapt(messageHandler.SendMessage))
+		r.Get("/", request.Adapt(messageHandler.GetMessages))
+		r.Get("/{id}", request.Adapt(messageHandler.GetMessageByID))
 	})
 
 	// Conversation endpoints
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/conversations", request.Adapt(conversationHandler.CreateConversation))
+		r.Get("/conversations/{id}", request.Adapt(conversationHandler.GetConversationByID))
 	})
 	log.Debug("API routes registered successfully")
 	return builder

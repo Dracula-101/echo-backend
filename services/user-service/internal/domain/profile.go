@@ -27,14 +27,6 @@ type Profile struct {
 	DeactivatedAt     *time.Time `db:"deactivated_at"`
 }
 
-func (p *Profile) TableName() string {
-	return "users.profiles"
-}
-
-func (p *Profile) PrimaryKey() interface{} {
-	return p.ID
-}
-
 // CreateProfileInput represents the input for creating a profile
 type CreateProfileInput struct {
 	UserID       string

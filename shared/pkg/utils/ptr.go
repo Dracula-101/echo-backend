@@ -1,5 +1,7 @@
 package utils
 
+import "github.com/google/uuid"
+
 func DerefString(s *string) string {
 	if s == nil {
 		return ""
@@ -93,6 +95,44 @@ func SafePtrInt64(i *int64) *int64 {
 	}
 	val := *i
 	return &val
+}
+
+func DerefUUID(u *uuid.UUID) uuid.UUID {
+	if u == nil {
+		return uuid.Nil
+	}
+	return *u
+}
+
+func PtrUUID(u uuid.UUID) *uuid.UUID {
+	return &u
+}
+
+func SafePtrUUID(u *uuid.UUID) *uuid.UUID {
+	if u == nil {
+		return nil
+	}
+	val := *u
+	return &val
+}
+
+func SafeParsePtrUUID(s *string) *uuid.UUID {
+	if s == nil {
+		return nil
+	}
+	parsed, err := uuid.Parse(*s)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+func ParsePtrUUID(s string) *uuid.UUID {
+	parsed, err := uuid.Parse(s)
+	if err != nil {
+		return nil
+	}
+	return &parsed
 }
 
 func Ptr[T any](v T) *T {

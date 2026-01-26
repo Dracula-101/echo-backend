@@ -16,6 +16,9 @@ import (
 type MessageRepository interface {
 	InsertMessage(ctx context.Context, message *dbModels.Message) pkgErrors.AppError
 	InsertMessages(ctx context.Context, messages []*dbModels.Message) pkgErrors.AppError
+	GetMessagesByConversationID(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*dbModels.Message, pkgErrors.AppError)
+	GetMessageByID(ctx context.Context, messageID string) (*dbModels.Message, pkgErrors.AppError)
+	GetMessageCount(ctx context.Context, conversationID string) (int64, pkgErrors.AppError)
 }
 
 type messageRepository struct {
@@ -242,4 +245,166 @@ func (r *messageRepository) InsertMessages(ctx context.Context, messages []*dbMo
 	)
 
 	return nil
+}
+
+// GetMessagesByConversationID retrieves messages for a conversation with cursor-based pagination
+func (r *messageRepository) GetMessagesByConversationID(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*dbModels.Message, pkgErrors.AppError) {
+	r.logger.Debug("fetching messages by conversation ID",
+		logger.String("conversation_id", conversationID),
+		logger.Int("limit", limit),
+	)
+
+	var query string
+	var args []interface{}
+
+	if beforeMessageID != nil && *beforeMessageID != "" {
+		// Cursor-based pagination: get messages before a specific message
+		query = `
+			SELECT
+				id, conversation_id, sender_user_id, parent_message_id,
+				message_type, content, content_encrypted, content_hash,
+				format_type, mentions, hashtags, links, status,
+				delivered_at, delivery_count, read_count, reply_count,
+				last_reply_at, reaction_count, is_forwarded,
+				forwarded_from_message_id, forward_count, sent_from_device_id,
+				sent_from_ip, created_at, updated_at, edited_at, deleted_at, metadata
+			FROM messages.messages
+			WHERE conversation_id = $1
+			  AND deleted_at IS NULL
+			  AND created_at < (SELECT created_at FROM messages.messages WHERE id = $2)
+			ORDER BY created_at DESC
+			LIMIT $3
+		`
+		args = []interface{}{conversationID, *beforeMessageID, limit}
+	} else {
+		// No cursor: get most recent messages
+		query = `
+			SELECT
+				id, conversation_id, sender_user_id, parent_message_id,
+				message_type, content, content_encrypted, content_hash,
+				format_type, mentions, hashtags, links, status,
+				delivered_at, delivery_count, read_count, reply_count,
+				last_reply_at, reaction_count, is_forwarded,
+				forwarded_from_message_id, forward_count, sent_from_device_id,
+				sent_from_ip, created_at, updated_at, edited_at, deleted_at, metadata
+			FROM messages.messages
+			WHERE conversation_id = $1
+			  AND deleted_at IS NULL
+			ORDER BY created_at DESC
+			LIMIT $2
+		`
+		args = []interface{}{conversationID, limit}
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		r.logger.Error("failed to query messages",
+			logger.String("conversation_id", conversationID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query messages")
+	}
+	defer rows.Close()
+
+	var messages []*dbModels.Message
+	for rows.Next() {
+		var msg dbModels.Message
+		if err := rows.Scan(
+			&msg.ID, &msg.ConversationID, &msg.SenderUserID, &msg.ParentMessageID,
+			&msg.MessageType, &msg.Content, &msg.ContentEncrypted, &msg.ContentHash,
+			&msg.FormatType, &msg.Mentions, pq.Array(&msg.Hashtags), &msg.Links,
+			&msg.Status, &msg.DeliveredAt, &msg.DeliveryCount, &msg.ReadCount,
+			&msg.ReplyCount, &msg.LastReplyAt, &msg.ReactionCount, &msg.IsForwarded,
+			&msg.ForwardedFromMessageID, &msg.ForwardCount, &msg.SentFromDeviceID,
+			&msg.SentFromIP, &msg.CreatedAt, &msg.UpdatedAt, &msg.EditedAt, &msg.DeletedAt, &msg.Metadata,
+		); err != nil {
+			r.logger.Error("failed to scan message row",
+				logger.String("conversation_id", conversationID),
+				logger.Error(err),
+			)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan message row")
+		}
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("error iterating messages",
+			logger.String("conversation_id", conversationID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "error iterating messages")
+	}
+
+	r.logger.Debug("messages fetched successfully",
+		logger.String("conversation_id", conversationID),
+		logger.Int("count", len(messages)),
+	)
+
+	return messages, nil
+}
+
+// GetMessageByID retrieves a single message by its ID
+func (r *messageRepository) GetMessageByID(ctx context.Context, messageID string) (*dbModels.Message, pkgErrors.AppError) {
+	r.logger.Debug("fetching message by ID",
+		logger.String("message_id", messageID),
+	)
+
+	query := `
+		SELECT
+			id, conversation_id, sender_user_id, parent_message_id,
+			message_type, content, content_encrypted, content_hash,
+			format_type, mentions, hashtags, links, status,
+			delivered_at, delivery_count, read_count, reply_count,
+			last_reply_at, reaction_count, is_forwarded,
+			forwarded_from_message_id, forward_count, sent_from_device_id,
+			sent_from_ip, created_at, updated_at, edited_at, deleted_at, metadata
+		FROM messages.messages
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	var message dbModels.Message
+	err := r.db.QueryRow(ctx, query, messageID).ScanOne(&message)
+	if err != nil {
+		r.logger.Error("failed to fetch message",
+			logger.String("message_id", messageID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to fetch message")
+	}
+
+	r.logger.Debug("message fetched successfully",
+		logger.String("message_id", messageID),
+	)
+
+	return &message, nil
+}
+
+// GetMessageCount returns the total count of messages in a conversation
+func (r *messageRepository) GetMessageCount(ctx context.Context, conversationID string) (int64, pkgErrors.AppError) {
+	r.logger.Debug("counting messages",
+		logger.String("conversation_id", conversationID),
+	)
+
+	query := `
+		SELECT COUNT(*)
+		FROM messages.messages
+		WHERE conversation_id = $1 AND deleted_at IS NULL
+	`
+
+	var count int64
+	err := r.db.QueryRow(ctx, query, conversationID).Scan(&count)
+	if err != nil {
+		r.logger.Error("failed to count messages",
+			logger.String("conversation_id", conversationID),
+			logger.Error(err),
+		)
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count messages")
+	}
+
+	r.logger.Debug("messages counted successfully",
+		logger.String("conversation_id", conversationID),
+		logger.Int64("count", count),
+	)
+
+	return count, nil
 }

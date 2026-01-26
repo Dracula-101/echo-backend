@@ -2,6 +2,7 @@ package dto
 
 import (
 	"shared/server/request"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -53,16 +54,16 @@ func (r *GetConversationsRequest) ValidateErrors(ve validator.ValidationErrors) 
 
 // ConversationResponse represents a single conversation in the list
 type ConversationResponse struct {
-	ID               string  `json:"id"`
-	ConversationType string  `json:"conversation_type"`
-	Title            string  `json:"title,omitempty"`
-	AvatarURL        *string `json:"avatar_url,omitempty"`
-	IsEncrypted      bool    `json:"is_encrypted"`
-	IsPublic         bool    `json:"is_public"`
-	MemberCount      int     `json:"member_count"`
-	UnreadCount      int     `json:"unread_count"`
-	LastMessageAt    *int64  `json:"last_message_at,omitempty"`
-	CreatedAt        int64   `json:"created_at"`
+	ID               string     `json:"id"`
+	ConversationType string     `json:"conversation_type"`
+	Title            string     `json:"title,omitempty"`
+	AvatarURL        *string    `json:"avatar_url,omitempty"`
+	IsEncrypted      bool       `json:"is_encrypted"`
+	IsPublic         bool       `json:"is_public"`
+	MemberCount      int        `json:"member_count"`
+	UnreadCount      int        `json:"unread_count"`
+	LastMessageAt    *time.Time `json:"last_message_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 // GetConversationsResponse represents the response for listing conversations

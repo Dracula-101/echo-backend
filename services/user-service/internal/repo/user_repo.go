@@ -250,19 +250,21 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile domain.Profi
 	)
 
 	var profileModel = dbModels.Profile{
-		UserID:       profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
-		CreatedAt:    utils.Ptr(time.Now()),
-		UpdatedAt:    utils.Ptr(time.Now()),
+		UserID:            profile.UserID,
+		Username:          profile.Username,
+		DisplayName:       profile.DisplayName,
+		FirstName:         profile.FirstName,
+		LastName:          profile.LastName,
+		Bio:               profile.Bio,
+		AvatarURL:         profile.AvatarURL,
+		LanguageCode:      profile.LanguageCode,
+		OnlineStatus:      dbModels.OnlineStatusOffline,
+		ProfileVisibility: dbModels.ProfileVisibilityPublic,
+		Timezone:          profile.Timezone,
+		CountryCode:       profile.CountryCode,
+		IsVerified:        profile.IsVerified,
+		CreatedAt:         utils.Ptr(time.Now()),
+		UpdatedAt:         utils.Ptr(time.Now()),
 	}
 	id, err := r.db.Insert(ctx, &profileModel)
 	if err != nil {

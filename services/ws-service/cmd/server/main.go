@@ -12,6 +12,7 @@ import (
 	codes "ws-service/internal/domain"
 	"ws-service/internal/health"
 	healthCheckers "ws-service/internal/health/checkers"
+	"ws-service/internal/repo"
 	"ws-service/internal/service"
 	wsManager "ws-service/internal/websocket"
 
@@ -481,7 +482,8 @@ func main() {
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
 
-	wsService := service.NewWSService(dbClient, cacheClient, manager.GetHub(), log)
+	userRepo := repo.NewUserRepository(dbClient, log)
+	wsService := service.NewWSService(userRepo, cacheClient, manager.GetHub(), log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

@@ -7,6 +7,7 @@ import (
 	"shared/pkg/cache"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
+	dbModel "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -16,6 +17,8 @@ import (
 )
 
 type ConversationRepository interface {
+	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError)
+	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]domain.ConversationParticipant, pkgErrors.AppError)
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, pkgErrors.AppError)
 	ValidateConversationParticipant(conversationID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
 }
@@ -30,23 +33,210 @@ func NewConversationRepository(db database.Database, cache cache.Cache, logger l
 	return &conversationRepository{db: db, cache: cache, logger: logger}
 }
 
-func (r *conversationRepository) CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, pkgErrors.AppError) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "Failed to create conversation")
+func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError) {
+	query := `
+		SELECT * FROM messages.conversations
+		WHERE id = $1
+	`
+	var conv dbModel.Conversation
+	err := r.db.QueryRow(ctx, query, conversationID)
+	if scanErr := err.ScanOne(&conv); scanErr != nil {
+		if postgres.IsNoRowsError(scanErr) {
+			return nil, pkgErrors.FromError(
+				msgErr.ConversationNotFoundError,
+				pkgErrors.CodeNotFound,
+				"Conversation not found",
+			)
+		}
+		r.logger.Error("Failed to get conversation by ID",
+			logger.Error(scanErr),
+			logger.String("conversation_id", conversationID.String()),
+			logger.Bool("is_no_rows", postgres.IsNoRowsError(scanErr)),
+		)
+		return nil, pkgErrors.FromError(
+			scanErr,
+			pkgErrors.CodeDatabaseError,
+			"Failed to get conversation by ID",
+		)
 	}
 
+	domainParticipants, dbErr := r.GetConversationParticipants(ctx, conversationID)
+	if dbErr != nil {
+		r.logger.Error("Failed to get conversation participants",
+			logger.Error(dbErr),
+			logger.String("conversation_id", conversationID.String()),
+		)
+		return nil, dbErr
+	}
+
+	dbParticipants := make([]dbModel.ConversationParticipant, len(domainParticipants))
+	for i, dp := range domainParticipants {
+		dbParticipants[i] = dbModel.ConversationParticipant{
+			ID:                dp.ID.String(),
+			ConversationID:    dp.ConversationID.String(),
+			UserID:            dp.UserID.String(),
+			Role:              dbModel.ParticipantRole(dp.Role),
+			JoinedAt:          dp.JoinedAt,
+			LeftAt:            dp.LeftAt,
+			LastReadAt:        dp.LastReadAt,
+			UnreadCount:       dp.UnreadCount,
+			IsMuted:           dp.IsMuted,
+			IsPinned:          dp.IsPinned,
+			IsArchived:        dp.IsArchived,
+			CanSendMessages:   dp.CanSendMessages,
+			CanAddMembers:     dp.CanAddMembers,
+			CanEditInfo:       dp.CanEditInfo,
+			CanDeleteMessages: dp.CanDeleteMessages,
+		}
+	}
+
+	lastMessageQuery := `
+		SELECT * FROM messages.messages
+		WHERE conversation_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var lastMsg dbModel.Message
+	row := r.db.QueryRow(ctx, lastMessageQuery, conversationID)
+	if scanErr := row.ScanOne(&lastMsg); scanErr != nil {
+		if !postgres.IsNoRowsError(scanErr) {
+			r.logger.Error("Failed to get last message for conversation",
+				logger.Error(scanErr),
+				logger.String("conversation_id", conversationID.String()),
+			)
+			return nil, pkgErrors.FromError(
+				scanErr,
+				pkgErrors.CodeDatabaseError,
+				"Failed to get last message for conversation",
+			)
+		} else {
+			return domain.NewConversation(conv, dbParticipants, nil), nil
+		}
+	}
+	return domain.NewConversation(conv, dbParticipants, &lastMsg), nil
+}
+
+func (r *conversationRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]domain.ConversationParticipant, pkgErrors.AppError) {
+	query := `
+		SELECT
+			cp.id,
+			cp.conversation_id,
+			cp.user_id,
+			cp.role,
+			cp.joined_at,
+			cp.left_at,
+			cp.removed_at,
+			cp.last_read_at,
+			cp.unread_count,
+			cp.is_muted,
+			cp.is_pinned,
+			cp.is_archived,
+			cp.can_send_messages,
+			cp.can_send_media,
+			cp.can_add_members,
+			cp.can_edit_info,
+			cp.can_delete_messages,
+			COALESCE(p.display_name, p.username, '') as user_name,
+			COALESCE(p.avatar_url, '') as avatar_url
+		FROM messages.conversation_participants cp
+		LEFT JOIN users.profiles p ON cp.user_id = p.user_id
+		WHERE cp.conversation_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, conversationID)
+	if err != nil {
+		r.logger.Error("Failed to get conversation participants",
+			logger.Error(err),
+			logger.String("conversation_id", conversationID.String()),
+		)
+		return nil, pkgErrors.FromError(
+			err,
+			pkgErrors.CodeDatabaseError,
+			"Failed to get conversation participants",
+		)
+	}
+	defer rows.Close()
+
+	var participants []domain.ConversationParticipant
+	for rows.Next() {
+		var cp dbModel.ConversationParticipant
+		var userName, avatarURL string
+
+		if scanErr := rows.Scan(
+			&cp.ID,
+			&cp.ConversationID,
+			&cp.UserID,
+			&cp.Role,
+			&cp.JoinedAt,
+			&cp.LeftAt,
+			&cp.RemovedAt,
+			&cp.LastReadAt,
+			&cp.UnreadCount,
+			&cp.IsMuted,
+			&cp.IsPinned,
+			&cp.IsArchived,
+			&cp.CanSendMessages,
+			&cp.CanSendMedia,
+			&cp.CanAddMembers,
+			&cp.CanEditInfo,
+			&cp.CanDeleteMessages,
+			&userName,
+			&avatarURL,
+		); scanErr != nil {
+			r.logger.Error("Failed to scan conversation participant",
+				logger.Error(scanErr),
+				logger.String("conversation_id", conversationID.String()),
+			)
+			return nil, pkgErrors.FromError(
+				scanErr,
+				pkgErrors.CodeDatabaseError,
+				"Failed to scan conversation participant",
+			)
+		}
+
+		participants = append(participants, *domain.NewConversationParticipant(cp, userName, avatarURL))
+	}
+
+	return participants, nil
+}
+
+func (r *conversationRepository) CreateConversation(ctx context.Context, input domain.CreateConversationInput) (conv *domain.Conversation, err pkgErrors.AppError) {
+	tx, dbErr := r.db.BeginTx(ctx, nil)
+	if dbErr != nil {
+		return nil, pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "Failed to create conversation")
+	}
 	defer func() {
 		if p := recover(); p != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			panic(p)
 		} else if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 		}
 	}()
 
-	var conversationID = uuid.Nil
-	conversationQuery := `
+	if input.ConversationType == domain.ConversationTypeDirect {
+		query := `
+			SELECT c.id
+			FROM messages.conversations c
+			JOIN messages.conversation_participants cp1 ON c.id = cp1.conversation_id
+			JOIN messages.conversation_participants cp2 ON c.id = cp2.conversation_id
+			WHERE c.conversation_type = $1
+			AND cp1.user_id = $2
+			AND cp2.user_id = $3
+			GROUP BY c.id
+			HAVING COUNT(DISTINCT cp1.user_id) = 1 AND COUNT(DISTINCT cp2.user_id) = 1
+		`
+		var existingConversationID uuid.UUID
+		dbErr := tx.QueryRow(ctx, query, input.ConversationType, input.CreatorUserID, input.ParticipantIDs[0]).Scan(&existingConversationID)
+		if dbErr == nil {
+			return r.GetConversationByID(ctx, existingConversationID)
+		}
+		if !postgres.IsNoRowsError(dbErr) {
+			return nil, pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "Failed to check existing conversation")
+		}
+	}
+
+	var conversationID uuid.UUID
+	insertQuery := `
 		INSERT INTO messages.conversations (
 			conversation_type,
 			title,
@@ -56,14 +246,14 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 			is_group,
 			is_channel,
 			is_encrypted,
-			is_public
+			is_public,
+			member_count
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
-
 	row := tx.QueryRow(
 		ctx,
-		conversationQuery,
+		insertQuery,
 		input.ConversationType,
 		input.Title,
 		input.Description,
@@ -73,10 +263,10 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 		input.ConversationType == domain.ConversationTypeChannel,
 		input.IsEncrypted,
 		input.IsPublic,
+		input.MemberCount,
 	)
-
-	if err := row.Scan(&conversationID); err != nil {
-		return nil, pkgErrors.FromError(err, msgErr.CodeConversationCreateFailed.String(), "failed to create conversation")
+	if scanErr := row.Scan(&conversationID); scanErr != nil {
+		return nil, pkgErrors.FromError(scanErr, msgErr.CodeConversationCreateFailed.String(), "failed to create conversation")
 	}
 
 	if len(input.ParticipantIDs) > 0 {
@@ -88,19 +278,17 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 				joined_at
 			) VALUES ($1, $2, $3, NOW())
 		`
-
 		for _, participantID := range input.ParticipantIDs {
-			if _, err := tx.Exec(ctx, participantQuery, conversationID, participantID, domain.ParticipantRoleMember); err != nil {
-				return nil, pkgErrors.FromError(err, "PARTICIPANT_INSERT_FAILED", "failed to add participant")
+			if _, execErr := tx.Exec(ctx, participantQuery, conversationID, participantID, domain.ParticipantRoleMember); execErr != nil {
+				return nil, pkgErrors.FromError(execErr, "PARTICIPANT_INSERT_FAILED", "failed to add participant")
 			}
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, pkgErrors.FromError(err, "TRANSACTION_COMMIT_FAILED", "failed to commit transaction")
+	if commitErr := tx.Commit(); commitErr != nil {
+		return nil, pkgErrors.FromError(commitErr, "TRANSACTION_COMMIT_FAILED", "failed to commit transaction")
 	}
 
-	// Fetch the conversation with participants using JOIN
 	fetchQuery := `
 		SELECT 
 			c.id,
@@ -121,16 +309,13 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 		GROUP BY c.id, c.conversation_type, c.title, c.description, c.avatar_url, 
 				 c.creator_user_id, c.is_encrypted, c.is_public, cp.user_id, cp.role, cp.joined_at
 	`
-
-	rows, err := r.db.Query(ctx, fetchQuery, conversationID)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "Failed to fetch conversation")
+	rows, queryErr := r.db.Query(ctx, fetchQuery, conversationID)
+	if queryErr != nil {
+		return nil, pkgErrors.FromError(queryErr, pkgErrors.CodeInternal, "Failed to fetch conversation")
 	}
 	defer rows.Close()
 
-	var conversation *domain.Conversation
 	participants := make([]domain.ConversationParticipant, 0)
-
 	for rows.Next() {
 		var (
 			id               uuid.UUID
@@ -147,16 +332,16 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 			joinedAt         *time.Time
 		)
 
-		if err := rows.Scan(
+		if scanErr := rows.Scan(
 			&id, &conversationType, &title, &description, &avatarURL,
 			&creatorUserID, &isEncrypted, &isPublic, &memberCount,
 			&participantID, &role, &joinedAt,
-		); err != nil {
-			return nil, pkgErrors.FromError(err, pkgErrors.CodeInternal, "Failed to scan conversation")
+		); scanErr != nil {
+			return nil, pkgErrors.FromError(scanErr, pkgErrors.CodeInternal, "Failed to scan conversation")
 		}
 
-		if conversation == nil {
-			conversation = &domain.Conversation{
+		if conv == nil {
+			conv = &domain.Conversation{
 				ID:               id,
 				ConversationType: domain.ConversationType(conversationType),
 				Title:            *title,
@@ -182,12 +367,12 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 		}
 	}
 
-	if conversation == nil {
+	if conv == nil {
 		return nil, pkgErrors.FromError(nil, pkgErrors.CodeNotFound, "Conversation not found after creation")
 	}
 
-	conversation.Participants = participants
-	return conversation, nil
+	conv.Participants = participants
+	return conv, nil
 }
 
 func (r *conversationRepository) ValidateConversationParticipant(conversationID uuid.UUID, userID uuid.UUID) pkgErrors.AppError {

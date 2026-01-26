@@ -20,7 +20,7 @@ type Database interface {
 	HardDelete(ctx context.Context, model Model) *DBError
 
 	FindOne(ctx context.Context, model Model, query string, args ...interface{}) *DBError
-	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *DBError
+	FindMany(ctx context.Context, dest any, query string, args ...interface{}) *DBError
 	FindOneAndUpdate(ctx context.Context, dest interface{}, query string, args ...interface{}) *DBError
 	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, error)
 	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, error)
@@ -59,6 +59,7 @@ type Transaction interface {
 type Rows interface {
 	Next() bool
 	Scan(dest ...interface{}) error
+	ScanAll(dest interface{}) error
 	Close() error
 	Err() error
 }

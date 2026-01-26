@@ -74,7 +74,6 @@ func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 			Content:         request.Content,
 			MessageType:     domain.MessageType(request.MessageType),
 			ParentMessageID: parentMessageID,
-			Mentions:        request.Mentions,
 			Metadata:        request.Metadata,
 		},
 		handler.GetDeviceInfo(),

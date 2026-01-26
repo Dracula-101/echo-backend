@@ -63,6 +63,16 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 			Description: req.Description,
 			AvatarURL:   req.AvatarURL,
 			IsEncrypted: req.IsEncrypted,
+			MemberCount: func() int {
+				switch domain.ConversationType(req.ConversationType) {
+				case domain.ConversationTypeGroup:
+					return len(req.ParticipantIDs) + 1
+				case domain.ConversationTypeChannel:
+					return 1
+				default:
+					return 2
+				}
+			}(),
 		},
 	)
 	if svcErr != nil {
