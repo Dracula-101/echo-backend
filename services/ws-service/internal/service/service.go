@@ -50,10 +50,6 @@ type WSService interface {
 }
 
 func (s *wsService) ValidateUserExists(ctx context.Context, userID uuid.UUID) (bool, error) {
-	if s.cache == nil {
-		return s.userRepo.ValidateUserAccess(ctx, userID)
-	}
-
 	cacheKey := fmt.Sprintf("user:exists:%s", userID.String())
 
 	existsInCache, cacheErr := s.cache.GetBool(ctx, cacheKey)

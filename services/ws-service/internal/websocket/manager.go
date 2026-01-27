@@ -14,6 +14,8 @@ import (
 	"shared/server/websocket/hub"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
+	"ws-service/internal/repo"
+	"ws-service/internal/service"
 	"ws-service/internal/websocket/middleware"
 	"ws-service/internal/websocket/tracker"
 
@@ -37,6 +39,13 @@ type Manager struct {
 	rateLimiter   *middleware.RateLimiter
 	messageBuffer *middleware.MessageBuffer
 	metrics       *Metrics
+
+	// Repositories
+	conversationRepo repo.ConversationRepository
+	userRepo         repo.UserRepository
+
+	// Services
+	authzService service.AuthorizationService
 
 	state          ManagerState
 	startTime      time.Time
@@ -106,21 +115,31 @@ func NewManager(log logger.Logger, db *database.Database, opts ...Option) *Manag
 		metrics = NewMetrics(cfg.MetricsPrefix)
 	}
 
+	// Initialize repositories
+	conversationRepo := repo.NewConversationRepository(*db, log)
+	userRepo := repo.NewUserRepository(*db, log)
+
+	// Initialize services
+	authzService := service.NewAuthorizationService(conversationRepo, userRepo, log)
+
 	mgr := &Manager{
-		engine:        engine,
-		db:            db,
-		hub:           hubInstance,
-		log:           log,
-		config:        cfg,
-		subscriptions: tracker.NewSubscriptionManager(log, subCfg),
-		presence:      tracker.NewPresenceTracker(log, presenceCfg),
-		typing:        tracker.NewTypingManager(log, typingCfg),
-		messageRouter: router.New(),
-		rateLimiter:   middleware.NewRateLimiter(rateLimiterCfg),
-		messageBuffer: middleware.NewMessageBuffer(bufferCfg),
-		metrics:       metrics,
-		state:         StateInitialized,
-		stopCh:        make(chan struct{}),
+		engine:           engine,
+		db:               db,
+		hub:              hubInstance,
+		log:              log,
+		config:           cfg,
+		subscriptions:    tracker.NewSubscriptionManager(log, subCfg),
+		presence:         tracker.NewPresenceTracker(log, presenceCfg),
+		typing:           tracker.NewTypingManager(log, typingCfg),
+		messageRouter:    router.New(),
+		rateLimiter:      middleware.NewRateLimiter(rateLimiterCfg),
+		messageBuffer:    middleware.NewMessageBuffer(bufferCfg),
+		metrics:          metrics,
+		conversationRepo: conversationRepo,
+		userRepo:         userRepo,
+		authzService:     authzService,
+		state:            StateInitialized,
+		stopCh:           make(chan struct{}),
 	}
 
 	mgr.registerHandlers()
