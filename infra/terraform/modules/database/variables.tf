@@ -47,3 +47,8 @@ variable "network_id" {
   description = "VPC network ID"
   type        = string
 }
+
+variable "private_vpc_connection" {
+  description = "Private VPC connection for Cloud SQL"
+  type        = string
+}

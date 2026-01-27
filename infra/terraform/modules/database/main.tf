@@ -6,6 +6,8 @@ resource "google_sql_database_instance" "postgres" {
   region           = var.region
   project          = var.project_id
 
+  depends_on = [var.private_vpc_connection]
+
   settings {
     tier              = var.postgres_tier
     disk_size         = var.postgres_disk_size

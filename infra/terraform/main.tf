@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -9,6 +9,10 @@ terraform {
     cloudflare = {
       source  = "cloudflare/cloudflare"
       version = "~> 4.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
 
@@ -24,7 +28,7 @@ provider "google" {
 }
 
 provider "cloudflare" {
-  api_token = var.cloudflare_api_token
+  api_token = var.enable_cloudflare ? var.cloudflare_api_token : null
 }
 
 # GCP Infrastructure
@@ -54,37 +58,17 @@ module "database" {
   redis_tier              = var.redis_tier
   redis_memory_size       = var.redis_memory_size
   network_id              = module.gcp.network_id
+  private_vpc_connection  = module.gcp.private_vpc_connection
 }
 
-# Cloudflare Configuration
+# Cloudflare Configuration (Optional)
 module "cloudflare" {
+  count  = var.enable_cloudflare ? 1 : 0
   source = "./modules/cloudflare"
-  
-  zone_id           = var.cloudflare_zone_id
-  domain_name       = var.domain_name
-  api_subdomain     = var.api_subdomain
-  ws_subdomain      = var.ws_subdomain
-  load_balancer_ip  = module.gcp.load_balancer_ip
-}
 
-# Outputs
-output "gke_cluster_endpoint" {
-  value       = module.gcp.cluster_endpoint
-  description = "GKE cluster endpoint"
-  sensitive   = true
-}
-
-output "postgres_connection_name" {
-  value       = module.database.postgres_connection_name
-  description = "Cloud SQL instance connection name"
-}
-
-output "redis_host" {
-  value       = module.database.redis_host
-  description = "Redis instance host"
-}
-
-output "cloudflare_dns_records" {
-  value       = module.cloudflare.dns_records
-  description = "Cloudflare DNS records"
+  zone_id          = var.cloudflare_zone_id
+  domain_name      = var.domain_name
+  api_subdomain    = var.api_subdomain
+  ws_subdomain     = var.ws_subdomain
+  load_balancer_ip = module.gcp.load_balancer_ip
 }

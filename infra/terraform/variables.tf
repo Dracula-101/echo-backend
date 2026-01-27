@@ -77,16 +77,24 @@ variable "redis_memory_size" {
   default     = 5
 }
 
-# Cloudflare Variables
+# Cloudflare Variables (Optional)
+variable "enable_cloudflare" {
+  description = "Enable Cloudflare DNS configuration"
+  type        = bool
+  default     = false
+}
+
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token"
+  description = "Cloudflare API token (required if enable_cloudflare = true)"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "cloudflare_zone_id" {
-  description = "Cloudflare zone ID"
+  description = "Cloudflare zone ID (required if enable_cloudflare = true)"
   type        = string
+  default     = ""
 }
 
 variable "domain_name" {

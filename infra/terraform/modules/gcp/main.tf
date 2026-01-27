@@ -105,6 +105,23 @@ resource "google_container_node_pool" "primary_nodes" {
   }
 }
 
+# Private IP allocation for Cloud SQL
+resource "google_compute_global_address" "private_ip_address" {
+  name          = "${var.network_name}-private-ip"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = google_compute_network.vpc.id
+  project       = var.project_id
+}
+
+# Private VPC Connection for Cloud SQL
+resource "google_service_networking_connection" "private_vpc_connection" {
+  network                 = google_compute_network.vpc.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
+}
+
 # Load Balancer IP
 resource "google_compute_global_address" "lb_ip" {
   name    = "${var.gke_cluster_name}-lb-ip"
@@ -132,4 +149,8 @@ output "network_name" {
 
 output "load_balancer_ip" {
   value = google_compute_global_address.lb_ip.address
+}
+
+output "private_vpc_connection" {
+  value = google_service_networking_connection.private_vpc_connection.network
 }
