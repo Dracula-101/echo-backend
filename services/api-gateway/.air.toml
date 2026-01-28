@@ -1,32 +1,43 @@
+# ==============================
+# Air - Go Development Config
+# ==============================
 root = "."
-testdata_dir = "testdata"
 tmp_dir = "tmp"
+testdata_dir = "testdata"
 
+# ------------------------------
+# Build settings
+# ------------------------------
 [build]
-  args_bin = []
-  bin = "./tmp/main"
   cmd = "go build -o ./tmp/main ./cmd/server"
-  delay = 1000
+  bin = "./tmp/main"
+  include_dir = ["../../shared", "cmd", "configs", "internal", "api"]
+  include_ext = ["go", "tpl", "tmpl", "html", "yaml", "yml"]
+  include_file = [".env"]
   exclude_dir = ["assets", "tmp", "vendor", "testdata"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
   full_bin = ""
-  include_dir = ["../../shared", "cmd", "configs", "internal"]
-  include_ext = ["go", "tpl", "tmpl", "html", "yaml", "yml"]
-  include_file = [".env"]
+  delay = 1000
   kill_delay = "5s"
   log = "build-errors.log"
-  poll = false
-  poll_interval = 0
+  pre_cmd = [
+    "go mod edit -replace shared=../../shared",
+    "go get shared",
+    "go mod tidy"
+  ]
   post_cmd = []
-  pre_cmd = ["go mod edit -replace shared=../../shared", "go get shared", "go mod tidy"]
-  rerun = false
+  rerun = true
   rerun_delay = 500
   send_interrupt = true
   stop_on_error = false
+  args_bin = []
 
+# ------------------------------
+# Color settings
+# ------------------------------
 [color]
   app = ""
   build = "yellow"
@@ -34,13 +45,22 @@ tmp_dir = "tmp"
   runner = "green"
   watcher = "cyan"
 
+# ------------------------------
+# Logging settings
+# ------------------------------
 [log]
   main_only = false
   time = false
 
+# ------------------------------
+# Miscellaneous
+# ------------------------------
 [misc]
   clean_on_exit = false
 
+# ------------------------------
+# Screen settings
+# ------------------------------
 [screen]
   clear_on_rebuild = false
   keep_scroll = true

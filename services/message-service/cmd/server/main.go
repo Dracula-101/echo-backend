@@ -192,6 +192,7 @@ func setupAPIRoutes(
 	// Conversation endpoints
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/conversations", request.Adapt(conversationHandler.CreateConversation))
+		r.Get("/conversations/me", request.Adapt(conversationHandler.GetUserConversations))
 		r.Get("/conversations/{id}", request.Adapt(conversationHandler.GetConversationByID))
 	})
 	log.Debug("API routes registered successfully")

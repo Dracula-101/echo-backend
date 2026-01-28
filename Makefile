@@ -27,8 +27,8 @@ else
     ENV_NAME := Development
 endif
 
-# Compose command alias
-DOCKER_COMPOSE := docker-compose $(COMPOSE_FILES)
+# Compose command alias with explicit env file
+DOCKER_COMPOSE := docker-compose --env-file .env $(COMPOSE_FILES)
 
 # Export for submakefiles
 export COMPOSE_FILES

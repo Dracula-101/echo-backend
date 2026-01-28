@@ -22,7 +22,7 @@ COPY services/user-service/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/user-service cmd/server/main.go
 
 # Final stage
-FROM alpine:latest
+FROM alpine:latest AS production
 
 RUN apk --no-cache add ca-certificates tzdata
 

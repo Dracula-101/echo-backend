@@ -18,7 +18,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server
 
 # Final stage
-FROM alpine:latest
+FROM alpine:latest AS production
 
 RUN apk --no-cache add ca-certificates tzdata
 

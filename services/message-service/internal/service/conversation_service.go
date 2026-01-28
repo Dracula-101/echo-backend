@@ -13,6 +13,7 @@ import (
 type ConversationService interface {
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MessageError)
 	GetConversation(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, *msgError.MessageError)
+	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MessageError)
 }
 
 type conversationService struct {
@@ -47,6 +48,31 @@ func (s *conversationService) CreateConversation(ctx context.Context, input doma
 }
 
 func (s *conversationService) GetConversation(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, *msgError.MessageError) {
+	exists, err := s.conversationRepo.ConversationExists(ctx, conversationID)
+	if err != nil {
+		s.logger.Error("Failed to check conversation existence",
+			logger.String("service", msgError.ServiceName),
+			logger.Any("conversation_id", conversationID),
+			logger.Error(err),
+		)
+		return nil, &msgError.MessageError{
+			Message: "Failed to check conversation existence",
+			Code:    msgError.CodeConversationFetchFailed,
+			Error:   err,
+		}
+	}
+	if !exists {
+		s.logger.Warn("Conversation not found",
+			logger.String("service", msgError.ServiceName),
+			logger.Any("conversation_id", conversationID),
+		)
+		return nil, &msgError.MessageError{
+			Message: "Conversation not found",
+			Code:    msgError.CodeConversationNotFound,
+			Error:   msgError.ConversationNotFoundError,
+		}
+	}
+
 	conversation, err := s.conversationRepo.GetConversationByID(ctx, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to get conversation by ID",
@@ -61,4 +87,21 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 		}
 	}
 	return conversation, nil
+}
+
+func (s *conversationService) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MessageError) {
+	conversations, err := s.conversationRepo.GetUserConversations(ctx, userID)
+	if err != nil {
+		s.logger.Error("Failed to get user conversations",
+			logger.String("service", msgError.ServiceName),
+			logger.Any("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, &msgError.MessageError{
+			Message: "Failed to get user conversations",
+			Code:    msgError.CodeConversationFetchFailed,
+			Error:   err,
+		}
+	}
+	return conversations, nil
 }

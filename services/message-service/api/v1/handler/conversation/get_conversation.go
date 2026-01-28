@@ -33,6 +33,7 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 			logger.String("conversation_id", conversationIDParam),
 		)
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", nil)
+		return
 	}
 
 	// Fetch conversation from service
@@ -44,7 +45,11 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(appErr.Error),
 		)
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), appErr.Message, appErr.Error)
+		if appErr.Code == convError.CodeConversationNotFound {
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation not found", appErr.Error)
+		}
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to get conversation", appErr.Error)
+		return
 	}
 
 	h.log.Info("Conversation retrieved successfully",

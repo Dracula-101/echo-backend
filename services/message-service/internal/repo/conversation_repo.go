@@ -17,8 +17,10 @@ import (
 )
 
 type ConversationRepository interface {
+	ConversationExists(ctx context.Context, conversationID uuid.UUID) (bool, pkgErrors.AppError)
 	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError)
 	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]domain.ConversationParticipant, pkgErrors.AppError)
+	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, pkgErrors.AppError)
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, pkgErrors.AppError)
 	ValidateConversationParticipant(conversationID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
 }
@@ -31,6 +33,32 @@ type conversationRepository struct {
 
 func NewConversationRepository(db database.Database, cache cache.Cache, logger logger.Logger) ConversationRepository {
 	return &conversationRepository{db: db, cache: cache, logger: logger}
+}
+
+func (r *conversationRepository) ConversationExists(ctx context.Context, conversationID uuid.UUID) (bool, pkgErrors.AppError) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1
+			FROM messages.conversations
+			WHERE id = $1
+		)
+	`
+
+	var exists bool
+	err := r.db.QueryRow(ctx, query, conversationID).Scan(&exists)
+	if err != nil {
+		r.logger.Error("Failed to check if conversation exists",
+			logger.String("conversation_id", conversationID.String()),
+			logger.Error(err),
+		)
+		return false, pkgErrors.FromError(
+			err,
+			pkgErrors.CodeDatabaseError,
+			"Failed to check if conversation exists",
+		)
+	}
+
+	return exists, nil
 }
 
 func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError) {
@@ -197,6 +225,65 @@ func (r *conversationRepository) GetConversationParticipants(ctx context.Context
 	}
 
 	return participants, nil
+}
+
+func (r *conversationRepository) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, pkgErrors.AppError) {
+	query := `
+		SELECT c.*
+		FROM messages.conversations c
+		JOIN messages.conversation_participants cp ON c.id = cp.conversation_id
+		WHERE cp.user_id = $1
+		  AND cp.left_at IS NULL
+		  AND cp.removed_at IS NULL
+		ORDER BY c.created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		r.logger.Error("Failed to get user conversations",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(
+			err,
+			pkgErrors.CodeDatabaseError,
+			"Failed to get user conversations",
+		)
+	}
+	defer rows.Close()
+
+	var conversations []dbModel.Conversation
+	for rows.Next() {
+		var conv dbModel.Conversation
+		if scanErr := rows.Scan(&conv); scanErr != nil {
+			r.logger.Error("Failed to scan conversation",
+				logger.String("user_id", userID.String()),
+				logger.Error(scanErr),
+			)
+			return nil, pkgErrors.FromError(
+				scanErr,
+				pkgErrors.CodeDatabaseError,
+				"Failed to scan conversation",
+			)
+		}
+		conversations = append(conversations, conv)
+	}
+
+	var domainConversations []domain.Conversation
+	for _, conv := range conversations {
+		domainConv, dbErr := r.GetConversationByID(ctx, uuid.MustParse(conv.ID))
+		if dbErr != nil {
+			r.logger.Error("Failed to get conversation by ID",
+				logger.String("user_id", userID.String()),
+				logger.String("conversation_id", conv.ID),
+				logger.Error(dbErr),
+			)
+			return nil, dbErr
+		}
+		domainConversations = append(domainConversations, *domainConv)
+	}
+
+	return domainConversations, nil
 }
 
 func (r *conversationRepository) CreateConversation(ctx context.Context, input domain.CreateConversationInput) (conv *domain.Conversation, err pkgErrors.AppError) {

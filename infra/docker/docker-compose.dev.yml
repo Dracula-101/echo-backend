@@ -332,20 +332,16 @@ services:
     build: { context: "${PWD}", dockerfile: services/message-service/Dockerfile.dev }
     container_name: echo-message-service-dev
     image: echo/message-service:dev
-    expose: [ "8083", "8084" ]
+    expose: [ "8083" ]
     environment:
-      <<: [ *env-full, *env-kafka, *env-ws ]
+      <<: [ *env-full, *env-kafka ]
       SERVER_PORT: 8083
-      WS_PORT: 8084
       REDIS_DB: 1
       KAFKA_TOPIC: chat-messages
       KAFKA_NOTIFICATION_TOPIC: notifications
       KAFKA_CONSUMER_GROUP: message-service-dev
       KAFKA_SESSION_TIMEOUT: 10s
       KAFKA_HEARTBEAT_INTERVAL: 3s
-      WS_MAX_MESSAGE_SIZE: 512000
-      WS_PING_INTERVAL: 30s
-      WS_PONG_TIMEOUT: 60s
     volumes:
       - ${PWD}/services/message-service:/app/services/message-service
       - ${PWD}/shared:/app/shared:ro

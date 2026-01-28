@@ -21,7 +21,7 @@ WORKDIR /app/services/ws-service
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/ws-service cmd/server/main.go
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:latest AS production
 
 # Install CA certificates for HTTPS
 RUN apk --no-cache add ca-certificates

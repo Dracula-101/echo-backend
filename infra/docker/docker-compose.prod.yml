@@ -284,7 +284,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/api-gateway/Dockerfile
-    container_name: echo-api-gateway-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/api-gateway:${VERSION:-latest}
     ports: [ "8080:8080" ]
     networks: [ echo-network, echo-internal ]
@@ -333,7 +333,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/auth-service/Dockerfile
-    container_name: echo-auth-service-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/auth-service:${VERSION:-latest}
     expose: [ "8081" ]
     environment:
@@ -370,7 +370,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/user-service/Dockerfile
-    container_name: echo-user-service-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/user-service:${VERSION:-latest}
     expose: [ "8082" ]
     environment:
@@ -397,7 +397,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/message-service/Dockerfile
-    container_name: echo-message-service-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/message-service:${VERSION:-latest}
     expose: [ "8083", "8084" ]
     environment:
@@ -442,7 +442,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/location-service/Dockerfile
-    container_name: echo-location-service-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/location-service:${VERSION:-latest}
     expose: [ "8090" ]
     logging: *logging-small
@@ -471,7 +471,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/media-service/Dockerfile
-    container_name: echo-media-service-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/media-service:${VERSION:-latest}
     expose: [ "8085" ]
     environment:
@@ -510,7 +510,7 @@ services:
     build:
       <<: *build-base
       dockerfile: services/presence-service/Dockerfile
-    container_name: echo-presence-service-prod
+    # container_name removed - incompatible with deploy.replicas
     image: echo/presence-service:${VERSION:-latest}
     expose: [ "8086" ]
     environment:
