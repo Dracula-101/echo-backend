@@ -336,7 +336,7 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 			is_encrypted,
 			is_public,
 			member_count
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
 	`
 	row := tx.QueryRow(

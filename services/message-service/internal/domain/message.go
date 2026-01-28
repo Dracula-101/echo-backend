@@ -57,7 +57,7 @@ func NewMessage(model db.Message) Message {
 		msg.Metadata = &MessageMetadata{
 			MediaURL:      utils.GetValue(metadata, "media_url", "").(string),
 			ThumbnailURL:  utils.GetValue(metadata, "thumbnail_url", "").(string),
-			MediaSize:     utils.GetValue(metadata, "media_size", 0).(int64),
+			MediaSize:     utils.GetValue(metadata, "media_size", 0).(int),
 			MediaDuration: utils.GetValue(metadata, "media_duration", 0).(int),
 			MimeType:      utils.GetValue(metadata, "mime_type", "").(string),
 			FileName:      utils.GetValue(metadata, "file_name", "").(string),
@@ -109,7 +109,7 @@ type MessageMetadata struct {
 	// Media information
 	MediaURL      string `json:"media_url,omitempty"`
 	ThumbnailURL  string `json:"thumbnail_url,omitempty"`
-	MediaSize     int64  `json:"media_size,omitempty"`
+	MediaSize     int    `json:"media_size,omitempty"`
 	MediaDuration int    `json:"media_duration,omitempty"`
 	MimeType      string `json:"mime_type,omitempty"`
 	FileName      string `json:"file_name,omitempty"`
