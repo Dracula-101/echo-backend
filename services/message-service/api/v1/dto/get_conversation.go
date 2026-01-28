@@ -2,7 +2,6 @@ package dto
 
 import (
 	"shared/server/request"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -54,19 +53,32 @@ func (r *GetConversationsRequest) ValidateErrors(ve validator.ValidationErrors) 
 
 // ConversationResponse represents a single conversation in the list
 type ConversationResponse struct {
-	ID               string     `json:"id"`
-	ConversationType string     `json:"conversation_type"`
-	Title            string     `json:"title,omitempty"`
-	AvatarURL        *string    `json:"avatar_url,omitempty"`
-	IsEncrypted      bool       `json:"is_encrypted"`
-	IsPublic         bool       `json:"is_public"`
-	MemberCount      int        `json:"member_count"`
-	UnreadCount      int        `json:"unread_count"`
-	LastMessageAt    *time.Time `json:"last_message_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
+	ID               string        `json:"id"`
+	Title            *string       `json:"title,omitempty"`
+	Description      *string       `json:"description,omitempty"`
+	ConversationType string        `json:"conversation_type"`
+	AvatarURL        *string       `json:"avatar_url,omitempty"`
+	UnreadCount      int           `json:"unread_count"`
+	MemberCount      int           `json:"member_count"`
+	MessageCount     int           `json:"message_count"`
+	LastMessage      *Message      `json:"last_message,omitempty"`
+	Participants     []Participant `json:"participants"`
 }
 
-// GetConversationsResponse represents the response for listing conversations
+type Message struct {
+	Content      string  `json:"content"`
+	MessageType  string  `json:"message_type"`
+	SenderUserID string  `json:"sender_user_id"`
+	SenderName   *string `json:"sender_name,omitempty"`
+	SenderAvatar *string `json:"sender_avatar,omitempty"`
+}
+
+type Participant struct {
+	UserID     string  `json:"user_id"`
+	UserName   *string `json:"user_name,omitempty"`
+	UserAvatar *string `json:"user_avatar,omitempty"`
+}
+
 type GetConversationsResponse struct {
 	Conversations []ConversationResponse `json:"conversations"`
 	Total         int                    `json:"total"`

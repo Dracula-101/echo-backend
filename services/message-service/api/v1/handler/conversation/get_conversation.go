@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	"shared/server/request"
 	"shared/server/response"
 
@@ -61,15 +62,28 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 	// Prepare and send response
 	resp := dto.ConversationResponse{
 		ID:               conversation.ID.String(),
+		Title:            utils.PtrString(conversation.Title),
+		Description:      utils.PtrString(conversation.Description),
 		ConversationType: string(conversation.ConversationType),
-		Title:            conversation.Title,
 		AvatarURL:        conversation.AvatarURL,
-		IsEncrypted:      conversation.IsEncrypted,
-		IsPublic:         conversation.IsPublic,
-		MemberCount:      conversation.MemberCount,
 		UnreadCount:      conversation.UnreadCount,
-		LastMessageAt:    conversation.LastMessageAt,
-		CreatedAt:        conversation.CreatedAt,
+		MemberCount:      conversation.MemberCount,
+		MessageCount:     conversation.MessageCount,
+		LastMessage: &dto.Message{
+			Content:      conversation.LastMessage.Content,
+			MessageType:  string(conversation.LastMessage.MessageType),
+			SenderUserID: conversation.LastMessage.SenderUserID.String(),
+			SenderName:   utils.PtrString(conversation.LastMessage.SenderName),
+			SenderAvatar: utils.PtrString(conversation.LastMessage.SenderAvatar),
+		},
+		Participants: make([]dto.Participant, 0, len(conversation.Participants)),
+	}
+	for _, p := range conversation.Participants {
+		resp.Participants = append(resp.Participants, dto.Participant{
+			UserID:     p.UserID.String(),
+			UserName:   utils.PtrString(p.UserName),
+			UserAvatar: utils.PtrString(p.UserAvatar),
+		})
 	}
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Conversation retrieved successfully", resp)
 }

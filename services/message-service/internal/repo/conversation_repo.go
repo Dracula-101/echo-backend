@@ -118,6 +118,7 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 			CanDeleteMessages: dp.CanDeleteMessages,
 		}
 	}
+	
 
 	lastMessageQuery := `
 		SELECT * FROM messages.messages

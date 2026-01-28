@@ -104,9 +104,14 @@ func (c *client) Insert(ctx context.Context, model database.Model) (*string, *da
 	)
 
 	nargs := normalizeArgs(filteredValues)
-	c.logger.Debug("Create",
+	c.logger.Info("Creating record",
+		logger.String("table", model.TableName()),
+		logger.Int("field_count", len(filteredFields)),
+	)
+	c.logger.Debug("Create query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
+		logger.Any("fields", filteredFields),
 	)
 
 	var returnedID interface{}
@@ -121,6 +126,15 @@ func (c *client) Insert(ctx context.Context, model database.Model) (*string, *da
 			WithDetail("pk_field", pkField)
 	}
 	formattedID := formatPrimaryKey(returnedID)
+	c.logger.Info("Record created successfully",
+		logger.String("table", model.TableName()),
+		logger.String("id", formattedID),
+	)
+	c.logger.Debug("Created record details",
+		logger.String("table", model.TableName()),
+		logger.String("id", formattedID),
+		logger.Any("model", model),
+	)
 	return &formattedID, nil
 }
 
@@ -156,7 +170,6 @@ func (c *client) Upsert(ctx context.Context, model database.Model) *database.DBE
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 
-	// Build update clause excluding primary key and created_at
 	updateParts := make([]string, 0)
 	for _, field := range filteredFields {
 		if field != pkField && field != "created_at" {
@@ -175,9 +188,14 @@ func (c *client) Upsert(ctx context.Context, model database.Model) *database.DBE
 	)
 
 	nargs := normalizeArgs(filteredValues)
-	c.logger.Debug("Upsert",
+	c.logger.Info("Upserting record",
+		logger.String("table", model.TableName()),
+		logger.Int("field_count", len(filteredFields)),
+	)
+	c.logger.Debug("Upsert query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
+		logger.Any("fields", filteredFields),
 	)
 
 	var returnedID interface{}
@@ -191,6 +209,16 @@ func (c *client) Upsert(ctx context.Context, model database.Model) *database.DBE
 			WithDetail("table", model.TableName()).
 			WithDetail("pk_field", pkField)
 	}
+
+	c.logger.Info("Record upserted successfully",
+		logger.String("table", model.TableName()),
+		logger.Any("id", returnedID),
+	)
+	c.logger.Debug("Upserted record details",
+		logger.String("table", model.TableName()),
+		logger.Any("id", returnedID),
+		logger.Any("model", model),
+	)
 
 	return nil
 }
@@ -210,7 +238,11 @@ func (c *client) FindByID(ctx context.Context, model database.Model, id interfac
 		pkField,
 	)
 
-	c.logger.Debug("FindByID",
+	c.logger.Info("Finding record by ID",
+		logger.String("table", model.TableName()),
+		logger.Any("id", id),
+	)
+	c.logger.Debug("FindByID query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
 	)
@@ -220,6 +252,15 @@ func (c *client) FindByID(ctx context.Context, model database.Model, id interfac
 		c.logDatabaseError("FindByID", query, []interface{}{id}, err)
 		return wrapDatabaseError(err, "FindByID", model.TableName(), query)
 	}
+	c.logger.Info("Record found successfully",
+		logger.String("table", model.TableName()),
+		logger.Any("id", id),
+	)
+	c.logger.Debug("Found record details",
+		logger.String("table", model.TableName()),
+		logger.Any("id", id),
+		logger.Any("model", model),
+	)
 	return nil
 }
 
@@ -258,7 +299,12 @@ func (c *client) Update(ctx context.Context, model database.Model) *database.DBE
 	)
 
 	nargs := normalizeArgs(updateValues)
-	c.logger.Debug("Update",
+	c.logger.Info("Updating record",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int("field_count", len(setParts)),
+	)
+	c.logger.Debug("Update query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
 		logger.Any("primary_key", model.PrimaryKey()),
@@ -282,6 +328,17 @@ func (c *client) Update(ctx context.Context, model database.Model) *database.DBE
 			WithDetail("primary_key", model.PrimaryKey())
 	}
 
+	c.logger.Info("Record updated successfully",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int64("rows_affected", rows),
+	)
+	c.logger.Debug("Updated record details",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Any("model", model),
+	)
+
 	return nil
 }
 
@@ -293,7 +350,11 @@ func (c *client) Delete(ctx context.Context, model database.Model) *database.DBE
 		pkField,
 	)
 
-	c.logger.Debug("Delete",
+	c.logger.Info("Soft deleting record",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+	)
+	c.logger.Debug("Delete query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
 	)
@@ -316,6 +377,12 @@ func (c *client) Delete(ctx context.Context, model database.Model) *database.DBE
 			WithDetail("primary_key", model.PrimaryKey())
 	}
 
+	c.logger.Info("Record soft deleted successfully",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int64("rows_affected", rows),
+	)
+
 	return nil
 }
 
@@ -327,7 +394,11 @@ func (c *client) HardDelete(ctx context.Context, model database.Model) *database
 		pkField,
 	)
 
-	c.logger.Debug("HardDelete",
+	c.logger.Info("Hard deleting record",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+	)
+	c.logger.Debug("HardDelete query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
 	)
@@ -350,18 +421,34 @@ func (c *client) HardDelete(ctx context.Context, model database.Model) *database
 			WithDetail("primary_key", model.PrimaryKey())
 	}
 
+	c.logger.Info("Record hard deleted successfully",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int64("rows_affected", rows),
+	)
+
 	return nil
 }
 
 func (c *client) FindOne(ctx context.Context, model database.Model, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
-	c.logger.Debug("FindOne", logger.String("query", query))
+	c.logger.Info("Finding one record",
+		logger.String("table", model.TableName()),
+	)
+	c.logger.Debug("FindOne query", logger.String("query", query))
 
 	row := c.db.QueryRowContext(ctx, query, nargs...)
 	if err := scanStruct(row, model); err != nil {
 		c.logDatabaseError("FindOne", query, nargs, err)
 		return wrapDatabaseError(err, "FindOne", model.TableName(), query)
 	}
+	c.logger.Info("Record found successfully",
+		logger.String("table", model.TableName()),
+	)
+	c.logger.Debug("Found record details",
+		logger.String("table", model.TableName()),
+		logger.Any("model", model),
+	)
 	return nil
 }
 
@@ -379,7 +466,8 @@ func (c *client) FindOneAndUpdate(ctx context.Context, dest interface{}, query s
 
 func (c *client) FindMany(ctx context.Context, dest any, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
-	c.logger.Debug("FindMany", logger.String("query", query))
+	c.logger.Info("Finding multiple records")
+	c.logger.Debug("FindMany query", logger.String("query", query))
 
 	rows, err := c.db.QueryContext(ctx, query, nargs...)
 	if err != nil {
@@ -393,10 +481,12 @@ func (c *client) FindMany(ctx context.Context, dest any, query string, args ...i
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan results").
 			WithDetail("operation", "FindMany")
 	}
+	c.logger.Info("Records found successfully")
+	c.logger.Debug("Found records", logger.Any("results", dest))
 	return nil
 }
 
-func (c *client) Exists(ctx context.Context, model database.Model, query string, args ...interface{}) (bool, error) {
+func (c *client) Exists(ctx context.Context, model database.Model, query string, args ...interface{}) (bool, *database.DBError) {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("Exists", logger.String("query", query))
 
@@ -409,7 +499,7 @@ func (c *client) Exists(ctx context.Context, model database.Model, query string,
 	return exists, nil
 }
 
-func (c *client) Count(ctx context.Context, model database.Model, query string, args ...interface{}) (int64, error) {
+func (c *client) Count(ctx context.Context, model database.Model, query string, args ...interface{}) (int64, *database.DBError) {
 	nargs := normalizeArgs(args)
 	c.logger.Debug("Count", logger.String("query", query))
 
@@ -556,7 +646,6 @@ func (c *client) logDatabaseError(operation string, query string, args []interfa
 		logger.Error(err),
 	}
 
-	// Extract PostgreSQL specific error details
 	if pqErr, ok := err.(*pq.Error); ok {
 		fields = append(fields,
 			logger.String("pg_error_code", string(pqErr.Code)),
@@ -579,20 +668,17 @@ func (c *client) logDatabaseError(operation string, query string, args []interfa
 			logger.String("pg_routine", pqErr.Routine),
 		)
 
-		// Detect if error came from a trigger
 		if strings.Contains(pqErr.Where, "PL/pgSQL function") ||
 			strings.Contains(pqErr.Routine, "trigger") ||
 			strings.Contains(pqErr.Message, "trigger") {
 			fields = append(fields, logger.String("error_source", "trigger"))
 		}
 
-		// Add constraint violation details
-		if pqErr.Code.Class() == "23" { // Integrity Constraint Violation
+		if pqErr.Code.Class() == "23" {
 			fields = append(fields, logger.String("constraint_type", "integrity_violation"))
 		}
 	}
 
-	// Log query arguments (sanitized)
 	if len(args) > 0 {
 		sanitizedArgs := make([]string, len(args))
 		for i, arg := range args {
@@ -660,9 +746,14 @@ func (t *transactionWrapper) Create(ctx context.Context, model database.Model) *
 	)
 
 	nargs := normalizeArgs(values)
-	t.logger.Debug("TX Create",
+	t.logger.Info("Creating record in transaction",
+		logger.String("table", model.TableName()),
+		logger.Int("field_count", len(fields)),
+	)
+	t.logger.Debug("TX Create query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
+		logger.Any("fields", fields),
 	)
 
 	pkField := getPrimaryKeyField(model)
@@ -679,6 +770,16 @@ func (t *transactionWrapper) Create(ctx context.Context, model database.Model) *
 			WithDetail("table", model.TableName()).
 			WithDetail("pk_field", pkField)
 	}
+
+	t.logger.Info("Record created successfully in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("id", returnedID),
+	)
+	t.logger.Debug("Created record details in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("id", returnedID),
+		logger.Any("model", model),
+	)
 
 	return nil
 }
@@ -698,13 +799,26 @@ func (t *transactionWrapper) FindByID(ctx context.Context, model database.Model,
 		pkField,
 	)
 
-	t.logger.Debug("TX FindByID", logger.String("query", query))
+	t.logger.Info("Finding record by ID in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("id", id),
+	)
+	t.logger.Debug("TX FindByID query prepared", logger.String("query", query))
 
 	row := t.tx.QueryRowContext(ctx, query, id)
 	if err := scanStruct(row, model); err != nil {
 		t.logDatabaseError("FindByID", query, []interface{}{id}, err)
 		return wrapDatabaseError(err, "TX:FindByID", model.TableName(), query)
 	}
+	t.logger.Info("Record found successfully in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("id", id),
+	)
+	t.logger.Debug("Found record details in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("id", id),
+		logger.Any("model", model),
+	)
 	return nil
 }
 
@@ -743,7 +857,12 @@ func (t *transactionWrapper) Update(ctx context.Context, model database.Model) *
 	)
 
 	nargs := normalizeArgs(updateValues)
-	t.logger.Debug("TX Update",
+	t.logger.Info("Updating record in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int("field_count", len(setParts)),
+	)
+	t.logger.Debug("TX Update query prepared",
 		logger.String("query", query),
 		logger.String("table", model.TableName()),
 	)
@@ -766,6 +885,17 @@ func (t *transactionWrapper) Update(ctx context.Context, model database.Model) *
 			WithDetail("primary_key", model.PrimaryKey())
 	}
 
+	t.logger.Info("Record updated successfully in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int64("rows_affected", rows),
+	)
+	t.logger.Debug("Updated record details in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Any("model", model),
+	)
+
 	return nil
 }
 
@@ -777,7 +907,11 @@ func (t *transactionWrapper) Delete(ctx context.Context, model database.Model) *
 		pkField,
 	)
 
-	t.logger.Debug("TX Delete", logger.String("query", query))
+	t.logger.Info("Soft deleting record in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+	)
+	t.logger.Debug("TX Delete query prepared", logger.String("query", query))
 
 	result, err := t.tx.ExecContext(ctx, query, time.Now(), model.PrimaryKey())
 	if err != nil {
@@ -797,6 +931,12 @@ func (t *transactionWrapper) Delete(ctx context.Context, model database.Model) *
 			WithDetail("primary_key", model.PrimaryKey())
 	}
 
+	t.logger.Info("Record soft deleted successfully in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int64("rows_affected", rows),
+	)
+
 	return nil
 }
 
@@ -808,7 +948,11 @@ func (t *transactionWrapper) HardDelete(ctx context.Context, model database.Mode
 		pkField,
 	)
 
-	t.logger.Debug("TX HardDelete", logger.String("query", query))
+	t.logger.Info("Hard deleting record in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+	)
+	t.logger.Debug("TX HardDelete query prepared", logger.String("query", query))
 
 	result, err := t.tx.ExecContext(ctx, query, model.PrimaryKey())
 	if err != nil {
@@ -828,24 +972,41 @@ func (t *transactionWrapper) HardDelete(ctx context.Context, model database.Mode
 			WithDetail("primary_key", model.PrimaryKey())
 	}
 
+	t.logger.Info("Record hard deleted successfully in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("primary_key", model.PrimaryKey()),
+		logger.Int64("rows_affected", rows),
+	)
+
 	return nil
 }
 
 func (t *transactionWrapper) FindOne(ctx context.Context, model database.Model, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
-	t.logger.Debug("TX FindOne", logger.String("query", query))
+	t.logger.Info("Finding one record in transaction",
+		logger.String("table", model.TableName()),
+	)
+	t.logger.Debug("TX FindOne query", logger.String("query", query))
 
 	row := t.tx.QueryRowContext(ctx, query, nargs...)
 	if err := scanStruct(row, model); err != nil {
 		t.logDatabaseError("FindOne", query, nargs, err)
 		return wrapDatabaseError(err, "TX:FindOne", model.TableName(), query)
 	}
+	t.logger.Info("Record found successfully in transaction",
+		logger.String("table", model.TableName()),
+	)
+	t.logger.Debug("Found record details in transaction",
+		logger.String("table", model.TableName()),
+		logger.Any("model", model),
+	)
 	return nil
 }
 
 func (t *transactionWrapper) FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
-	t.logger.Debug("TX FindMany", logger.String("query", query))
+	t.logger.Info("Finding multiple records in transaction")
+	t.logger.Debug("TX FindMany query", logger.String("query", query))
 
 	rows, err := t.tx.QueryContext(ctx, query, nargs...)
 	if err != nil {
@@ -859,10 +1020,12 @@ func (t *transactionWrapper) FindMany(ctx context.Context, dest interface{}, que
 		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan results").
 			WithDetail("operation", "TX:FindMany")
 	}
+	t.logger.Info("Records found successfully in transaction")
+	t.logger.Debug("Found records in transaction", logger.Any("results", dest))
 	return nil
 }
 
-func (t *transactionWrapper) Query(ctx context.Context, query string, args ...interface{}) (database.Rows, error) {
+func (t *transactionWrapper) Query(ctx context.Context, query string, args ...interface{}) (database.Rows, *database.DBError) {
 	nargs := normalizeArgs(args)
 	t.logger.Debug("TX Query", logger.String("query", query))
 
@@ -880,7 +1043,7 @@ func (t *transactionWrapper) QueryRow(ctx context.Context, query string, args ..
 	return &rowWrapper{row: t.tx.QueryRowContext(ctx, query, nargs...), log: t.logger}
 }
 
-func (t *transactionWrapper) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, error) {
+func (t *transactionWrapper) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, *database.DBError) {
 	nargs := normalizeArgs(args)
 	t.logger.Debug("TX Exec", logger.String("query", query))
 
@@ -892,7 +1055,7 @@ func (t *transactionWrapper) Exec(ctx context.Context, query string, args ...int
 	return &resultWrapper{result: result}, nil
 }
 
-func (t *transactionWrapper) Commit() error {
+func (t *transactionWrapper) Commit() *database.DBError {
 	err := t.tx.Commit()
 	if err != nil {
 		t.logger.Error("Failed to commit transaction", logger.Error(err))
@@ -902,7 +1065,7 @@ func (t *transactionWrapper) Commit() error {
 	return nil
 }
 
-func (t *transactionWrapper) Rollback() error {
+func (t *transactionWrapper) Rollback() *database.DBError {
 	err := t.tx.Rollback()
 	if err != nil {
 		t.logger.Error("Failed to rollback transaction", logger.Error(err))
@@ -922,12 +1085,16 @@ func (r *rowsWrapper) Next() bool {
 	return r.rows.Next()
 }
 
-func (r *rowsWrapper) Scan(dest ...interface{}) error {
+func (r *rowsWrapper) Scan(dest ...interface{}) *database.DBError {
 	r.log.Debug("Scanning row", logger.Int("num_fields", len(dest)))
-	return r.rows.Scan(dest...)
+	if err := r.rows.Scan(dest...); err != nil {
+		r.log.Error("Failed to scan row", logger.Error(err))
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan row")
+	}
+	return nil
 }
 
-func (r *rowsWrapper) ScanAll(dest interface{}) error {
+func (r *rowsWrapper) ScanAll(dest interface{}) *database.DBError {
 	r.log.Debug("Scanning all rows into slice", logger.String("dest_type", fmt.Sprintf("%T", dest)))
 	if err := scanStructs(r.rows, dest, r.log); err != nil {
 		r.log.Error("Failed to scan rows", logger.Error(err))
@@ -954,12 +1121,21 @@ func (r *rowsWrapper) ScanOne(model database.Model) *database.DBError {
 	return nil
 }
 
-func (r *rowsWrapper) Close() error {
-	return r.rows.Close()
+func (r *rowsWrapper) Close() *database.DBError {
+	r.log.Debug("Closing rows")
+	if err := r.rows.Close(); err != nil {
+		r.log.Error("Failed to close rows", logger.Error(err))
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to close rows")
+	}
+	return nil
 }
 
-func (r *rowsWrapper) Err() error {
-	return r.rows.Err()
+func (r *rowsWrapper) Err() *database.DBError {
+	if err := r.rows.Err(); err != nil {
+		r.log.Error("Rows error", logger.Error(err))
+		return database.WrapDBError(err, database.CodeDBInternal, "rows error")
+	}
+	return nil
 }
 
 type rowWrapper struct {
@@ -967,12 +1143,16 @@ type rowWrapper struct {
 	log logger.Logger
 }
 
-func (r *rowWrapper) Scan(dest ...any) error {
+func (r *rowWrapper) Scan(dest ...any) *database.DBError {
 	r.log.Debug("Scanning single row", logger.Int("num_fields", len(dest)))
-	return r.row.Scan(dest...)
+	if err := r.row.Scan(dest...); err != nil {
+		r.log.Error("Failed to scan row", logger.Error(err))
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan row")
+	}
+	return nil
 }
 
-func (r *rowWrapper) ScanModel(model database.Model) error {
+func (r *rowWrapper) ScanModel(model database.Model) *database.DBError {
 	r.log.Debug("Scanning single row into model",
 		logger.String("table", model.TableName()),
 		logger.String("operation", "ScanOne"),
@@ -985,12 +1165,20 @@ type resultWrapper struct {
 	result sql.Result
 }
 
-func (r *resultWrapper) LastInsertId() (int64, error) {
-	return r.result.LastInsertId()
+func (r *resultWrapper) LastInsertId() (int64, *database.DBError) {
+	id, err := r.result.LastInsertId()
+	if err != nil {
+		return 0, database.WrapDBError(err, database.CodeDBInternal, "failed to get last insert id")
+	}
+	return id, nil
 }
 
-func (r *resultWrapper) RowsAffected() (int64, error) {
-	return r.result.RowsAffected()
+func (r *resultWrapper) RowsAffected() (int64, *database.DBError) {
+	count, err := r.result.RowsAffected()
+	if err != nil {
+		return 0, database.WrapDBError(err, database.CodeDBInternal, "failed to get rows affected")
+	}
+	return count, nil
 }
 
 func normalizeArgs(args []interface{}) []interface{} {
@@ -1151,7 +1339,7 @@ func formatPrimaryKey(value interface{}) string {
 	}
 }
 
-func scanStruct(row *sql.Row, dest interface{}) error {
+func scanStruct(row *sql.Row, dest interface{}) *database.DBError {
 	v := reflect.ValueOf(dest)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to struct")
@@ -1176,7 +1364,8 @@ func scanStruct(row *sql.Row, dest interface{}) error {
 				if field.Type.String() == "time.Time" {
 					dests = append(dests, fieldValue.Addr().Interface())
 				} else {
-					return fmt.Errorf("unsupported struct type: %s", field.Type.String())
+					return database.NewDBError(database.CodeDBInternal, "unsupported struct type").
+						WithDetail("type", field.Type.String())
 				}
 			} else {
 				dests = append(dests, fieldValue.Addr().Interface())
@@ -1184,10 +1373,13 @@ func scanStruct(row *sql.Row, dest interface{}) error {
 		}
 	}
 
-	return row.Scan(dests...)
+	if err := row.Scan(dests...); err != nil {
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan struct")
+	}
+	return nil
 }
 
-func scanStructRows(rows *sql.Rows, dest interface{}) error {
+func scanStructRows(rows *sql.Rows, dest interface{}) *database.DBError {
 	destValue := reflect.ValueOf(dest)
 	if destValue.Kind() != reflect.Ptr || destValue.Elem().Kind() != reflect.Struct {
 		return database.NewDBError(database.CodeDBInternal, "dest must be a pointer to struct")
@@ -1224,10 +1416,13 @@ func scanStructRows(rows *sql.Rows, dest interface{}) error {
 		}
 	}
 
-	return rows.Scan(dests...)
+	if err := rows.Scan(dests...); err != nil {
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to scan struct rows")
+	}
+	return nil
 }
 
-func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) error {
+func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) *database.DBError {
 	destValue := reflect.ValueOf(dest)
 	log.Debug("Scanning multiple rows into slice", logger.String("dest_type", destValue.Type().String()))
 	if destValue.Kind() != reflect.Ptr {
@@ -1270,7 +1465,7 @@ func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) error {
 		}
 
 		if err := rows.Scan(dests...); err != nil {
-			return err
+			return database.WrapDBError(err, database.CodeDBInternal, "failed to scan row")
 		}
 		if isPtr {
 			sliceValue.Set(reflect.Append(sliceValue, elemValue))
@@ -1278,7 +1473,10 @@ func scanStructs(rows *sql.Rows, dest interface{}, log logger.Logger) error {
 			sliceValue.Set(reflect.Append(sliceValue, elem))
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return database.WrapDBError(err, database.CodeDBInternal, "failed to iterate rows")
+	}
+	return nil
 }
 
 func wrapDatabaseError(err error, operation, table, query string) *database.DBError {

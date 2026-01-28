@@ -22,8 +22,8 @@ type Database interface {
 	FindOne(ctx context.Context, model Model, query string, args ...interface{}) *DBError
 	FindMany(ctx context.Context, dest any, query string, args ...interface{}) *DBError
 	FindOneAndUpdate(ctx context.Context, dest interface{}, query string, args ...interface{}) *DBError
-	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, error)
-	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, error)
+	Exists(ctx context.Context, model Model, query string, args ...interface{}) (bool, *DBError)
+	Count(ctx context.Context, model Model, query string, args ...interface{}) (int64, *DBError)
 
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, *DBError)
 	QueryRow(ctx context.Context, query string, args ...interface{}) Row
@@ -48,30 +48,30 @@ type Transaction interface {
 	FindOne(ctx context.Context, model Model, query string, args ...interface{}) *DBError
 	FindMany(ctx context.Context, dest interface{}, query string, args ...interface{}) *DBError
 
-	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (Rows, *DBError)
 	QueryRow(ctx context.Context, query string, args ...interface{}) Row
-	Exec(ctx context.Context, query string, args ...interface{}) (Result, error)
+	Exec(ctx context.Context, query string, args ...interface{}) (Result, *DBError)
 
-	Commit() error
-	Rollback() error
+	Commit() *DBError
+	Rollback() *DBError
 }
 
 type Rows interface {
 	Next() bool
-	Scan(dest ...interface{}) error
-	ScanAll(dest interface{}) error
-	Close() error
-	Err() error
+	Scan(dest ...interface{}) *DBError
+	ScanAll(dest interface{}) *DBError
+	Close() *DBError
+	Err() *DBError
 }
 
 type Row interface {
-	Scan(dest ...any) error
-	ScanModel(model Model) error
+	Scan(dest ...any) *DBError
+	ScanModel(model Model) *DBError
 }
 
 type Result interface {
-	LastInsertId() (int64, error)
-	RowsAffected() (int64, error)
+	LastInsertId() (int64, *DBError)
+	RowsAffected() (int64, *DBError)
 }
 
 type TxOptions struct {
