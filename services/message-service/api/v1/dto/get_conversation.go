@@ -66,17 +66,17 @@ type ConversationResponse struct {
 }
 
 type Message struct {
-	Content      string  `json:"content"`
-	MessageType  string  `json:"message_type"`
-	SenderUserID string  `json:"sender_user_id"`
-	SenderName   *string `json:"sender_name,omitempty"`
-	SenderAvatar *string `json:"sender_avatar,omitempty"`
+	Content      string `json:"content"`
+	MessageType  string `json:"message_type"`
+	SenderUserID string `json:"sender_user_id"`
+	SenderName   string `json:"sender_name,omitempty"`
+	SenderAvatar string `json:"sender_avatar,omitempty"`
 }
 
 type Participant struct {
-	UserID     string  `json:"user_id"`
-	UserName   *string `json:"user_name,omitempty"`
-	UserAvatar *string `json:"user_avatar,omitempty"`
+	UserID     string `json:"user_id"`
+	UserName   string `json:"user_name,omitempty"`
+	UserAvatar string `json:"user_avatar,omitempty"`
 }
 
 type GetConversationsResponse struct {

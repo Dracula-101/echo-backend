@@ -73,16 +73,16 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 			Content:      conversation.LastMessage.Content,
 			MessageType:  string(conversation.LastMessage.MessageType),
 			SenderUserID: conversation.LastMessage.SenderUserID.String(),
-			SenderName:   utils.PtrString(conversation.LastMessage.SenderName),
-			SenderAvatar: utils.PtrString(conversation.LastMessage.SenderAvatar),
+			SenderName:   conversation.LastMessage.SenderName,
+			SenderAvatar: conversation.LastMessage.SenderAvatar,
 		},
 		Participants: make([]dto.Participant, 0, len(conversation.Participants)),
 	}
 	for _, p := range conversation.Participants {
 		resp.Participants = append(resp.Participants, dto.Participant{
 			UserID:     p.UserID.String(),
-			UserName:   utils.PtrString(p.UserName),
-			UserAvatar: utils.PtrString(p.UserAvatar),
+			UserName:   p.UserName,
+			UserAvatar: p.UserAvatar,
 		})
 	}
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Conversation retrieved successfully", resp)

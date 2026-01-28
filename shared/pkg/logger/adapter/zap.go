@@ -686,6 +686,8 @@ func (l *zapLogger) makeZapFields(extra []logger.Field) []zap.Field {
 			zfs = append(zfs, zap.Float64(k, v))
 		case error:
 			zfs = append(zfs, zap.Error(v))
+		case any:
+			zfs = append(zfs, zap.Any(k, v))
 		default:
 			zfs = append(zfs, zap.Any(k, v))
 		}

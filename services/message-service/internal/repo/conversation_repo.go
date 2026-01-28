@@ -118,7 +118,6 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 			CanDeleteMessages: dp.CanDeleteMessages,
 		}
 	}
-	
 
 	lastMessageQuery := `
 		SELECT * FROM messages.messages
@@ -226,6 +225,12 @@ func (r *conversationRepository) GetConversationParticipants(ctx context.Context
 		participants = append(participants, *domain.NewConversationParticipant(cp, userName, avatarURL))
 	}
 
+	r.logger.Debug("Fetched conversation participants",
+		logger.String("conversation_id", conversationID.String()),
+		logger.Int("participant_count", len(participants)),
+		logger.Any("participants", participants),
+	)
+
 	return participants, nil
 }
 
@@ -284,6 +289,12 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 		}
 		domainConversations = append(domainConversations, *domainConv)
 	}
+
+	r.logger.Debug("Fetched user conversations",
+		logger.String("user_id", userID.String()),
+		logger.Int("conversation_count", len(domainConversations)),
+		logger.Any("conversations", domainConversations),
+	)
 
 	return domainConversations, nil
 }
