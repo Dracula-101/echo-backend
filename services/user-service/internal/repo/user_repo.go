@@ -148,7 +148,7 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	row := r.db.QueryRow(ctx, query, userID)
 
 	var profile dbModels.Profile
-	err := row.ScanOne(&profile)
+	err := row.ScanModel(&profile)
 	if err != nil {
 		if postgres.IsNoRowsError(err) {
 			r.log.Debug("Profile not found",
@@ -201,7 +201,7 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 	row := r.db.QueryRow(ctx, query, username)
 
 	var profile dbModels.Profile
-	err := row.ScanOne(&profile)
+	err := row.ScanModel(&profile)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			r.log.Debug("Profile not found by username",

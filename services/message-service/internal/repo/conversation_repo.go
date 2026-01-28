@@ -69,7 +69,7 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 	`
 	var conv dbModel.Conversation
 	err := r.db.QueryRow(ctx, query, conversationID)
-	if scanErr := err.ScanOne(&conv); scanErr != nil {
+	if scanErr := err.ScanModel(&conv); scanErr != nil {
 		if postgres.IsNoRowsError(scanErr) {
 			return nil, pkgErrors.FromError(
 				scanErr,
@@ -127,7 +127,7 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 	`
 	var lastMsg dbModel.Message
 	row := r.db.QueryRow(ctx, lastMessageQuery, conversationID)
-	if scanErr := row.ScanOne(&lastMsg); scanErr != nil {
+	if scanErr := row.ScanModel(&lastMsg); scanErr != nil {
 		if !postgres.IsNoRowsError(scanErr) {
 			r.logger.Error("Failed to get last message for conversation",
 				logger.Error(scanErr),

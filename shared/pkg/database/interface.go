@@ -66,7 +66,7 @@ type Rows interface {
 
 type Row interface {
 	Scan(dest ...any) error
-	ScanOne(model Model) error
+	ScanModel(model Model) error
 }
 
 type Result interface {

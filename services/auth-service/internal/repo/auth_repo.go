@@ -197,7 +197,7 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	query := `SELECT  * FROM auth.users WHERE email = $1 LIMIT 1`
 	row := r.db.QueryRow(ctx, query, email)
 	var user models.AuthUser
-	err := row.ScanOne(&user)
+	err := row.ScanModel(&user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			r.log.Debug("User not found by email",
@@ -250,7 +250,7 @@ func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domai
 	query := `SELECT * FROM auth.users WHERE id = $1 LIMIT 1`
 	row := r.db.QueryRow(ctx, query, userID)
 	var user models.AuthUser
-	err := row.ScanOne(&user)
+	err := row.ScanModel(&user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			r.log.Debug("User not found by ID",

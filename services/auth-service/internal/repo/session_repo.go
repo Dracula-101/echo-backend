@@ -61,7 +61,7 @@ func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*m
 	)
 	var session models.AuthSession
 	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1"
-	err := r.db.QueryRow(ctx, query, userID).ScanOne(&session)
+	err := r.db.QueryRow(ctx, query, userID).ScanModel(&session)
 	if err != nil {
 		if postgres.IsNoRowsError(err) {
 			r.log.Debug("No active session found for user",

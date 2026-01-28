@@ -972,7 +972,7 @@ func (r *rowWrapper) Scan(dest ...any) error {
 	return r.row.Scan(dest...)
 }
 
-func (r *rowWrapper) ScanOne(model database.Model) error {
+func (r *rowWrapper) ScanModel(model database.Model) error {
 	r.log.Debug("Scanning single row into model",
 		logger.String("table", model.TableName()),
 		logger.String("operation", "ScanOne"),

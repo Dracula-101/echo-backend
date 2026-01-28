@@ -363,7 +363,7 @@ func (r *messageRepository) GetMessageByID(ctx context.Context, messageID string
 	`
 
 	var message dbModels.Message
-	err := r.db.QueryRow(ctx, query, messageID).ScanOne(&message)
+	err := r.db.QueryRow(ctx, query, messageID).ScanModel(&message)
 	if err != nil {
 		r.logger.Error("failed to fetch message",
 			logger.String("message_id", messageID),
