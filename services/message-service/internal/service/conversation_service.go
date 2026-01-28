@@ -5,6 +5,7 @@ import (
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
 	"echo-backend/services/message-service/internal/repo"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 
 	"github.com/google/uuid"
@@ -69,7 +70,7 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 		return nil, &msgError.MessageError{
 			Message: "Conversation not found",
 			Code:    msgError.CodeConversationNotFound,
-			Error:   msgError.ConversationNotFoundError,
+			Error:   pkgErrors.New(msgError.CodeConversationNotFound.String(), "conversation does not exist"),
 		}
 	}
 

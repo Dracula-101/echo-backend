@@ -4,6 +4,7 @@ import (
 	"context"
 	"echo-backend/services/message-service/internal/domain"
 	msgErr "echo-backend/services/message-service/internal/error"
+	"errors"
 	"shared/pkg/cache"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
@@ -71,7 +72,7 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 	if scanErr := err.ScanOne(&conv); scanErr != nil {
 		if postgres.IsNoRowsError(scanErr) {
 			return nil, pkgErrors.FromError(
-				msgErr.ConversationNotFoundError,
+				scanErr,
 				pkgErrors.CodeNotFound,
 				"Conversation not found",
 			)
@@ -495,7 +496,7 @@ func (r *conversationRepository) ValidateConversationParticipant(conversationID 
 		)
 		if postgres.IsNoRowsError(dbErr) {
 			err = pkgErrors.FromError(
-				msgErr.ParticipantNotInConversationError,
+				dbErr,
 				pkgErrors.CodeNotFound,
 				"Participant not in conversation",
 			)
@@ -509,28 +510,28 @@ func (r *conversationRepository) ValidateConversationParticipant(conversationID 
 	} else {
 		if leftAt != nil && utils.IsValidTime(*leftAt) {
 			err = pkgErrors.FromError(
-				msgErr.ParticipantLeftConversationError,
+				errors.New("participant has left the conversation"),
 				pkgErrors.CodePermissionDenied,
 				"participant has left the conversation",
 			)
 		}
 		if removedAt != nil && utils.IsValidTime(*removedAt) {
 			err = pkgErrors.FromError(
-				msgErr.ParticipantRemovedFromConversationError,
+				errors.New("participant has been removed from the conversation"),
 				pkgErrors.CodePermissionDenied,
 				"Participant has been removed from the conversation",
 			)
 		}
 		if !canSendMessages {
 			err = pkgErrors.FromError(
-				msgErr.ParticipantNotAllowedToSendMessagesError,
+				errors.New("participant is not allowed to send messages"),
 				pkgErrors.CodePermissionDenied,
 				"Participant is not allowed to send messages",
 			)
 		}
 		if !isActive {
 			err = pkgErrors.FromError(
-				msgErr.ConversationInactiveError,
+				errors.New("conversation is inactive"),
 				pkgErrors.CodePermissionDenied,
 				"Conversation is inactive",
 			)

@@ -204,31 +204,31 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 
 func (s *messageService) handleValidationError(dbErr pkgErrors.AppError) *msgError.MessageError {
 	switch dbErr.Code() {
-	case msgError.ParticipantNotInConversationError.Code():
+	case msgError.CodeBlockedUserNotFound.String():
 		return &msgError.MessageError{
 			Message: "Participant not in conversation",
 			Code:    msgError.CodeParticipantNotInConversation,
 			Error:   dbErr,
 		}
-	case msgError.ParticipantLeftConversationError.Code():
+	case msgError.CodeParticipantLeftConversation.String():
 		return &msgError.MessageError{
 			Message: "Participant has left the conversation",
 			Code:    msgError.CodeParticipantLeftConversation,
 			Error:   dbErr,
 		}
-	case msgError.ParticipantRemovedFromConversationError.Code():
+	case msgError.CodeParticipantRemovedFromConversation.String():
 		return &msgError.MessageError{
 			Message: "Participant has been removed from the conversation",
 			Code:    msgError.CodeParticipantRemovedFromConversation,
 			Error:   dbErr,
 		}
-	case msgError.ConversationInactiveError.Code():
+	case msgError.CodeConversationInactive.String():
 		return &msgError.MessageError{
 			Message: "Conversation is inactive",
 			Code:    msgError.CodeConversationInactive,
 			Error:   dbErr,
 		}
-	case msgError.ParticipantNotAllowedToSendMessagesError.Code():
+	case msgError.CodeParticipantNotAllowedToSendMessages.String():
 		return &msgError.MessageError{
 			Message: "Participant is not allowed to send messages",
 			Code:    msgError.CodeParticipantNotAllowedToSendMessages,
