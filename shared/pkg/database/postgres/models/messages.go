@@ -55,7 +55,7 @@ type ConversationParticipant struct {
 	UserID              string          `db:"user_id" json:"user_id"`
 	Role                ParticipantRole `db:"role" json:"role"`
 	Nickname            *string         `db:"nickname" json:"nickname,omitempty"`
-	CustomNotifications bool            `db:"custom_notifications" json:"custom_notifications"`
+	CustomNotifications *bool           `db:"custom_notifications" json:"custom_notifications,omitempty"`
 	IsMuted             bool            `db:"is_muted" json:"is_muted"`
 	MutedUntil          *time.Time      `db:"muted_until" json:"muted_until,omitempty"`
 	IsPinned            bool            `db:"is_pinned" json:"is_pinned"`

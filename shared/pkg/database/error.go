@@ -31,6 +31,7 @@ const (
 	CodeDBDuplicateKey         = "DB_DUPLICATE_KEY"
 	CodeDBForeignKey           = "DB_FOREIGN_KEY_VIOLATION"
 	CodeDBConstraint           = "DB_CONSTRAINT_VIOLATION"
+	CodeDBDuplicate            = "DB_DUPLICATE_ENTRY"
 	CodeDBNotNull              = "DB_NOT_NULL_VIOLATION"
 	CodeDBCheckViolation       = "DB_CHECK_VIOLATION"
 	CodeDBDataException        = "DB_DATA_EXCEPTION"

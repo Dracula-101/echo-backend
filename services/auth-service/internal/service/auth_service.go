@@ -252,7 +252,7 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 	)
 
 	user, err := s.repo.GetUserByEmail(ctx, email)
-	if err != nil && !postgres.IsNoRowsError(err) {
+	if err != nil && !postgres.IsNotFoundError(err) {
 		return nil, &error.AuthError{
 			Message: "Failed to get user by email",
 			Code:    authErrors.CodeDatabaseError,
@@ -463,7 +463,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*d
 	)
 
 	user, err2 := s.repo.GetUserByID(ctx, userID)
-	if err2 != nil && !postgres.IsNoRowsError(err2) {
+	if err2 != nil && !postgres.IsNotFoundError(err2) {
 		return nil, &error.AuthError{
 			Message: "Failed to get user by ID",
 			Code:    authErrors.CodeDatabaseError,

@@ -4,418 +4,304 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
-	db "shared/pkg/database"
+	"shared/pkg/database"
 
 	"github.com/lib/pq"
 )
 
+// PostgreSQL error code classes
 const (
-	PQCodeUniqueViolation     = "23505"
-	PQCodeForeignKeyViolation = "23503"
-	PQCodeNotNullViolation    = "23502"
-	PQCodeCheckViolation      = "23514"
-	PQCodeExclusionViolation  = "23P01"
+	// Class 23 - Integrity Constraint Violation
+	pqClassIntegrityConstraint = "23"
 
-	PQCodeSerializationFailure = "40001"
-	PQCodeDeadlockDetected     = "40P01"
-
-	PQCodeConnectionException = "08000"
-	PQCodeConnectionFailure   = "08006"
-
-	PQCodeQueryCanceled = "57014"
-
-	PQCodeDiskFull    = "53100"
-	PQCodeOutOfMemory = "53200"
+	// Specific error codes
+	pqCodeUniqueViolation     = "23505"
+	pqCodeForeignKeyViolation = "23503"
+	pqCodeNotNullViolation    = "23502"
+	pqCodeCheckViolation      = "23514"
 )
 
-func ConvertPQError(err error, operation, query string) error {
+// wrapDatabaseError converts a raw error into a structured DBError with context.
+func wrapDatabaseError(err error, operation, table, query string) *database.DBError {
 	if err == nil {
 		return nil
 	}
 
-	var dbErr *db.DBError
+	// Already a DBError, return as-is
+	var dbErr *database.DBError
 	if errors.As(err, &dbErr) {
-		return err
+		return dbErr
 	}
 
-	if errors.Is(err, sql.ErrNoRows) {
-		return db.NewDBError(db.CodeDBNoRows, "No rows found").
+	// Standard SQL errors
+	if sqlErr := handleSQLError(err, operation, table, query); sqlErr != nil {
+		return sqlErr
+	}
+
+	// Context errors (timeout, cancellation)
+	if ctxErr := handleContextError(err, operation, table, query); ctxErr != nil {
+		return ctxErr
+	}
+
+	// Connection errors
+	if connErr := handleConnectionError(err, operation, table); connErr != nil {
+		return connErr
+	}
+
+	// PostgreSQL-specific errors
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return convertPQError(pqErr, operation, table, query)
+	}
+
+	// Generic fallback
+	return database.NewDBError(database.CodeDBInternal, "database operation failed").
+		WithOperation(operation).
+		WithTable(table).
+		WithQuery(query).
+		WithWrapped(err)
+}
+
+// handleSQLError handles standard database/sql errors.
+func handleSQLError(err error, operation, table, query string) *database.DBError {
+	switch err {
+	case sql.ErrNoRows:
+		return database.NewDBError(database.CodeDBNoRows, "no rows found").
 			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithWrapped(err)
+
+	case sql.ErrTxDone:
+		return database.NewDBError(database.CodeDBTransaction, "transaction already completed").
+			WithOperation(operation).
+			WithTable(table).
+			WithWrapped(err)
+
+	case sql.ErrConnDone:
+		return database.NewDBError(database.CodeDBConnection, "connection already closed").
+			WithOperation(operation).
+			WithTable(table).
+			WithWrapped(err)
+	}
+
+	return nil
+}
+
+// handleContextError handles context-related errors.
+func handleContextError(err error, operation, table, query string) *database.DBError {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return database.NewDBError(database.CodeDBTimeout, "operation timed out").
+			WithOperation(operation).
+			WithTable(table).
 			WithQuery(query).
 			WithWrapped(err)
 	}
 
-	if errors.Is(err, context.DeadlineExceeded) {
-		return db.TimeoutError(operation, err).WithQuery(query)
-	}
-
-	var pqErr *pq.Error
-	if !errors.As(err, &pqErr) {
-		return db.QueryError(query, err).WithOperation(operation)
-	}
-
-	var dbError *db.DBError
-
-	switch pqErr.Code {
-	case PQCodeUniqueViolation:
-		dbError = db.NewDBError(db.CodeDBDuplicateKey, "Duplicate key violation")
-
-	case PQCodeForeignKeyViolation:
-		dbError = db.NewDBError(db.CodeDBForeignKey, "Foreign key constraint violation")
-
-	case PQCodeNotNullViolation:
-		dbError = db.NewDBError(db.CodeDBNotNull, "Not null constraint violation")
-
-	case PQCodeCheckViolation:
-		dbError = db.NewDBError(db.CodeDBCheckViolation, "Check constraint violation")
-
-	case PQCodeExclusionViolation:
-		dbError = db.NewDBError(db.CodeDBConstraint, "Exclusion constraint violation")
-
-	case PQCodeDeadlockDetected:
-		dbError = db.NewDBError(db.CodeDBDeadlock, "Deadlock detected")
-
-	case PQCodeSerializationFailure:
-		dbError = db.NewDBError(db.CodeDBSerializationFailure, "Serialization failure")
-
-	case PQCodeConnectionException, PQCodeConnectionFailure:
-		dbError = db.NewDBError(db.CodeDBConnection, "Database connection error")
-
-	case PQCodeQueryCanceled:
-		dbError = db.NewDBError(db.CodeDBTimeout, "Query canceled")
-
-	case PQCodeDiskFull:
-		dbError = db.NewDBError(db.CodeDBDiskFull, "Disk full")
-
-	case PQCodeOutOfMemory:
-		dbError = db.NewDBError(db.CodeDBOutOfMemory, "Out of memory")
-
-	default:
-		dbError = db.NewDBError(db.CodeDBInternal, pqErr.Message)
-	}
-
-	dbError.WithOperation(operation).
-		WithQuery(query).
-		WithSQLState(string(pqErr.Code)).
-		WithWrapped(err)
-
-	if pqErr.Table != "" {
-		dbError.WithTable(pqErr.Table)
-	}
-	if pqErr.Column != "" {
-		dbError.WithColumn(pqErr.Column)
-	}
-	if pqErr.Constraint != "" {
-		dbError.WithConstraint(pqErr.Constraint)
-	}
-	if pqErr.Detail != "" {
-		dbError.WithDetail("pg_detail", pqErr.Detail)
-	}
-	if pqErr.Hint != "" {
-		dbError.WithDetail("pg_hint", pqErr.Hint)
-	}
-	if pqErr.Where != "" {
-		dbError.WithDetail("pg_where", pqErr.Where)
-	}
-	if pqErr.Schema != "" {
-		dbError.WithDetail("pg_schema", pqErr.Schema)
-	}
-	if pqErr.DataTypeName != "" {
-		dbError.WithDetail("pg_datatype", pqErr.DataTypeName)
-	}
-
-	return dbError
-}
-
-func IsNoRowsError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBNoRows
-	}
-	return errors.Is(err, sql.ErrNoRows)
-}
-
-func IsDuplicateKeyError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBDuplicateKey
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeUniqueViolation
-	}
-
-	return false
-}
-
-func IsForeignKeyError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBForeignKey
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeForeignKeyViolation
-	}
-
-	return false
-}
-
-func IsNotNullError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBNotNull
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeNotNullViolation
-	}
-
-	return false
-}
-
-func IsCheckViolationError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBCheckViolation
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeCheckViolation
-	}
-
-	return false
-}
-
-func IsConstraintError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		switch dbErr.Code() {
-		case db.CodeDBConstraint, db.CodeDBDuplicateKey, db.CodeDBForeignKey,
-			db.CodeDBNotNull, db.CodeDBCheckViolation:
-			return true
-		}
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		switch pqErr.Code {
-		case PQCodeUniqueViolation, PQCodeForeignKeyViolation,
-			PQCodeNotNullViolation, PQCodeCheckViolation, PQCodeExclusionViolation:
-			return true
-		}
-	}
-
-	return false
-}
-
-func IsDeadlockError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBDeadlock
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeDeadlockDetected
-	}
-
-	return false
-}
-
-func IsSerializationError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBSerializationFailure
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeSerializationFailure
-	}
-
-	return false
-}
-
-func IsConnectionError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBConnection
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeConnectionException ||
-			pqErr.Code == PQCodeConnectionFailure
-	}
-
-	return false
-}
-
-func IsTimeoutError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Code() == db.CodeDBTimeout
-	}
-
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == PQCodeQueryCanceled
-	}
-
-	return false
-}
-
-func IsRetryableError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.IsRetryable()
-	}
-
-	return IsDeadlockError(err) || IsSerializationError(err) ||
-		IsTimeoutError(err) || IsConnectionError(err)
-}
-
-func IsClientError(err error) bool {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.IsClientError()
-	}
-
-	return IsConstraintError(err)
-}
-
-// Extraction functions for error details
-
-func GetConstraintName(err error) string {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Constraint()
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Constraint
-	}
-
-	return ""
-}
-
-func GetTableName(err error) string {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Table()
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Table
-	}
-
-	return ""
-}
-
-func GetColumnName(err error) string {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.Column()
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Column
-	}
-
-	return ""
-}
-
-func GetSQLState(err error) string {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		return dbErr.SQLState()
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return string(pqErr.Code)
-	}
-
-	return ""
-}
-
-func ExtractPQDetails(err error) map[string]interface{} {
-	var dbErr *db.DBError
-	if errors.As(err, &dbErr) {
-		details := make(map[string]interface{})
-
-		for k, v := range dbErr.Details() {
-			details[k] = v
-		}
-
-		if dbErr.Table() != "" {
-			details["table"] = dbErr.Table()
-		}
-		if dbErr.Column() != "" {
-			details["column"] = dbErr.Column()
-		}
-		if dbErr.Constraint() != "" {
-			details["constraint"] = dbErr.Constraint()
-		}
-		if dbErr.SQLState() != "" {
-			details["sql_state"] = dbErr.SQLState()
-		}
-		if dbErr.Operation() != "" {
-			details["operation"] = dbErr.Operation()
-		}
-
-		return details
-	}
-
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		details := make(map[string]interface{})
-
-		if pqErr.Table != "" {
-			details["table"] = pqErr.Table
-		}
-		if pqErr.Column != "" {
-			details["column"] = pqErr.Column
-		}
-		if pqErr.Constraint != "" {
-			details["constraint"] = pqErr.Constraint
-		}
-		if pqErr.Detail != "" {
-			details["detail"] = pqErr.Detail
-		}
-		if pqErr.Hint != "" {
-			details["hint"] = pqErr.Hint
-		}
-		if pqErr.Where != "" {
-			details["where"] = pqErr.Where
-		}
-		if pqErr.Schema != "" {
-			details["schema"] = pqErr.Schema
-		}
-		if pqErr.DataTypeName != "" {
-			details["datatype"] = pqErr.DataTypeName
-		}
-		details["sql_state"] = string(pqErr.Code)
-
-		return details
+	if errors.Is(err, context.Canceled) {
+		return database.NewDBError(database.CodeDBTimeout, "operation canceled").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithWrapped(err)
 	}
 
 	return nil
+}
+
+// handleConnectionError handles network/connection errors.
+func handleConnectionError(err error, operation, table string) *database.DBError {
+	errMsg := err.Error()
+
+	connectionIndicators := []string{
+		"connection refused",
+		"no such host",
+		"network is unreachable",
+		"connection reset",
+		"broken pipe",
+		"dial tcp",
+	}
+
+	for _, indicator := range connectionIndicators {
+		if strings.Contains(errMsg, indicator) {
+			return database.NewDBError(database.CodeDBConnection, "connection failed").
+				WithOperation(operation).
+				WithTable(table).
+				WithWrapped(err)
+		}
+	}
+
+	return nil
+}
+
+// convertPQError converts a PostgreSQL error to a structured DBError.
+func convertPQError(pqErr *pq.Error, operation, table, query string) *database.DBError {
+	code := string(pqErr.Code)
+
+	// Handle by specific error code first
+	switch code {
+	case pqCodeUniqueViolation:
+		return database.NewDBError(database.CodeDBDuplicate, "duplicate key violation").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithDetail("constraint", pqErr.Constraint).
+			WithDetail("column", pqErr.Column).
+			WithWrapped(pqErr)
+
+	case pqCodeForeignKeyViolation:
+		return database.NewDBError(database.CodeDBConstraint, "foreign key violation").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithDetail("constraint", pqErr.Constraint).
+			WithDetail("detail", pqErr.Detail).
+			WithWrapped(pqErr)
+
+	case pqCodeNotNullViolation:
+		return database.NewDBError(database.CodeDBConstraint, "not null violation").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithDetail("column", pqErr.Column).
+			WithWrapped(pqErr)
+
+	case pqCodeCheckViolation:
+		return database.NewDBError(database.CodeDBConstraint, "check constraint violation").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithDetail("constraint", pqErr.Constraint).
+			WithWrapped(pqErr)
+	}
+
+	// Handle by error class
+	switch pqErr.Code.Class() {
+	case pqClassIntegrityConstraint:
+		return database.NewDBError(database.CodeDBConstraint, "integrity constraint violation").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithDetail("constraint", pqErr.Constraint).
+			WithWrapped(pqErr)
+
+	case "08": // Connection Exception
+		return database.NewDBError(database.CodeDBConnection, "connection exception").
+			WithOperation(operation).
+			WithTable(table).
+			WithWrapped(pqErr)
+
+	case "42": // Syntax Error or Access Rule Violation
+		return database.NewDBError(database.CodeDBInternal, "syntax or access error").
+			WithOperation(operation).
+			WithTable(table).
+			WithQuery(query).
+			WithDetail("pg_message", pqErr.Message).
+			WithWrapped(pqErr)
+
+	case "53": // Insufficient Resources
+		return database.NewDBError(database.CodeDBInternal, "insufficient resources").
+			WithOperation(operation).
+			WithTable(table).
+			WithDetail("pg_message", pqErr.Message).
+			WithWrapped(pqErr)
+
+	case "57": // Operator Intervention
+		return database.NewDBError(database.CodeDBConnection, "operator intervention").
+			WithOperation(operation).
+			WithTable(table).
+			WithDetail("pg_message", pqErr.Message).
+			WithWrapped(pqErr)
+
+	case "58": // System Error
+		return database.NewDBError(database.CodeDBInternal, "system error").
+			WithOperation(operation).
+			WithTable(table).
+			WithDetail("pg_message", pqErr.Message).
+			WithWrapped(pqErr)
+	}
+
+	// Default PostgreSQL error
+	return database.NewDBError(database.CodeDBInternal, pqErr.Message).
+		WithOperation(operation).
+		WithTable(table).
+		WithQuery(query).
+		WithDetail("pg_code", code).
+		WithDetail("pg_severity", pqErr.Severity).
+		WithWrapped(pqErr)
+}
+
+// ConvertPQError is exported for use by other packages that need to convert pq errors.
+func ConvertPQError(err error, operation, query string) error {
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		return err
+	}
+
+	return convertPQError(pqErr, operation, "", query)
+}
+
+// IsUniqueViolation checks if an error is a unique constraint violation.
+func IsUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return string(pqErr.Code) == pqCodeUniqueViolation
+	}
+
+	var dbErr *database.DBError
+	if errors.As(err, &dbErr) {
+		return dbErr.Code() == database.CodeDBDuplicate
+	}
+
+	return false
+}
+
+// IsForeignKeyViolation checks if an error is a foreign key violation.
+func IsForeignKeyViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return string(pqErr.Code) == pqCodeForeignKeyViolation
+	}
+
+	return false
+}
+
+// IsNotFoundError checks if an error indicates no rows were found.
+func IsNotFoundError(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+
+	var dbErr *database.DBError
+	if errors.As(err, &dbErr) {
+		return dbErr.Code() == database.CodeDBNoRows
+	}
+
+	return false
+}
+
+// IsConnectionError checks if an error is connection-related.
+func IsConnectionError(err error) bool {
+	var dbErr *database.DBError
+	if errors.As(err, &dbErr) {
+		return dbErr.Code() == database.CodeDBConnection
+	}
+
+	return false
+}
+
+// IsTimeoutError checks if an error is timeout-related.
+func IsTimeoutError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+
+	var dbErr *database.DBError
+	if errors.As(err, &dbErr) {
+		return dbErr.Code() == database.CodeDBTimeout
+	}
+
+	return false
 }

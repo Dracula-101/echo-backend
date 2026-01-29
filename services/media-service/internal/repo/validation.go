@@ -48,7 +48,7 @@ func (r *FileRepository) AlbumExistsAndOwned(ctx context.Context, albumID, userI
 	var exists bool
 	err := r.db.QueryRow(ctx, query, albumID, userID).Scan(&exists)
 	if err != nil {
-		if postgres.IsNoRowsError(err) {
+		if postgres.IsNotFoundError(err) {
 			return false, nil
 		}
 		r.log.Error("Failed to check album ownership",
@@ -70,7 +70,7 @@ func (r *FileRepository) FileExistsAndOwned(ctx context.Context, fileID, userID 
 	var exists bool
 	err := r.db.QueryRow(ctx, query, fileID, userID).Scan(&exists)
 	if err != nil {
-		if postgres.IsNoRowsError(err) {
+		if postgres.IsNotFoundError(err) {
 			return false, nil
 		}
 		r.log.Error("Failed to check file ownership",

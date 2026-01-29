@@ -9,7 +9,7 @@ up:
 	@echo "$(BOLD)$(BRIGHT_BLUE)$(STAR) Starting All Services$(NC)"
 	@echo "$(DIM)Environment: $(ENV_NAME)$(NC)"
 	@echo ""
-	@$(DOCKER_COMPOSE) up -d --build
+	@$(DOCKER_COMPOSE) up -d
 	@sleep 2
 	@echo ""
 	@echo "$(BRIGHT_GREEN)$(CHECK) Services started successfully$(NC)"

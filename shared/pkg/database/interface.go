@@ -59,6 +59,8 @@ type Transaction interface {
 type Rows interface {
 	Next() bool
 	Scan(dest ...interface{}) *DBError
+	ScanModel(model Model) *DBError
+	ScanModelAndAppend(model Model, args ...interface{}) *DBError
 	ScanAll(dest interface{}) *DBError
 	Close() *DBError
 	Err() *DBError

@@ -150,7 +150,7 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	var profile dbModels.Profile
 	err := row.ScanModel(&profile)
 	if err != nil {
-		if postgres.IsNoRowsError(err) {
+		if postgres.IsNotFoundError(err) {
 			r.log.Debug("Profile not found",
 				logger.String("service", userErrors.ServiceName),
 				logger.String("user_id", userID),
@@ -391,7 +391,7 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 
 	var profile dbModels.Profile
 	if err := r.db.FindOneAndUpdate(ctx, &profile, query, args...); err != nil {
-		if postgres.IsNoRowsError(err) {
+		if postgres.IsNotFoundError(err) {
 			r.log.Debug("No profile updated - not found",
 				logger.String("service", userErrors.ServiceName),
 				logger.String("user_id", params.UserID),

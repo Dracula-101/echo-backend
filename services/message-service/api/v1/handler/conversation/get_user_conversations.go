@@ -1,7 +1,9 @@
 package conversation
 
 import (
+	"echo-backend/services/message-service/api/v1/dto"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	"shared/server/request"
 	"shared/server/response"
 
@@ -31,5 +33,34 @@ func (h *ConversationHandler) GetUserConversations(handler *request.RequestHandl
 		return
 	}
 
-	response.JSONWithMessage(context, handler.Request(), handler.Writer(), response.StatusOK, "User conversations fetched successfully", conversations)
+	responseData := make([]interface{}, len(conversations))
+	for i, conv := range conversations {
+		participants := make([]dto.Participant, len(conv.Participants))
+		for j, p := range conv.Participants {
+			participants[j] = dto.Participant{
+				UserID:     p.UserID.String(),
+				UserName:   p.UserName,
+				UserAvatar: p.UserAvatar,
+			}
+		}
+		responseData[i] = dto.ConversationResponse{
+			ID:               conv.ID.String(),
+			Title:            utils.PtrString(conv.Title),
+			Description:      utils.PtrString(conv.Description),
+			ConversationType: string(conv.ConversationType),
+			AvatarURL:        conv.AvatarURL,
+			UnreadCount:      conv.UnreadCount,
+			MemberCount:      conv.MemberCount,
+			MessageCount:     conv.MessageCount,
+			LastMessage: &dto.Message{
+				Content:      conv.LastMessage.Content,
+				MessageType:  string(conv.LastMessage.MessageType),
+				SenderUserID: conv.LastMessage.SenderUserID.String(),
+				SenderName:   conv.LastMessage.SenderName,
+				SenderAvatar: conv.LastMessage.SenderAvatar,
+			},
+			Participants: participants,
+		}
+	}
+	response.JSONWithMessage(context, handler.Request(), handler.Writer(), response.StatusOK, "User conversations fetched successfully", responseData)
 }

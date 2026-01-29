@@ -35,7 +35,7 @@ type Conversation struct {
 	LastMessage  *Message
 }
 
-func NewConversation(model db.Conversation, participants []db.ConversationParticipant, lastMessage *db.Message) *Conversation {
+func NewConversation(model db.Conversation, participants []ConversationParticipant, lastMessage *Message) *Conversation {
 	conv := &Conversation{
 		ID:               uuid.MustParse(model.ID),
 		ConversationType: ConversationType(model.ConversationType),
@@ -51,19 +51,12 @@ func NewConversation(model db.Conversation, participants []db.ConversationPartic
 		LastMessageID:    utils.SafeParsePtrUUID(model.LastMessageID),
 		LastMessageAt:    model.LastMessageAt,
 		LastActivityAt:   utils.Ptr(model.LastActivityAt),
+		Participants:     participants,
+		LastMessage:      lastMessage,
 		CreatedAt:        model.CreatedAt,
 		UpdatedAt:        model.UpdatedAt,
 		DeletedAt:        model.DeletedAt,
 	}
-
-	conv.Participants = make([]ConversationParticipant, len(participants))
-	for i, p := range participants {
-		conv.Participants[i] = *NewConversationParticipant(p, "", "")
-	}
-	if lastMessage != nil {
-		conv.LastMessage = utils.Ptr(NewMessage(*lastMessage))
-	}
-
 	return conv
 }
 
