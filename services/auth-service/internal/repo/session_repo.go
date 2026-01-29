@@ -152,6 +152,7 @@ func (r *SessionRepo) GetAllSessionsByUserId(ctx context.Context, userID string)
 func (r *SessionRepo) UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Updating session",
 		logger.String("session_id", session.ID),
+		logger.Any("updates", session),
 	)
 	updateQuery := `UPDATE auth.sessions SET
 		refresh_token = COALESCE($1, refresh_token),

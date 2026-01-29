@@ -122,15 +122,22 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		PushEnabled: loginRequest.FCMToken != nil || loginRequest.APNSToken != nil,
 	})
 
-	session := &domain.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID, deviceInfo.ID)
 	if sessErr != nil {
 		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessErr)
 		return
 	}
+	session := &domain.CreateSessionOutput{
+		SessionId: activeSession.ID,
+	}
 
 	if activeSession == nil {
+		h.log.Info("No active session found, creating new session",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", userResult.User.ID),
+		)
 		isMobile := deviceInfo.IsMobile()
 		createdSession, err := h.sessionService.CreateSession(ctx, domain.CreateSessionInput{
 			UserID:          userResult.User.ID,
@@ -165,7 +172,28 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		}
 		session = createdSession
 	} else {
-		
+		h.log.Info("Active session found, updating session tokens",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", userResult.User.ID),
+			logger.String("session_id", activeSession.ID),
+		)
+		sessionData, _ := h.sessionService.UpdateSession(ctx, userResult.User.ID, session.SessionId, domain.UpdateSession{
+			FCMToken:    utils.SafePtrString(loginRequest.FCMToken),
+			APNSToken:   utils.SafePtrString(loginRequest.APNSToken),
+			RevokedAt:   nil,
+			PushEnabled: utils.PtrBool(utils.DerefString(loginRequest.FCMToken) != "" || utils.DerefString(loginRequest.APNSToken) != ""),
+		})
+		h.log.Info("Session tokens updated successfully",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", userResult.User.ID),
+			logger.Any("session", sessionData),
+		)
+		session = &domain.CreateSessionOutput{
+			SessionId:    sessionData.ID,
+			SessionToken: sessionData.SessionToken,
+		}
 	}
 
 	h.log.Info("Login successful",

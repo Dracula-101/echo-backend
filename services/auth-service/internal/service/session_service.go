@@ -10,7 +10,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"shared/pkg/cache"
 	"shared/pkg/database/postgres/models"
@@ -211,20 +210,8 @@ func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessi
 		logger.String("session_id", sessionID),
 	)
 
-	// Fetch existing session
-	session, err := s.repo.GetSessionByUserId(ctx, userID, nil)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, authErrors.CodeSessionUpdateFailed, "failed to fetch session for update").
-			WithService(authErrors.ServiceName).
-			WithDetail("session_id", sessionID)
-	}
-
-	if session == nil {
-		return nil, pkgErrors.FromError(errors.New("session not found"), authErrors.CodeSessionNotFound, "session not found").
-			WithService(authErrors.ServiceName).
-			WithDetail("session_id", sessionID)
-	}
 	var update domain.UpdateAuthSession
+	update.ID = sessionID
 	if updates.FCMToken != nil {
 		update.FCMToken = updates.FCMToken
 	}
@@ -240,7 +227,7 @@ func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessi
 		logger.String("session_id", sessionID),
 	)
 	// Save updated session
-	session, err = s.repo.UpdateSession(ctx, &update)
+	session, err := s.repo.UpdateSession(ctx, &update)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, authErrors.CodeSessionUpdateFailed, "failed to update session in database").
 			WithService(authErrors.ServiceName).
