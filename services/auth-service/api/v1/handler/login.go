@@ -155,7 +155,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			Metadata: map[string]any{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
-				"device-id":      device.DeviceID,
+				"device-id":      device.ID,
 			},
 		})
 		if err != nil {
@@ -165,11 +165,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		}
 		session = createdSession
 	} else {
-		session.SessionId = activeSession.ID
-		session.SessionToken = activeSession.SessionToken
-		if activeSession.RefreshToken != "" {
-			userResult.RefreshToken = activeSession.RefreshToken
-		}
+		
 	}
 
 	h.log.Info("Login successful",

@@ -7,6 +7,7 @@ import (
 )
 
 type UserDevice struct {
+	ID                 string
 	UserID             string
 	DeviceID           string
 	DeviceName         string
@@ -24,6 +25,7 @@ type UserDevice struct {
 
 func NewUserDevice(model db.Device) *UserDevice {
 	return &UserDevice{
+		ID:                 model.ID,
 		UserID:             model.UserID,
 		DeviceID:           model.DeviceID,
 		DeviceName:         *utils.SafePtrString(model.DeviceName),

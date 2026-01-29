@@ -49,3 +49,10 @@ type CreateSessionInput struct {
 	ExpiresAt       time.Time
 	Metadata        map[string]interface{}
 }
+
+type UpdateSession struct {
+	FCMToken    *string
+	APNSToken   *string
+	RevokedAt   *time.Time
+	PushEnabled *bool
+}

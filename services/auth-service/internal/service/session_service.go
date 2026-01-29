@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"shared/pkg/cache"
 	"shared/pkg/database/postgres/models"
@@ -25,6 +26,7 @@ import (
 type SessionServiceInterface interface {
 	// Session management
 	CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError)
+	UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError)
 	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
@@ -130,38 +132,39 @@ func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateS
 		logger.String("user_id", input.UserID),
 		logger.Bool("push_enabled", pushEnabled),
 	)
-
-	err = s.repo.CreateSession(ctx, &models.AuthSession{
+	metaDataInfo := make(map[string]interface{})
+	utils.UnmarshalRawMessageSafe(*metadata, metaDataInfo)
+	err = s.repo.CreateSession(ctx, &domain.Session{
 		ID:                 sessionID,
 		UserID:             input.UserID,
 		SessionToken:       sessionToken,
-		RefreshToken:       &input.RefreshToken,
-		DeviceID:           &input.Device.ID,
-		DeviceName:         &input.Device.Name,
-		DeviceType:         &input.Device.Type,
-		DeviceOS:           &input.Device.OS,
-		DeviceOSVersion:    &input.Device.OsVersion,
-		DeviceModel:        &input.Device.Model,
-		DeviceManufacturer: &input.Device.Manufacturer,
-		BrowserName:        &input.Browser.Name,
-		BrowserVersion:     &input.Browser.Version,
-		UserAgent:          &input.UserAgent,
+		RefreshToken:       input.RefreshToken,
+		DeviceID:           input.Device.ID,
+		DeviceName:         input.Device.Name,
+		DeviceType:         input.Device.Type,
+		DeviceOS:           input.Device.OS,
+		DeviceOSVersion:    input.Device.OsVersion,
+		DeviceModel:        input.Device.Model,
+		DeviceManufacturer: input.Device.Manufacturer,
+		BrowserName:        input.Browser.Name,
+		BrowserVersion:     input.Browser.Version,
+		UserAgent:          input.UserAgent,
 		IPAddress:          input.IP.IP,
-		IPCountry:          &input.IP.Country,
-		IPRegion:           &input.IP.State,
-		IPCity:             &input.IP.City,
-		IPTimezone:         &input.IP.Timezone,
-		IPISP:              &input.IP.ISP,
+		Country:            input.IP.Country,
+		Region:             input.IP.State,
+		City:               input.IP.City,
+		Timezone:           input.IP.Timezone,
+		IPISP:              input.IP.ISP,
 		Latitude:           &input.Latitude,
 		Longitude:          &input.Longitude,
 		IsMobile:           input.IsMobile,
 		ExpiresAt:          input.ExpiresAt,
 		IsTrustedDevice:    input.IsTrustedDevice,
-		FCMToken:           &input.FCMToken,
-		APNSToken:          &input.APNSToken,
+		FCMToken:           input.FCMToken,
+		APNSToken:          input.APNSToken,
 		SessionType:        toDBSessionType(input.SessionType),
 		PushEnabled:        pushEnabled,
-		Metadata:           metadata,
+		Metadata:           metaDataInfo,
 	})
 	if err != nil {
 		return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to store session in database").
@@ -202,13 +205,63 @@ func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateS
 	}, nil
 }
 
+func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError) {
+	s.log.Info("Updating session",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+	)
+
+	// Fetch existing session
+	session, err := s.repo.GetSessionByUserId(ctx, userID, nil)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, authErrors.CodeSessionUpdateFailed, "failed to fetch session for update").
+			WithService(authErrors.ServiceName).
+			WithDetail("session_id", sessionID)
+	}
+
+	if session == nil {
+		return nil, pkgErrors.FromError(errors.New("session not found"), authErrors.CodeSessionNotFound, "session not found").
+			WithService(authErrors.ServiceName).
+			WithDetail("session_id", sessionID)
+	}
+	var update domain.UpdateAuthSession
+	if updates.FCMToken != nil {
+		update.FCMToken = updates.FCMToken
+	}
+	if updates.APNSToken != nil {
+		update.APNSToken = updates.APNSToken
+	}
+	if updates.PushEnabled != nil {
+		update.PushEnabled = updates.PushEnabled
+	}
+
+	s.log.Debug("Saving updated session to database",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+	)
+	// Save updated session
+	session, err = s.repo.UpdateSession(ctx, &update)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, authErrors.CodeSessionUpdateFailed, "failed to update session in database").
+			WithService(authErrors.ServiceName).
+			WithDetail("session_id", sessionID)
+	}
+
+	s.log.Info("Session updated successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+	)
+
+	return session, nil
+}
+
 func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by user ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 	)
 
-	session, err := s.repo.GetSessionByUserId(ctx, userID, deviceID)
+	session, err := s.repo.GetSessionByUserId(ctx, userID, &deviceID)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by user ID").
 			WithService(authErrors.ServiceName).
@@ -232,7 +285,7 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string, 
 	return &domain.SessionRecord{
 		ID:           session.ID,
 		SessionToken: session.SessionToken,
-		RefreshToken: utils.DerefString(session.RefreshToken),
+		RefreshToken: session.RefreshToken,
 	}, nil
 }
 
