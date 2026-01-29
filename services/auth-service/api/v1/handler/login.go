@@ -121,15 +121,12 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		APNSToken:   utils.SafePtrString(loginRequest.APNSToken),
 		PushEnabled: loginRequest.FCMToken != nil || loginRequest.APNSToken != nil,
 	})
-
+	session := &domain.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID, deviceInfo.ID)
 	if sessErr != nil {
 		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessErr)
 		return
-	}
-	session := &domain.CreateSessionOutput{
-		SessionId: activeSession.ID,
 	}
 
 	if activeSession == nil {
@@ -178,7 +175,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			logger.String("user_id", userResult.User.ID),
 			logger.String("session_id", activeSession.ID),
 		)
-		sessionData, _ := h.sessionService.UpdateSession(ctx, userResult.User.ID, session.SessionId, domain.UpdateSession{
+		sessionData, _ := h.sessionService.UpdateSession(ctx, userResult.User.ID, activeSession.ID, domain.UpdateSession{
 			FCMToken:    utils.SafePtrString(loginRequest.FCMToken),
 			APNSToken:   utils.SafePtrString(loginRequest.APNSToken),
 			RevokedAt:   nil,

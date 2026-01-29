@@ -83,7 +83,7 @@ func (r *SessionRepo) CreateSession(ctx context.Context, session *domain.Session
 		LastActivityAt:     session.LastActivityAt,
 		LastRefreshAt:      utils.Ptr(time.Now()),
 		RevokedReason:      nil,
-		Metadata:           &json.RawMessage{},
+		Metadata:           utils.Ptr(json.RawMessage("{}")),
 	})
 
 	if err != nil {
