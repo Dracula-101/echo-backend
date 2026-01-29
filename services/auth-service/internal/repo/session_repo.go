@@ -13,7 +13,7 @@ import (
 type SessionRepositoryInterface interface {
 	// Session management
 	CreateSession(ctx context.Context, session *models.AuthSession) pkgErrors.AppError
-	GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError)
+	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*models.AuthSession, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
@@ -55,13 +55,13 @@ func (r *SessionRepo) CreateSession(ctx context.Context, session *models.AuthSes
 	return nil
 }
 
-func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string) (*models.AuthSession, pkgErrors.AppError) {
+func (r *SessionRepo) GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*models.AuthSession, pkgErrors.AppError) {
 	r.log.Debug("Fetching session by user ID",
 		logger.String("user_id", userID),
 	)
 	var session models.AuthSession
-	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1"
-	err := r.db.QueryRow(ctx, query, userID).ScanModel(&session)
+	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND device_id = $2 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1"
+	err := r.db.QueryRow(ctx, query, userID, deviceID).ScanModel(&session)
 	if err != nil {
 		if postgres.IsNotFoundError(err) {
 			r.log.Debug("No active session found for user",

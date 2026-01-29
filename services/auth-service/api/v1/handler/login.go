@@ -8,6 +8,7 @@ import (
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	req "shared/server/request"
 	"shared/server/response"
 )
@@ -106,8 +107,23 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
+	device, _ := h.authService.UpdateUserActiveDevice(ctx, user.ID, domain.UserDevice{
+		UserID:      user.ID,
+		DeviceID:    deviceInfo.ID,
+		DeviceName:  deviceInfo.Name,
+		DeviceType:  deviceInfo.Type,
+		DeviceModel: deviceInfo.Model,
+		OSName:      deviceInfo.OS,
+		OSVersion:   deviceInfo.OsVersion,
+		AppVersion:  deviceInfo.AppVersion,
+		IsActive:    true,
+		FCMToken:    utils.SafePtrString(loginRequest.FCMToken),
+		APNSToken:   utils.SafePtrString(loginRequest.APNSToken),
+		PushEnabled: loginRequest.FCMToken != nil || loginRequest.APNSToken != nil,
+	})
+
 	session := &domain.CreateSessionOutput{}
-	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID)
+	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID, deviceInfo.ID)
 	if sessErr != nil {
 		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessErr)
@@ -127,8 +143,8 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			Longitude:       locationInfo.Longitude,
 			IsMobile:        isMobile,
 			IsTrustedDevice: false,
-			FCMToken:        loginRequest.FCMToken,
-			APNSToken:       loginRequest.APNSToken,
+			FCMToken:        utils.DerefString(loginRequest.FCMToken),
+			APNSToken:       utils.DerefString(loginRequest.APNSToken),
 			SessionType: func() domain.SessionType {
 				if isMobile {
 					return domain.SessionTypeMobile
@@ -139,6 +155,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			Metadata: map[string]any{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
+				"device-id":      device.DeviceID,
 			},
 		})
 		if err != nil {

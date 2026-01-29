@@ -14,6 +14,7 @@ type UserServiceInterface interface {
 	// Profile operations
 	GetProfile(ctx context.Context, userID string) (*domain.User, error)
 	CreateProfile(ctx context.Context, profile *domain.CreateProfileInput) (*domain.User, error)
+	AddUserDevice(ctx context.Context, input *domain.UserDevice) error
 	GenerateUsername(ctx context.Context, displayName string) (string, error)
 }
 

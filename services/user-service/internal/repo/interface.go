@@ -21,6 +21,10 @@ type UserRepositoryInterface interface {
 	CreateProfile(ctx context.Context, profile domain.Profile) (*domain.Profile, error)
 	UpdateProfile(ctx context.Context, params UpdateProfileParams) (*domain.Profile, error)
 
+	AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) error
+	GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, error)
+	UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) error
+
 	// Search and validation
 	SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error)
 	UsernameExists(ctx context.Context, username string) (bool, error)

@@ -10,10 +10,10 @@ import (
 
 // LoginRequest represents the payload required to authenticate a user.
 type LoginRequest struct {
-	Email     string `json:"email" validate:"required,email"`
-	Password  string `json:"password" validate:"required,min=8"`
-	FCMToken  string `json:"fcm_token,omitempty" validate:"omitempty"`
-	APNSToken string `json:"apns_token,omitempty" validate:"omitempty"`
+	Email     string  `json:"email" validate:"required,email"`
+	Password  string  `json:"password" validate:"required,min=8"`
+	FCMToken  *string `json:"fcm_token,omitempty" validate:"omitempty"`
+	APNSToken *string `json:"apns_token,omitempty" validate:"omitempty"`
 }
 
 // NewLoginRequest constructs a login request with zero values.

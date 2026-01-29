@@ -121,6 +121,7 @@ const (
 	ApplicationPDF            = "application/pdf"
 
 	// ------------ Custom Application Headers ------------
+	XAppVersion         = "X-App-Version"
 	XAPIKey             = "X-API-Key"
 	XAPIVersion         = "X-API-Version"
 	XClientID           = "X-Client-ID"

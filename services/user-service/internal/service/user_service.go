@@ -10,7 +10,9 @@ import (
 	repository "user-service/internal/repo"
 
 	"shared/pkg/cache"
+	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 type UserService struct {
@@ -203,4 +205,57 @@ func (s *UserService) CreateProfile(ctx context.Context, input *domain.CreatePro
 		CreatedAt:    *result.CreatedAt,
 		UpdatedAt:    *result.UpdatedAt,
 	}, nil
+}
+
+func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevice) error {
+	s.log.Info("Adding user device",
+		logger.String("user_id", input.UserID),
+		logger.String("device_id", input.DeviceID),
+	)
+
+	devices, err := s.repo.GetUserDevices(ctx, input.UserID)
+	if err != nil && !postgres.IsNotFoundError(err) {
+		s.log.Error("Failed to get user devices",
+			logger.String("user_id", input.UserID),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	alreadyRegistered := false
+	for _, device := range devices {
+		if device.DeviceID == input.DeviceID {
+			s.log.Info("Device already registered for user",
+				logger.String("user_id", input.UserID),
+				logger.String("device_id", input.DeviceID),
+			)
+			alreadyRegistered = true
+			break
+		}
+	}
+
+	if !alreadyRegistered {
+		err = s.repo.AddUserDevice(ctx, input, true)
+		if err != nil {
+			s.log.Error("Failed to add user device",
+				logger.String("user_id", input.UserID),
+				logger.String("device_id", input.DeviceID),
+				logger.Error(err),
+			)
+			return err
+		}
+		s.log.Info("User device added successfully",
+			logger.String("user_id", input.UserID),
+			logger.String("device_id", input.DeviceID),
+		)
+	} else {
+		for _, device := range devices {
+			updateInput := &domain.UpdateUserDevice{
+				IsActive: utils.PtrBool(device.DeviceID == input.DeviceID),
+			}
+			s.repo.UpdateUserDevice(ctx, updateInput, input.UserID, device.DeviceID)
+		}
+	}
+
+	return nil
 }

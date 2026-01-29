@@ -176,7 +176,7 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
-			router.Middleware(coreMiddleware.InterceptUserId()),
+			router.Middleware(coreMiddleware.InterceptUserId("/profile")),
 			router.Middleware(coreMiddleware.InterceptSessionId()),
 			router.Middleware(coreMiddleware.InterceptSessionToken()),
 		).

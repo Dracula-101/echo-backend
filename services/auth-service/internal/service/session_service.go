@@ -15,6 +15,7 @@ import (
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	"shared/server/common/token"
 
 	"github.com/google/uuid"
@@ -24,7 +25,7 @@ import (
 type SessionServiceInterface interface {
 	// Session management
 	CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError)
-	GetSessionByUserId(ctx context.Context, userID string) (*domain.SessionRecord, pkgErrors.AppError)
+	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
@@ -201,13 +202,13 @@ func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateS
 	}, nil
 }
 
-func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) (*domain.SessionRecord, pkgErrors.AppError) {
+func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by user ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 	)
 
-	session, err := s.repo.GetSessionByUserId(ctx, userID)
+	session, err := s.repo.GetSessionByUserId(ctx, userID, deviceID)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by user ID").
 			WithService(authErrors.ServiceName).
@@ -231,12 +232,7 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string) 
 	return &domain.SessionRecord{
 		ID:           session.ID,
 		SessionToken: session.SessionToken,
-		RefreshToken: func() string {
-			if session.RefreshToken == nil {
-				return ""
-			}
-			return *session.RefreshToken
-		}(),
+		RefreshToken: utils.DerefString(session.RefreshToken),
 	}, nil
 }
 

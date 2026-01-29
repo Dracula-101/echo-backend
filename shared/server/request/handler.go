@@ -10,6 +10,7 @@ import (
 	"shared/server/env"
 	"shared/server/headers"
 	"shared/server/response"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -168,9 +169,9 @@ func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 
 func (h *RequestHandler) validateRequest() error {
 	if h.config.RequireContentType {
-		contentType := h.request.Header.Get(headers.ContentType)
-		if contentType != "" && contentType != headers.ApplicationJSON {
-			return fmt.Errorf("%s", fmt.Sprintf("content-Type must be %s", headers.ApplicationJSON))
+		headers := strings.Split(h.request.Header.Get(headers.ContentType), ";")
+		if len(headers) == 0 || strings.TrimSpace(headers[0]) != "application/json" {
+			return fmt.Errorf("content-type must be application/json")
 		}
 	}
 

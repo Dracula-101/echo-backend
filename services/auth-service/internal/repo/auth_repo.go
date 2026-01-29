@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -27,6 +28,8 @@ type AuthRepositoryInterface interface {
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError)
+	GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError)
+	UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError)
 	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError
 	RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError
 }
@@ -291,6 +294,166 @@ func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domai
 		DeletedAt:              user.DeletedAt,
 		UpdatedAt:              user.UpdatedAt,
 	}, nil
+}
+
+func (r *AuthRepository) GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError) {
+	r.log.Debug("Fetching active device for user",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT * FROM users.devices WHERE user_id = $1 AND is_active = TRUE LIMIT 1`
+	row := r.db.QueryRow(ctx, query, userID)
+	var device models.Device
+	err := row.ScanModel(&device)
+	if err != nil {
+		if postgres.IsNotFoundError(err) {
+			r.log.Debug("No active device found for user",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get active device for user").
+			WithDetail("user_id", userID).
+			WithDetail("query", query)
+	}
+
+	r.log.Debug("Active device fetched successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", device.DeviceID),
+	)
+
+	return domain.NewUserDevice(device), nil
+}
+
+func (r *AuthRepository) UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError) {
+	r.log.Info("Updating user device",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+	var device *domain.UserDevice
+
+	// check if the device exists
+	query := `SELECT COUNT(1) FROM users.devices WHERE user_id = $1 AND device_id = $2`
+	var count int
+	err := r.db.QueryRow(ctx, query, userID, deviceID).Scan(&count)
+	if err != nil && !postgres.IsNotFoundError(err) {
+		r.log.Error("Failed to check if device exists",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check if device exists").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+	if count == 0 {
+		r.log.Info("Device does not exist, skipping update",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+		)
+		return nil, nil
+	} else {
+		query = `UPDATE users.devices
+		SET app_version = COALESCE($1, app_version),
+		    fcm_token = COALESCE($2, fcm_token),
+		    apns_token = COALESCE($3, apns_token),
+		    push_enabled = COALESCE($4, push_enabled),
+		    is_active = COALESCE($5, is_active),
+			is_current_device = COALESCE($6, is_current_device),
+			last_active_at = NOW()
+		WHERE user_id = $7 AND device_id = $8`
+
+		result, err := r.db.Exec(ctx, query,
+			update.AppVersion,
+			update.FCMToken,
+			update.APNSToken,
+			update.PushEnabled,
+			update.IsActive,
+			update.IsCurrentDevice,
+			userID,
+			deviceID,
+		)
+		if err != nil {
+			r.log.Error("Failed to update user device",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("device_id", deviceID),
+				logger.Error(err),
+			)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update user device").
+				WithDetail("user_id", userID).
+				WithDetail("device_id", deviceID)
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		r.log.Info("User device updated successfully",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+			logger.Int64("rows_affected", rowsAffected),
+		)
+
+		// set other devices' is_current_device to false
+		if update.IsCurrentDevice != nil && *update.IsCurrentDevice {
+			query := `UPDATE users.devices
+			SET is_current_device = FALSE,
+			    last_active_at = NOW()
+			WHERE user_id = $1 AND device_id != $2`
+
+			result, err := r.db.Exec(ctx, query, userID, deviceID)
+			if err != nil {
+				r.log.Error("Failed to unset current device flag for other devices",
+					logger.String("service", authErrors.ServiceName),
+					logger.String("user_id", userID),
+					logger.String("device_id", deviceID),
+					logger.Error(err),
+				)
+				return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to unset current device flag for other devices").
+					WithDetail("user_id", userID).
+					WithDetail("device_id", deviceID)
+			}
+
+			rowsAffected, _ := result.RowsAffected()
+			r.log.Info("Other devices' current device flag unset successfully",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("device_id", deviceID),
+				logger.Int64("rows_affected", rowsAffected),
+			)
+		}
+	}
+
+	r.log.Info("User device update process completed",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	// get the updated device
+	query = `SELECT * FROM users.devices WHERE user_id = $1 AND device_id = $2 LIMIT 1`
+	row := r.db.QueryRow(ctx, query, userID, deviceID)
+	var updatedDevice models.Device
+	err = row.ScanModel(&updatedDevice)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to fetch updated user device").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+	device = domain.NewUserDevice(updatedDevice)
+
+	r.log.Info("Fetched updated user device successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	return device, nil
 }
 
 // ============================================================================

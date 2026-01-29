@@ -18,6 +18,7 @@ type RegisterUserInput struct {
 type LoginInput struct {
 	Email    string
 	Password string
+	DeviceID string
 }
 
 type FailedLoginAttemptInput struct {

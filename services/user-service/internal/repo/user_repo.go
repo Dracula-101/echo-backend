@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -428,6 +429,167 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		CreatedAt:    profile.CreatedAt,
 		UpdatedAt:    profile.UpdatedAt,
 	}, nil
+}
+
+func (r *UserRepository) AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) error {
+	r.log.Info("Adding user device",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", input.UserID),
+		logger.String("device_id", input.DeviceID),
+	)
+
+	deviceModel := dbModels.Device{
+		UserID:             input.UserID,
+		DeviceID:           input.DeviceID,
+		DeviceName:         utils.PtrString(input.DeviceName),
+		DeviceType:         utils.PtrString(input.DeviceType),
+		DeviceModel:        utils.PtrString(input.DeviceModel),
+		DeviceManufacturer: utils.PtrString(input.DeviceManufacturer),
+		OSName:             utils.PtrString(input.OSName),
+		OSVersion:          utils.PtrString(input.OSVersion),
+		AppVersion:         utils.PtrString(input.AppVersion),
+		IsCurrentDevice:    isCurrentDevice,
+		IsActive:           input.FCMToken != nil || input.APNSToken != nil,
+		LastActiveAt:       time.Now(),
+		RegisteredAt:       time.Now(),
+		FCMToken:           input.FCMToken,
+		APNSToken:          input.APNSToken,
+		PushEnabled:        input.PushEnabled,
+		Metadata:           json.RawMessage("{}"),
+	}
+
+	_, err := r.db.Insert(ctx, &deviceModel)
+	if err != nil {
+		r.log.Error("Failed to add user device",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", input.UserID),
+			logger.String("device_id", input.DeviceID),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	r.log.Info("User device added successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", input.UserID),
+		logger.String("device_id", input.DeviceID),
+	)
+
+	return nil
+}
+
+func (r *UserRepository) GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, error) {
+	r.log.Debug("Fetching user devices",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT * FROM users.devices WHERE user_id = $1 AND is_active = true`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		r.log.Error("Failed to fetch user devices",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devices []*domain.UserDevice
+	for rows.Next() {
+		var device dbModels.Device
+		if err := rows.ScanModel(&device); err != nil {
+			r.log.Error("Failed to scan user device",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.Error(err),
+			)
+			continue
+		}
+		devices = append(devices, domain.NewUserDevice(device))
+	}
+
+	r.log.Debug("User devices fetched successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int("device_count", len(devices)),
+	)
+
+	return devices, nil
+}
+
+func (r *UserRepository) UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) error {
+	r.log.Info("Updating user device",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	setClauses := []string{}
+	args := []interface{}{}
+	argPos := 1
+
+	if input.PushEnabled != nil {
+		setClauses = append(setClauses, fmt.Sprintf("push_enabled = $%d", argPos))
+		args = append(args, *input.PushEnabled)
+		argPos++
+	}
+	if input.FCMToken != nil {
+		setClauses = append(setClauses, fmt.Sprintf("fcm_token = $%d", argPos))
+		args = append(args, *input.FCMToken)
+		argPos++
+	}
+	if input.APNSToken != nil {
+		setClauses = append(setClauses, fmt.Sprintf("apns_token = $%d", argPos))
+		args = append(args, *input.APNSToken)
+		argPos++
+	}
+	if input.IsActive != nil {
+		setClauses = append(setClauses, fmt.Sprintf("is_active = $%d", argPos))
+		args = append(args, *input.IsActive)
+		argPos++
+	}
+	setClauses = append(setClauses, fmt.Sprintf("last_active_at = $%d", argPos))
+	args = append(args, time.Now())
+	argPos++
+
+	args = append(args, userID)
+	args = append(args, deviceID)
+
+	query := fmt.Sprintf(`
+		UPDATE users.devices 
+		SET %s
+		WHERE user_id = $%d AND device_id = $%d`,
+		strings.Join(setClauses, ", "),
+		argPos-2,
+		argPos-1,
+	)
+
+	r.log.Debug("Executing update device query",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	_, err := r.db.Exec(ctx, query, args...)
+	if err != nil {
+		r.log.Error("Failed to update user device",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	r.log.Info("User device updated successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	return nil
 }
 
 // SearchProfiles searches for profiles by query

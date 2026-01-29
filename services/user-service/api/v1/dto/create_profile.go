@@ -8,6 +8,7 @@ import (
 )
 
 type CreateProfileRequest struct {
+	UserID       string `json:"user_id" validate:"required,uuid4"`
 	DisplayName  string `json:"display_name" validate:"required,max=50"`
 	FirstName    string `json:"first_name" validate:"max=30"`
 	LastName     string `json:"last_name" validate:"max=30"`
@@ -16,6 +17,9 @@ type CreateProfileRequest struct {
 	LanguageCode string `json:"language_code" validate:"omitempty,len=2"`
 	Timezone     string `json:"timezone" validate:"omitempty"`
 	CountryCode  string `json:"country_code" validate:"omitempty,len=2"`
+	FCMToken     string `json:"fcm_token,omitempty" validate:"omitempty"`
+	APNSToken    string `json:"apns_token,omitempty" validate:"omitempty"`
+	PushEnabled  *bool  `json:"push_enabled,omitempty" validate:"omitempty"`
 }
 
 func NewCreateProfileRequest() *CreateProfileRequest {
@@ -30,6 +34,18 @@ func (cpr *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) (
 	var errors []request.ValidationErrorDetail
 	for _, err := range ve {
 		switch err.Field() {
+		case "UserID":
+			if err.Tag() == "required" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "User ID is required",
+					Code: request.REQUIRED_FIELD,
+				})
+			} else if err.Tag() == "uuid4" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "User ID must be a valid UUIDv4",
+					Code: request.INVALID_FORMAT,
+				})
+			}
 		case "DisplayName":
 			if err.Tag() == "required" {
 				errors = append(errors, request.ValidationErrorDetail{
@@ -86,6 +102,13 @@ func (cpr *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) (
 			if err.Tag() == "len" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Msg:  "Country code must be 2 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "Timezone":
+			if err.Tag() == "timezone" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Timezone must be a valid IANA timezone",
 					Code: request.INVALID_FORMAT,
 				})
 			}

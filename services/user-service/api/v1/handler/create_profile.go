@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	req "shared/server/request"
 	"shared/server/response"
 	"user-service/api/v1/dto"
@@ -27,7 +28,7 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		return
 	}
 
-	userId, _ := req.GetUserIDFromContext(ctx)
+	userId := createProfileRequest.UserID
 	h.log.Debug("creating profile", logger.String("user_id", userId))
 	location, err := h.locationService.Lookup(handler.GetClientIP())
 	if err != nil {
@@ -73,6 +74,34 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		return
 	}
 
+	deviceInfo := handler.GetDeviceInfo()
+	deviceErr := h.service.AddUserDevice(ctx, &domain.UserDevice{
+		UserID:             userId,
+		DeviceID:           deviceInfo.ID,
+		DeviceName:         deviceInfo.Name,
+		DeviceType:         deviceInfo.Type,
+		DeviceModel:        deviceInfo.Model,
+		DeviceManufacturer: deviceInfo.Manufacturer,
+		OSName:             deviceInfo.OS,
+		OSVersion:          deviceInfo.OsVersion,
+		AppVersion:         deviceInfo.AppVersion,
+		FCMToken:           utils.PtrString(createProfileRequest.FCMToken),
+		APNSToken:          utils.PtrString(createProfileRequest.APNSToken),
+		PushEnabled:        utils.DerefBool(createProfileRequest.PushEnabled),
+		IsActive:           true,
+	})
+	h.log.Debug("adding user device info",
+		logger.String("user_id", userId),
+		logger.String("device_id", deviceInfo.ID),
+	)
+	if deviceErr != nil {
+		h.log.Error("failed to add user device info",
+			logger.String("user_id", userId),
+			logger.String("device_id", deviceInfo.ID),
+			logger.Error(deviceErr),
+		)
+	}
+
 	response.JSONWithMessage(ctx, r, w, http.StatusCreated, "Profile created successfully", dto.CreateProfileResponse{
 		ID:           profile.ID,
 		Username:     profile.Username,
@@ -83,7 +112,7 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		AvatarURL:    *profile.AvatarURL,
 		LanguageCode: profile.LanguageCode,
 		Timezone:     location.Timezone,
-		CountryCode:  location.Country,
+		CountryCode:  location.CountryCode,
 		IsVerified:   profile.IsVerified,
 		CreatedAt:    profile.CreatedAt,
 		UpdatedAt:    profile.UpdatedAt,

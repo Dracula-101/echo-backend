@@ -14,6 +14,7 @@ type DeviceInfo struct {
 	Platform     string
 	OS           string
 	OsVersion    string
+	AppVersion   string
 	Model        string
 	Manufacturer string
 }
@@ -114,6 +115,10 @@ func (h *RequestHandler) GetDeviceInfo() DeviceInfo {
 	if manufacturer == "" {
 		manufacturer = "unknown"
 	}
+	appVersion := h.request.Header.Get(headers.XAppVersion)
+	if appVersion == "" {
+		appVersion = "unknown"
+	}
 
 	return DeviceInfo{
 		ID:           id,
@@ -123,6 +128,7 @@ func (h *RequestHandler) GetDeviceInfo() DeviceInfo {
 		OS:           os,
 		OsVersion:    osVersion,
 		Model:        model,
+		AppVersion:   appVersion,
 		Manufacturer: manufacturer,
 	}
 }
