@@ -37,8 +37,19 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 		return
 	}
 
+	userIDInContext, _ := request.GetUserIDFromContext(ctx)
+	userID, uuidErr := uuid.Parse(userIDInContext)
+	if uuidErr != nil {
+		h.log.Error("Invalid user ID in context",
+			logger.String("user_id", userID.String()),
+			logger.Error(uuidErr),
+		)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid user ID", uuidErr)
+		return
+	}
+
 	// Fetch conversation from service
-	conversation, appErr := h.conversationService.GetConversation(ctx, conversationID)
+	conversation, appErr := h.conversationService.GetConversation(ctx, conversationID, userID)
 	if appErr != nil {
 		h.log.Error("Failed to get conversation by ID",
 			logger.String("service", convError.ServiceName),
@@ -48,6 +59,7 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 		)
 		if appErr.Code == convError.CodeConversationNotFound {
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation not found", appErr.Error)
+			return
 		}
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to get conversation", appErr.Error)
 		return

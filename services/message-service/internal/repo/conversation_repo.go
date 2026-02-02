@@ -19,7 +19,7 @@ import (
 
 type ConversationRepository interface {
 	ConversationExists(ctx context.Context, conversationID uuid.UUID) (bool, pkgErrors.AppError)
-	GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError)
+	GetConversationByID(ctx context.Context, conversationID uuid.UUID, currentUserID *uuid.UUID) (*domain.Conversation, pkgErrors.AppError)
 	GetConversationParticipants(ctx context.Context, conversationID uuid.UUID) ([]domain.ConversationParticipant, pkgErrors.AppError)
 	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, pkgErrors.AppError)
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, pkgErrors.AppError)
@@ -62,7 +62,7 @@ func (r *conversationRepository) ConversationExists(ctx context.Context, convers
 	return exists, nil
 }
 
-func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, pkgErrors.AppError) {
+func (r *conversationRepository) GetConversationByID(ctx context.Context, conversationID uuid.UUID, currentUserID *uuid.UUID) (*domain.Conversation, pkgErrors.AppError) {
 	query := `
 		SELECT * FROM messages.conversations
 		WHERE id = $1
@@ -90,12 +90,16 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 	}
 	// join from users.profiles to get participant details
 	participantsQuery := `
-		SELECT cp.*, COALESCE(p.display_name, p.username, '') as user_name, COALESCE(p.avatar_url, '') as avatar_url
+		SELECT
+			cp.*,
+			COALESCE(p.display_name, p.username, '') AS user_name,
+			COALESCE(p.avatar_url, '') AS avatar_url
 		FROM messages.conversation_participants cp
 		LEFT JOIN users.profiles p ON cp.user_id = p.user_id
 		WHERE cp.conversation_id = $1
+		AND cp.user_id <> $2
 	`
-	rows, dbErr := r.db.Query(ctx, participantsQuery, conversationID)
+	rows, dbErr := r.db.Query(ctx, participantsQuery, conversationID, currentUserID)
 	if dbErr != nil {
 		r.logger.Error("Failed to get conversation participants",
 			logger.Error(dbErr),
@@ -285,7 +289,7 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 
 	var domainConversations []domain.Conversation
 	for _, convID := range conversationIDs {
-		domainConv, dbErr := r.GetConversationByID(ctx, uuid.MustParse(convID))
+		domainConv, dbErr := r.GetConversationByID(ctx, uuid.MustParse(convID), &userID)
 		if dbErr != nil {
 			r.logger.Error("Failed to get conversation by ID",
 				logger.String("user_id", userID.String()),
@@ -335,7 +339,7 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 		var existingConversationID uuid.UUID
 		dbErr := tx.QueryRow(ctx, query, input.ConversationType, input.CreatorUserID, input.ParticipantIDs[0]).Scan(&existingConversationID)
 		if dbErr == nil {
-			return r.GetConversationByID(ctx, existingConversationID)
+			return r.GetConversationByID(ctx, existingConversationID, &input.CreatorUserID)
 		}
 		if !postgres.IsNotFoundError(dbErr) {
 			return nil, pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "Failed to check existing conversation")
@@ -416,7 +420,7 @@ func (r *conversationRepository) CreateConversation(ctx context.Context, input d
 		GROUP BY c.id, c.conversation_type, c.title, c.description, c.avatar_url, 
 				 c.creator_user_id, c.is_encrypted, c.is_public, cp.user_id, cp.role, cp.joined_at
 	`
-	rows, queryErr := r.db.Query(ctx, fetchQuery, conversationID)
+	rows, queryErr := r.db.Query(ctx, fetchQuery, conversationID, &input.CreatorUserID)
 	if queryErr != nil {
 		return nil, pkgErrors.FromError(queryErr, pkgErrors.CodeInternal, "Failed to fetch conversation")
 	}

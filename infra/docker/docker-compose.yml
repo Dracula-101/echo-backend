@@ -193,8 +193,15 @@ services:
       echo-network:
         aliases: [ kafka.echo.local ]
     healthcheck:
-      <<: *healthcheck-slow
-      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092" ]
+      test: >
+        bash -c '
+          kafka-broker-api-versions --bootstrap-server localhost:29092 &&
+          kafka-topics --bootstrap-server localhost:29092 --list
+        '
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     labels: { com.echo.service: kafka, com.echo.tier: infrastructure }
 
   # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ import (
 
 type ConversationService interface {
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MessageError)
-	GetConversation(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, *msgError.MessageError)
+	GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MessageError)
 	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MessageError)
 }
 
@@ -48,7 +48,7 @@ func (s *conversationService) CreateConversation(ctx context.Context, input doma
 	return conversation, nil
 }
 
-func (s *conversationService) GetConversation(ctx context.Context, conversationID uuid.UUID) (*domain.Conversation, *msgError.MessageError) {
+func (s *conversationService) GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MessageError) {
 	exists, err := s.conversationRepo.ConversationExists(ctx, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to check conversation existence",
@@ -74,7 +74,7 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 		}
 	}
 
-	conversation, err := s.conversationRepo.GetConversationByID(ctx, conversationID)
+	conversation, err := s.conversationRepo.GetConversationByID(ctx, conversationID, &userID)
 	if err != nil {
 		s.logger.Error("Failed to get conversation by ID",
 			logger.String("service", msgError.ServiceName),
