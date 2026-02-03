@@ -45,6 +45,7 @@ type ChatMessageEvent struct {
 	ID                     uuid.UUID         `json:"ID"`
 	ConversationID         uuid.UUID         `json:"ConversationID"`
 	SenderUserID           uuid.UUID         `json:"SenderUserID"`
+	RecipientIDs           []uuid.UUID       `json:"RecipientIDs,omitempty"`
 	ParentMessageID        *uuid.UUID        `json:"ParentMessageID,omitempty"`
 	MessageType            MessageType       `json:"MessageType"`
 	Content                string            `json:"Content"`

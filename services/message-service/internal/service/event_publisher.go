@@ -15,6 +15,7 @@ type EventPublisher interface {
 	PublishMessageEvent(ctx context.Context, event *domain.MessageEvent) error
 	PublishChatMessage(ctx context.Context, event *domain.ChatMessageEvent) error
 	PublishConversationEvent(ctx context.Context, event *domain.ConversationEvent) error
+	PublishDeliveryEvent(ctx context.Context, event *DeliveryEvent) error
 }
 
 // KafkaEventPublisher implements EventPublisher using Kafka
@@ -133,6 +134,45 @@ func (p *KafkaEventPublisher) PublishConversationEvent(ctx context.Context, even
 	p.log.Debug("Published conversation event",
 		logger.String("event_type", string(event.EventType)),
 		logger.String("conversation_id", event.ConversationID.String()),
+	)
+
+	return nil
+}
+
+func (p *KafkaEventPublisher) PublishDeliveryEvent(ctx context.Context, event *DeliveryEvent) error {
+	topic := "delivery-events"
+	key := event.ConversationID.String()
+
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		p.log.Error("Failed to marshal delivery event",
+			logger.Error(err),
+			logger.String("event_type", string(event.EventType)),
+			logger.String("user_id", event.UserID.String()),
+		)
+		return err
+	}
+
+	kafkaMsg := messaging.NewMessage(eventJSON).
+		WithKey([]byte(key)).
+		WithHeader("type", "delivery_event").
+		WithHeader("event_type", string(event.EventType)).
+		WithHeader("user_id", event.UserID.String())
+
+	err = p.producer.Send(ctx, topic, kafkaMsg)
+	if err != nil {
+		p.log.Error("Failed to publish delivery event",
+			logger.Error(err),
+			logger.String("event_type", string(event.EventType)),
+			logger.String("user_id", event.UserID.String()),
+		)
+		return err
+	}
+
+	p.log.Debug("Published delivery event",
+		logger.String("event_type", string(event.EventType)),
+		logger.String("user_id", event.UserID.String()),
+		logger.Int("message_count", len(event.MessageIDs)),
 	)
 
 	return nil

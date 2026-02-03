@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"shared/pkg/logger"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
 )
 
-func (m *Manager) handleSubscribe(ctx context.Context, msg *router.Message) error {
+func (m *Manager) handleSubscribe(_ context.Context, msg *router.Message) error {
 	conn, ok := m.getConnection(msg)
 	if !ok {
 		return nil
@@ -18,6 +19,9 @@ func (m *Manager) handleSubscribe(ctx context.Context, msg *router.Message) erro
 
 	var payload protocol.SubscribePayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		m.log.Error("Failed to unmarshal subscribe payload",
+			logger.Error(err),
+		)
 		return err
 	}
 
@@ -25,6 +29,18 @@ func (m *Manager) handleSubscribe(ctx context.Context, msg *router.Message) erro
 	if !ok {
 		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeUnauthorized, "User not authenticated")
 	}
+
+	m.log.Info("Processing subscription request",
+		logger.String("user_id", userID.String()),
+		logger.String("conn_id", conn.ID()),
+		logger.Int("topic_count", len(payload.Topics)),
+		logger.Int("conversation_count", len(payload.ConversationIDs)),
+	)
+
+	// Use a detached context with timeout for database operations
+	// The incoming context is tied to the WebSocket read and may be canceled
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	subscribedTopics := make([]protocol.Topic, 0, len(payload.Topics))
 
@@ -37,7 +53,7 @@ func (m *Manager) handleSubscribe(ctx context.Context, msg *router.Message) erro
 				topicKey := string(topic) + ":" + resourceID
 
 				// Validate conversation access using authorization service
-				allowed, err := m.authzService.CanSubscribeToTopic(ctx, userID, topic, resourceID)
+				allowed, err := m.authzService.CanSubscribeToTopic(dbCtx, userID, topic, resourceID)
 				if err != nil {
 					m.log.Error("Failed to validate conversation subscription",
 						logger.String("user_id", userID.String()),
@@ -58,6 +74,10 @@ func (m *Manager) handleSubscribe(ctx context.Context, msg *router.Message) erro
 				}
 
 				m.subscriptions.Subscribe(conn.ID(), topicKey)
+				m.log.Info("Conversation subscription successful",
+					logger.String("user_id", userID.String()),
+					logger.String("topic_key", topicKey),
+				)
 				successCount++
 			}
 
@@ -73,7 +93,7 @@ func (m *Manager) handleSubscribe(ctx context.Context, msg *router.Message) erro
 		topicKey := string(topic) + ":" + resourceID
 
 		// Validate subscription using authorization service
-		allowed, err := m.authzService.CanSubscribeToTopic(ctx, userID, topic, resourceID)
+		allowed, err := m.authzService.CanSubscribeToTopic(dbCtx, userID, topic, resourceID)
 		if err != nil {
 			m.log.Error("Failed to validate subscription",
 				logger.String("user_id", userID.String()),

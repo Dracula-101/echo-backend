@@ -170,8 +170,53 @@ func startChatMessageConsumer(
 	)
 	consumerTopics := []string{topic}
 	if err := kafkaConsumer.Consume(ctx, consumerTopics, chatMessageConsumer); err != nil {
-		log.Fatal("Failed to start Kafka consumer", logger.Error(err))
+		if ctx.Err() == nil {
+			log.Error("Chat message consumer error", logger.Error(err))
+		}
 	}
+}
+
+func startDeliveryEventConsumer(
+	ctx context.Context,
+	kafkaConsumer messaging.Consumer,
+	deliveryEventConsumer *consumer.DeliveryEventConsumer,
+	topic string,
+	log logger.Logger,
+) {
+	log.Info("Starting Kafka consumer for delivery events",
+		logger.String("topic", topic),
+	)
+	if err := kafkaConsumer.Consume(ctx, []string{topic}, deliveryEventConsumer); err != nil {
+		if ctx.Err() == nil {
+			log.Error("Delivery event consumer error", logger.Error(err))
+		}
+	}
+}
+
+func createDeliveryKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.Consumer, error) {
+	deliveryGroupID := cfg.GroupID + "-delivery"
+	log.Debug("Creating Kafka consumer for delivery events",
+		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("group_id", deliveryGroupID),
+	)
+	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+		Brokers:           cfg.Brokers,
+		ClientID:          cfg.ClientID + "-delivery",
+		GroupID:           deliveryGroupID,
+		RetryBackoff:      100,
+		SessionTimeout:    30000,
+		HeartbeatInterval: 10000,
+		MaxRetries:        5,
+	})
+	if err != nil {
+		log.Error("Failed to create delivery Kafka consumer", logger.Error(err))
+		return nil, err
+	}
+	log.Info("Delivery Kafka consumer created successfully",
+		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("group_id", deliveryGroupID),
+	)
+	return kafkaConsumer, nil
 }
 
 func setupAPIRoutes(
@@ -240,7 +285,7 @@ func createRouter(
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, kafkaConsumer messaging.Consumer, consumerCancel context.CancelFunc, cfg *config.Config, log logger.Logger) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, kafkaConsumer messaging.Consumer, deliveryKafkaConsumer messaging.Consumer, consumerCancel context.CancelFunc, cfg *config.Config, log logger.Logger) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
@@ -254,6 +299,17 @@ func setupShutdownManager(srv *server.Server, kafkaConsumer messaging.Consumer, 
 		}),
 		shutdown.PriorityHigh,
 	)
+
+	if deliveryKafkaConsumer != nil {
+		shutdownMgr.RegisterWithPriority(
+			"delivery-kafka-consumer",
+			shutdown.Hook(func(ctx context.Context) error {
+				log.Info("Closing delivery Kafka consumer")
+				return deliveryKafkaConsumer.Close()
+			}),
+			shutdown.PriorityHigh,
+		)
+	}
 
 	shutdownMgr.RegisterWithPriority(
 		"http-server",
@@ -353,7 +409,7 @@ func main() {
 		}
 	}()
 
-	// Create Kafka consumer
+	// Create Kafka consumer for chat messages
 	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
 	if err != nil {
 		log.Fatal("Failed to create Kafka consumer", logger.Error(err))
@@ -363,6 +419,20 @@ func main() {
 			log.Info("Closing Kafka consumer")
 			if err := kafkaConsumer.Close(); err != nil {
 				log.Error("Failed to close Kafka consumer", logger.Error(err))
+			}
+		}
+	}()
+
+	// Create Kafka consumer for delivery events (separate consumer group)
+	deliveryKafkaConsumer, err := createDeliveryKafkaConsumer(cfg.Kafka, log)
+	if err != nil {
+		log.Fatal("Failed to create delivery Kafka consumer", logger.Error(err))
+	}
+	defer func() {
+		if deliveryKafkaConsumer != nil {
+			log.Info("Closing delivery Kafka consumer")
+			if err := deliveryKafkaConsumer.Close(); err != nil {
+				log.Error("Failed to close delivery Kafka consumer", logger.Error(err))
 			}
 		}
 	}()
@@ -385,12 +455,14 @@ func main() {
 	// Initialize services
 	messageService := service.NewMessageService(messageRepo, conversationRepo, userRepo, eventPublisher, cacheClient, log)
 	conversationService := service.NewConversationService(conversationRepo, log)
+	deliveryService := service.NewDeliveryService(messageRepo, log)
 
 	// Initialize handlers
 	messageHandler := messageHandler.NewMessageHandler(messageService, log)
 	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
 	healthHandler := health.NewHandler(healthMgr)
 	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)
+	deliveryEventConsumer := consumer.NewDeliveryEventConsumer(deliveryService, log)
 
 	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)
 	if err != nil {
@@ -415,8 +487,9 @@ func main() {
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+	go startDeliveryEventConsumer(consumerCtx, deliveryKafkaConsumer, deliveryEventConsumer, "delivery-events", log)
 
-	shutdownMgr := setupShutdownManager(srv, kafkaConsumer, consumerCancel, cfg, log)
+	shutdownMgr := setupShutdownManager(srv, kafkaConsumer, deliveryKafkaConsumer, consumerCancel, cfg, log)
 
 	serverErrors := make(chan error, 1)
 	go func() {

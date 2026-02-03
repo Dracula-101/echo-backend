@@ -37,6 +37,7 @@ type ChatMessageEvent struct {
 	ID                     uuid.UUID
 	ConversationID         uuid.UUID
 	SenderUserID           uuid.UUID
+	RecipientIDs           []uuid.UUID // Recipients for delivery tracking
 	ParentMessageID        *uuid.UUID
 	MessageType            MessageType
 	Content                string

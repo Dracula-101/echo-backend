@@ -54,6 +54,7 @@ const (
 	MsgTypeSubscribed       MessageType = "subscribed"
 	MsgTypeUnsubscribed     MessageType = "unsubscribed"
 	MsgTypePresenceResponse MessageType = "presence.response"
+	MsgTypeMessageSending   MessageType = "message.sending"
 	MsgTypeMessageNew       MessageType = "message.new"
 	MsgTypeMessageRead      MessageType = "message.read"
 	MsgTypeMessageDelivered MessageType = "message.delivered"

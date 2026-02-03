@@ -137,10 +137,30 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 		return nil, validationErr
 	}
 
+	// Get conversation participants for delivery tracking
+	participants, participantsErr := s.conversationRepo.GetConversationParticipants(ctx, req.ConversationID)
+	if participantsErr != nil {
+		s.logger.Error("Failed to get conversation participants",
+			logger.String("service", msgError.ServiceName),
+			logger.String("conversation_id", req.ConversationID.String()),
+			logger.Error(participantsErr),
+		)
+		// Don't fail the message send, just log the error - delivery tracking will be incomplete
+	}
+
+	// Build recipient IDs list (all participants except sender)
+	var recipientIDs []uuid.UUID
+	for _, p := range participants {
+		if p.UserID != req.SenderUserID {
+			recipientIDs = append(recipientIDs, p.UserID)
+		}
+	}
+
 	messageEvent := domain.ChatMessageEvent{
 		ID:               uuid.New(),
 		ConversationID:   req.ConversationID,
 		SenderUserID:     req.SenderUserID,
+		RecipientIDs:     recipientIDs,
 		ParentMessageID:  req.ParentMessageID,
 		MessageType:      req.MessageType,
 		Content:          req.Content,
@@ -308,6 +328,22 @@ func (s *messageService) ProcessChatMessage(ctx context.Context, event *domain.C
 			logger.Error(dbErr),
 		)
 		return pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to insert chat message")
+	}
+
+	// Create delivery status records for all recipients
+	if len(event.RecipientIDs) > 0 {
+		recipientStrings := make([]string, len(event.RecipientIDs))
+		for i, id := range event.RecipientIDs {
+			recipientStrings[i] = id.String()
+		}
+		if deliveryErr := s.messageRepo.CreateDeliveryStatuses(ctx, event.ID.String(), recipientStrings); deliveryErr != nil {
+			s.logger.Error("Failed to create delivery statuses",
+				logger.String("service", msgError.ServiceName),
+				logger.String("message_id", event.ID.String()),
+				logger.Error(deliveryErr),
+			)
+			// Don't fail the message processing, just log the error
+		}
 	}
 
 	s.logger.Debug("Chat message inserted into database",

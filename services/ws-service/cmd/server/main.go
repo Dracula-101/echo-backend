@@ -151,6 +151,24 @@ func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.C
 	return kafkaConsumer, nil
 }
 
+func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.Producer, error) {
+	log.Debug("Creating Kafka producer",
+		logger.Strings("brokers", cfg.Brokers),
+	)
+
+	producer, err := kafka.NewProducer(messaging.Config{
+		Brokers:  cfg.Brokers,
+		ClientID: cfg.ClientID + "-producer",
+	})
+	if err != nil {
+		log.Error("Failed to create Kafka producer", logger.Error(err))
+		return nil, err
+	}
+
+	log.Info("Kafka producer created successfully")
+	return producer, nil
+}
+
 func startChatMessageConsumer(
 	ctx context.Context,
 	kafkaConsumer messaging.Consumer,
@@ -335,6 +353,7 @@ func setupShutdownManager(
 	srv *server.Server,
 	manager *wsManager.Manager,
 	kafkaConsumer messaging.Consumer,
+	kafkaProducer messaging.Producer,
 	consumerCancel context.CancelFunc,
 	dbClient database.Database,
 	cacheClient cache.Cache,
@@ -353,6 +372,17 @@ func setupShutdownManager(
 				log.Info("Shutting down Kafka consumer")
 				consumerCancel()
 				return kafkaConsumer.Close()
+			}),
+			shutdown.PriorityHigh,
+		)
+	}
+
+	if kafkaProducer != nil {
+		shutdownMgr.RegisterWithPriority(
+			"kafka-producer",
+			shutdown.Hook(func(ctx context.Context) error {
+				log.Info("Closing Kafka producer")
+				return kafkaProducer.Close()
 			}),
 			shutdown.PriorityHigh,
 		)
@@ -477,6 +507,17 @@ func main() {
 		log.Fatal("Failed to create Kafka consumer", logger.Error(err))
 	}
 
+	// Create Kafka producer for delivery events
+	kafkaProducer, err := createKafkaProducer(cfg.Kafka, log)
+	if err != nil {
+		log.Fatal("Failed to create Kafka producer", logger.Error(err))
+	}
+
+	// Create delivery publisher and wire to manager
+	deliveryPublisher := service.NewKafkaDeliveryPublisher(kafkaProducer, log)
+	manager.SetDeliveryPublisher(deliveryPublisher)
+	log.Info("Delivery publisher wired to WebSocket manager")
+
 	chatMessageConsumer := consumer.NewChatMessageConsumer(manager, log)
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
@@ -512,7 +553,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, manager, kafkaConsumer, consumerCancel, dbClient, cacheClient, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, manager, kafkaConsumer, kafkaProducer, consumerCancel, dbClient, cacheClient, log, cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {

@@ -45,7 +45,8 @@ type Manager struct {
 	userRepo         repo.UserRepository
 
 	// Services
-	authzService service.AuthorizationService
+	authzService      service.AuthorizationService
+	deliveryPublisher service.DeliveryEventPublisher
 
 	state          ManagerState
 	startTime      time.Time
@@ -532,5 +533,10 @@ type ManagerStats struct {
 	TypingStats       tracker.TypingStats           `json:"typing_stats"`
 	RateLimiterStats  middleware.RateLimiterStats   `json:"rate_limiter_stats"`
 	BufferStats       middleware.MessageBufferStats `json:"buffer_stats"`
-	Metrics           MetricsSnapshot               `json:"metrics,omitempty"`
+	Metrics           MetricsSnapshot               `json:"metrics,omitzero"`
+}
+
+// SetDeliveryPublisher sets the delivery event publisher for receipt tracking
+func (m *Manager) SetDeliveryPublisher(publisher service.DeliveryEventPublisher) {
+	m.deliveryPublisher = publisher
 }

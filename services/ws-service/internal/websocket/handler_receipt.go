@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
+	"shared/pkg/logger"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
+	"ws-service/internal/service"
 )
 
 func (m *Manager) handleMarkRead(ctx context.Context, msg *router.Message) error {
@@ -25,12 +27,34 @@ func (m *Manager) handleMarkRead(ctx context.Context, msg *router.Message) error
 		return err
 	}
 
+	now := time.Now()
+
+	// Publish delivery event to Kafka for persistence
+	if m.deliveryPublisher != nil {
+		deliveryEvent := &service.DeliveryEvent{
+			EventType:      service.DeliveryEventRead,
+			MessageIDs:     payload.MessageIDs,
+			UserID:         userID,
+			ConversationID: payload.ConversationID,
+			Timestamp:      now,
+		}
+		if err := m.deliveryPublisher.PublishDeliveryEvent(ctx, deliveryEvent); err != nil {
+			m.log.Error("Failed to publish read receipt event",
+				logger.String("user_id", userID.String()),
+				logger.String("conversation_id", payload.ConversationID.String()),
+				logger.Error(err),
+			)
+			// Continue with broadcast even if publish fails
+		}
+	}
+
+	// Broadcast to conversation participants
 	return m.BroadcastToConversation(payload.ConversationID, string(protocol.MsgTypeMessageRead),
 		protocol.ReadReceiptEvent{
 			UserID:         userID,
 			ConversationID: payload.ConversationID,
 			MessageIDs:     payload.MessageIDs,
-			ReadAt:         time.Now(),
+			ReadAt:         now,
 		}, userID)
 }
 
@@ -50,11 +74,33 @@ func (m *Manager) handleMarkDelivered(ctx context.Context, msg *router.Message) 
 		return err
 	}
 
+	now := time.Now()
+
+	// Publish delivery event to Kafka for persistence
+	if m.deliveryPublisher != nil {
+		deliveryEvent := &service.DeliveryEvent{
+			EventType:      service.DeliveryEventDelivered,
+			MessageIDs:     payload.MessageIDs,
+			UserID:         userID,
+			ConversationID: payload.ConversationID,
+			Timestamp:      now,
+		}
+		if err := m.deliveryPublisher.PublishDeliveryEvent(ctx, deliveryEvent); err != nil {
+			m.log.Error("Failed to publish delivered receipt event",
+				logger.String("user_id", userID.String()),
+				logger.String("conversation_id", payload.ConversationID.String()),
+				logger.Error(err),
+			)
+			// Continue with broadcast even if publish fails
+		}
+	}
+
+	// Broadcast to conversation participants
 	return m.BroadcastToConversation(payload.ConversationID, string(protocol.MsgTypeMessageDelivered),
 		protocol.DeliveredReceiptEvent{
 			UserID:         userID,
 			ConversationID: payload.ConversationID,
 			MessageIDs:     payload.MessageIDs,
-			DeliveredAt:    time.Now(),
+			DeliveredAt:    now,
 		}, userID)
 }
