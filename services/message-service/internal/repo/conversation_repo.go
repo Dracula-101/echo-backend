@@ -116,8 +116,8 @@ func (r *conversationRepository) GetConversationByID(ctx context.Context, conver
 	var dbParticipants []domain.ConversationParticipant
 	for rows.Next() {
 		var cp dbModel.ConversationParticipant
-		var avatarURL, userName string
-		if scanErr := rows.ScanModelAndAppend(&cp, &avatarURL, &userName); scanErr != nil {
+		var userName, avatarURL string
+		if scanErr := rows.ScanModelAndAppend(&cp, &userName, &avatarURL); scanErr != nil {
 			r.logger.Error("Failed to scan conversation participant",
 				logger.Error(scanErr),
 				logger.String("conversation_id", conversationID.String()),

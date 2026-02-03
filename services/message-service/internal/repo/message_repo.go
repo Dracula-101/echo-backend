@@ -37,7 +37,7 @@ func (r *messageRepository) InsertMessage(ctx context.Context, message *dbModels
 		return pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to begin transaction")
 	}
 
-	var txErr error
+	var txErr *database.DBError
 	defer func() {
 		if p := recover(); p != nil {
 			tx.Rollback()
@@ -145,7 +145,7 @@ func (r *messageRepository) InsertMessages(ctx context.Context, messages []*dbMo
 		return pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to begin transaction")
 	}
 
-	var txErr error
+	var txErr *database.DBError
 	defer func() {
 		if p := recover(); p != nil {
 			tx.Rollback()
