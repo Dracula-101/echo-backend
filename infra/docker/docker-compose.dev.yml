@@ -381,6 +381,35 @@ services:
     labels: { com.echo.service: location-service, com.echo.mode: development }
 
   # ---------------------------------------------------------------------------
+  # Presence Service
+  # ---------------------------------------------------------------------------
+  presence-service:
+    <<: *service-base
+    build: { context: "${PWD}", dockerfile: services/presence-service/Dockerfile.dev }
+    container_name: echo-presence-service-dev
+    image: echo/presence-service:dev
+    expose: [ "8084" ]
+    environment:
+      <<: *env-full
+      SERVER_PORT: 8084
+      CONFIG_PATH: /app/services/presence-service/configs/config.yaml
+      REDIS_DB: 4
+      PRESENCE_UPDATE_INTERVAL: 30s
+      PRESENCE_TIMEOUT: 300s
+      PRESENCE_CLEANUP_INTERVAL: 60s
+    volumes:
+      - ${PWD}/services/presence-service:/app/services/presence-service
+      - ${PWD}/shared:/app/shared:ro
+      - presence-service-cache:/app/tmp
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on: *depends-db
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:8084/health" ]
+    labels: { com.echo.service: presence-service, com.echo.mode: development }
+
+  # ---------------------------------------------------------------------------
   # Media Service
   # ---------------------------------------------------------------------------
   media-service:
@@ -414,35 +443,6 @@ services:
     labels: { com.echo.service: media-service, com.echo.mode: development }
 
   # ---------------------------------------------------------------------------
-  # Presence Service
-  # ---------------------------------------------------------------------------
-  presence-service:
-    <<: *service-base
-    build: { context: "${PWD}", dockerfile: services/presence-service/Dockerfile.dev }
-    container_name: echo-presence-service-dev
-    image: echo/presence-service:dev
-    expose: [ "8086" ]
-    environment:
-      <<: *env-full
-      SERVER_PORT: 8086
-      CONFIG_PATH: /app/services/presence-service/configs/config.yaml
-      REDIS_DB: 4
-      PRESENCE_UPDATE_INTERVAL: 30s
-      PRESENCE_TIMEOUT: 300s
-      PRESENCE_CLEANUP_INTERVAL: 60s
-    volumes:
-      - ${PWD}/services/presence-service:/app/services/presence-service
-      - ${PWD}/shared:/app/shared:ro
-      - presence-service-cache:/app/tmp
-      - go-mod-cache:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
-    depends_on: *depends-db
-    healthcheck:
-      <<: *healthcheck
-      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
-    labels: { com.echo.service: presence-service, com.echo.mode: development }
-
-  # ---------------------------------------------------------------------------
   # WebSocket Service
   # ---------------------------------------------------------------------------
   ws-service:
@@ -450,10 +450,10 @@ services:
     build: { context: "${PWD}", dockerfile: services/ws-service/Dockerfile.dev }
     container_name: echo-ws-service-dev
     image: echo/ws-service:dev
-    ports: [ "8087:8087" ]
+    ports: [ "8086:8086" ]
     environment:
       <<: [ *env-full, *env-kafka, *env-ws ]
-      SERVER_PORT: 8087
+      SERVER_PORT: 8086
       CONFIG_PATH: /app/services/ws-service/configs/config.yaml
       REDIS_DB: 5
       WS_WRITE_WAIT: 10s
