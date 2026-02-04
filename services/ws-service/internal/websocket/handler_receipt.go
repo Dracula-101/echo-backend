@@ -96,7 +96,7 @@ func (m *Manager) handleMarkDelivered(ctx context.Context, msg *router.Message) 
 	}
 
 	// Broadcast to read conversation participants
-	return m.BroadcastToConversation(payload.ConversationID, string(protocol.MsgTypeMarkRead),
+	return m.BroadcastToConversation(payload.ConversationID, string(protocol.MsgTypeMarkDelivered),
 		protocol.DeliveredReceiptEvent{
 			UserID:         userID,
 			ConversationID: payload.ConversationID,
