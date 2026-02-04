@@ -33,10 +33,10 @@ type PresenceInfo struct {
 }
 
 type DevicePresence struct {
-	DeviceID   string    `json:"device_id"`
-	Platform   string    `json:"platform"`
+	DeviceID   string         `json:"device_id"`
+	Platform   string         `json:"platform"`
 	Status     PresenceStatus `json:"status"`
-	LastSeenAt time.Time `json:"last_seen_at"`
+	LastSeenAt time.Time      `json:"last_seen_at"`
 }
 
 type PresenceChangeEvent struct {
@@ -378,7 +378,7 @@ func (pt *PresenceTracker) CleanupStale() []PresenceChangeEvent {
 }
 
 type PresenceStats struct {
-	TotalUsers   int                       `json:"total_users"`
-	TotalDevices int                       `json:"total_devices"`
-	StatusCounts map[PresenceStatus]int    `json:"status_counts"`
+	TotalUsers   int                    `json:"total_users"`
+	TotalDevices int                    `json:"total_devices"`
+	StatusCounts map[PresenceStatus]int `json:"status_counts"`
 }

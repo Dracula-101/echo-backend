@@ -6,6 +6,7 @@ replace shared => ../../shared
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/redis/go-redis/v9 v9.17.2
 	golang.org/x/time v0.14.0
 	shared v0.0.0-00010101000000-000000000000
 )
@@ -40,7 +41,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
-	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
