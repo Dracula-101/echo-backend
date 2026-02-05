@@ -20,7 +20,7 @@ testdata_dir = "testdata"
   exclude_unchanged = false
   follow_symlink = false
   full_bin = ""
-  delay = 1000
+  delay = 2000
   kill_delay = "5s"
   log = "build-errors.log"
   pre_cmd = [
@@ -30,7 +30,7 @@ testdata_dir = "testdata"
   ]
   post_cmd = []
   rerun = true
-  rerun_delay = 500
+  rerun_delay = 1500
   send_interrupt = true
   stop_on_error = false
   args_bin = []

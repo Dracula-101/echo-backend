@@ -62,21 +62,32 @@ func (c *ChatMessageConsumer) Handle(ctx context.Context, message *messaging.Mes
 
 func (c *ChatMessageConsumer) HandleBatch(ctx context.Context, messages []*messaging.Message) error {
 	var events []*domain.ChatMessageEvent
+	var skipped int
 	for _, message := range messages {
 		var event domain.ChatMessageEvent
 		if err := json.Unmarshal(message.Value, &event); err != nil {
-			c.logger.Error("failed to unmarshal chat message event in batch",
+			c.logger.Error("failed to unmarshal chat message event in batch, skipping",
 				logger.Error(err),
 				logger.String("topic", message.Topic),
 				logger.Int64("offset", message.Offset),
 			)
-			return err
+			skipped++
+			continue
 		}
 		events = append(events, &event)
 	}
 
+	if len(events) == 0 {
+		c.logger.Warn("no valid events in batch",
+			logger.Int("total", len(messages)),
+			logger.Int("skipped", skipped),
+		)
+		return nil
+	}
+
 	c.logger.Debug("processing batch of chat message events",
 		logger.Int("batch_size", len(events)),
+		logger.Int("skipped", skipped),
 	)
 
 	if err := c.messageService.ProcessChatMessages(ctx, events); err != nil {

@@ -11,7 +11,7 @@ import (
 	"ws-service/internal/service"
 )
 
-func (m *Manager) handleMarkRead(ctx context.Context, msg *router.Message) error {
+func (m *Manager) handleMarkRead(_ context.Context, msg *router.Message) error {
 	conn, ok := m.getConnection(msg)
 	if !ok {
 		return nil
@@ -31,6 +31,10 @@ func (m *Manager) handleMarkRead(ctx context.Context, msg *router.Message) error
 
 	// Publish delivery event to Kafka for persistence
 	if m.deliveryPublisher != nil {
+		// Use detached context to avoid cancellation from WebSocket
+		publishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		deliveryEvent := &service.DeliveryEvent{
 			EventType:      service.DeliveryEventRead,
 			MessageIDs:     payload.MessageIDs,
@@ -38,7 +42,7 @@ func (m *Manager) handleMarkRead(ctx context.Context, msg *router.Message) error
 			ConversationID: payload.ConversationID,
 			Timestamp:      now,
 		}
-		if err := m.deliveryPublisher.PublishDeliveryEvent(ctx, deliveryEvent); err != nil {
+		if err := m.deliveryPublisher.PublishDeliveryEvent(publishCtx, deliveryEvent); err != nil {
 			m.log.Error("Failed to publish read receipt event",
 				logger.String("user_id", userID.String()),
 				logger.String("conversation_id", payload.ConversationID.String()),
@@ -58,7 +62,7 @@ func (m *Manager) handleMarkRead(ctx context.Context, msg *router.Message) error
 		}, userID)
 }
 
-func (m *Manager) handleMarkDelivered(ctx context.Context, msg *router.Message) error {
+func (m *Manager) handleMarkDelivered(_ context.Context, msg *router.Message) error {
 	conn, ok := m.getConnection(msg)
 	if !ok {
 		return nil
@@ -78,6 +82,10 @@ func (m *Manager) handleMarkDelivered(ctx context.Context, msg *router.Message) 
 
 	// Publish delivery event to Kafka for persistence
 	if m.deliveryPublisher != nil {
+		// Use detached context to avoid cancellation from WebSocket
+		publishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		deliveryEvent := &service.DeliveryEvent{
 			EventType:      service.DeliveryEventDelivered,
 			MessageIDs:     payload.MessageIDs,
@@ -85,7 +93,7 @@ func (m *Manager) handleMarkDelivered(ctx context.Context, msg *router.Message) 
 			ConversationID: payload.ConversationID,
 			Timestamp:      now,
 		}
-		if err := m.deliveryPublisher.PublishDeliveryEvent(ctx, deliveryEvent); err != nil {
+		if err := m.deliveryPublisher.PublishDeliveryEvent(publishCtx, deliveryEvent); err != nil {
 			m.log.Error("Failed to publish delivered receipt event",
 				logger.String("user_id", userID.String()),
 				logger.String("conversation_id", payload.ConversationID.String()),

@@ -408,9 +408,6 @@ func (pp *PrettyPrinter) formatString(s string) string {
 	}
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
 	return pp.colorWrap(fmt.Sprintf("\"%s\"", s), ansiGreen)
 }
 
@@ -1206,9 +1203,6 @@ func formatFieldsPretty(fields []logger.Field) []string {
 			if len(s) > maxStringDisplay {
 				s = s[:maxStringDisplay-3] + "..."
 			}
-			s = strings.ReplaceAll(s, "\n", `\n`)
-			s = strings.ReplaceAll(s, "\r", `\r`)
-			s = strings.ReplaceAll(s, "\t", `\t`)
 			lines = append(lines, fmt.Sprintf("  %s%s%s: %s\"%s\"%s", ansiBold+ansiCyan, k, ansiReset, ansiGreen, s, ansiReset))
 
 		case reflect.Bool:

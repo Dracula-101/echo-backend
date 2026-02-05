@@ -107,11 +107,12 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 	rateLimitKey := fmt.Sprintf("rate:msg:%s", req.SenderUserID.String())
 	rateLimit, cacheErr := s.cache.GetInt(ctx, rateLimitKey)
 	if cacheErr != nil {
-		s.logger.Error("Failed to get rate limit from cache",
+		s.logger.Warn("Failed to get rate limit from cache, allowing message",
 			logger.String("service", msgError.ServiceName),
 			logger.String("user_id", req.SenderUserID.String()),
 			logger.Error(cacheErr),
 		)
+		rateLimit = 0
 	}
 	if rateLimit > 100 && !env.IsDevelopment() {
 		s.logger.Warn("Rate limit exceeded for sending messages",

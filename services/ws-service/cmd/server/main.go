@@ -276,21 +276,14 @@ func createWebSocketHandler(
 		ExtractMetadata: handler.DefaultMetadataExtractor,
 		OnConnected: func(conn *handler.Connection) {
 			userID, _ := conn.GetMetadata(codes.UserIdMetaKey)
-			deviceID, _ := conn.GetMetadata("device_id")
+			deviceID, _ := conn.GetMetadata(codes.DeviceIdMetaKey)
 			if uid, ok := userID.(uuid.UUID); ok {
-				if did, ok := deviceID.(string); ok {
-					wsService.HandleClientConnect(context.Background(), uid, did)
-				}
+				wsService.HandleClientConnect(context.Background(), uid, deviceID.(string))
 			}
 		},
 		OnDisconnected: func(conn *handler.Connection) {
-			userID, _ := conn.GetMetadata(codes.UserIdMetaKey)
-			deviceID, _ := conn.GetMetadata("device_id")
-			if uid, ok := userID.(uuid.UUID); ok {
-				if did, ok := deviceID.(string); ok {
-					wsService.HandleClientDisconnect(context.Background(), uid, did)
-				}
-			}
+			// Disconnect is handled by manager.SetOnDisconnect which calls wsService.HandleClientDisconnect
+			// after hub.Unregister() to ensure correct online status
 		},
 		SendErrorsToClient: true,
 	}
@@ -525,6 +518,7 @@ func main() {
 
 	userRepo := repo.NewUserRepository(dbClient, log)
 	wsService := service.NewWSService(userRepo, cacheClient, manager.GetHub(), log)
+	manager.SetWSService(wsService)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

@@ -36,7 +36,7 @@ type WSService interface {
 
 	// Connection lifecycle
 	HandleClientConnect(ctx context.Context, userID uuid.UUID, deviceID string) error
-	HandleClientDisconnect(ctx context.Context, userID uuid.UUID, deviceID string) error
+	HandleClientDisconnect(ctx context.Context, userID uuid.UUID, deviceID string, userStillOnline bool) error
 
 	// Broadcasting
 	BroadcastEvent(ctx context.Context, req *domain.BroadcastRequest) (*domain.BroadcastResponse, error)
@@ -134,9 +134,7 @@ func (s *wsService) HandleClientConnect(ctx context.Context, userID uuid.UUID, d
 	return nil
 }
 
-func (s *wsService) HandleClientDisconnect(ctx context.Context, userID uuid.UUID, deviceID string) error {
-	userStillOnline := s.hub.IsOnline(userID)
-
+func (s *wsService) HandleClientDisconnect(ctx context.Context, userID uuid.UUID, deviceID string, userStillOnline bool) error {
 	s.log.Info("Client disconnected",
 		logger.String("user_id", userID.String()),
 		logger.String("device_id", deviceID),

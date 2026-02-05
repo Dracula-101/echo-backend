@@ -252,7 +252,7 @@ func (c *Client) FindOne(ctx context.Context, model database.Model, query string
 func (c *Client) FindOneAndUpdate(ctx context.Context, dest interface{}, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing FindOneAndUpdate", logger.String("query", query))
+	c.log.Debug("Executing FindOneAndUpdate", logger.String("query", query), logger.Any("args", args))
 
 	row := c.db.QueryRowContext(ctx, query, nargs...)
 	if err := scanStruct(row, dest); err != nil {
@@ -266,7 +266,7 @@ func (c *Client) FindOneAndUpdate(ctx context.Context, dest interface{}, query s
 func (c *Client) FindMany(ctx context.Context, dest any, query string, args ...interface{}) *database.DBError {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing FindMany", logger.String("query", query))
+	c.log.Debug("Executing FindMany", logger.String("query", query), logger.Any("args", args))
 
 	rows, err := c.db.QueryContext(ctx, query, nargs...)
 	if err != nil {
@@ -286,7 +286,7 @@ func (c *Client) FindMany(ctx context.Context, dest any, query string, args ...i
 func (c *Client) Exists(ctx context.Context, model database.Model, query string, args ...interface{}) (bool, *database.DBError) {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing Exists check", logger.String("table", model.TableName()))
+	c.log.Debug("Executing Exists check", logger.String("table", model.TableName()), logger.String("query", query), logger.Any("args", args))
 
 	var exists bool
 	if err := c.db.QueryRowContext(ctx, query, nargs...).Scan(&exists); err != nil {
@@ -300,7 +300,7 @@ func (c *Client) Exists(ctx context.Context, model database.Model, query string,
 func (c *Client) Count(ctx context.Context, model database.Model, query string, args ...interface{}) (int64, *database.DBError) {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing Count", logger.String("table", model.TableName()))
+	c.log.Debug("Executing Count", logger.String("table", model.TableName()), logger.String("query", query), logger.Any("args", args))
 
 	var count int64
 	if err := c.db.QueryRowContext(ctx, query, nargs...).Scan(&count); err != nil {
@@ -314,7 +314,7 @@ func (c *Client) Count(ctx context.Context, model database.Model, query string, 
 func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (database.Rows, *database.DBError) {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing raw Query", logger.String("query", query))
+	c.log.Debug("Executing raw Query", logger.String("query", query), logger.Any("args", args))
 
 	rows, err := c.db.QueryContext(ctx, query, nargs...)
 	if err != nil {
@@ -328,7 +328,7 @@ func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (
 func (c *Client) QueryRow(ctx context.Context, query string, args ...interface{}) database.Row {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing QueryRow", logger.String("query", query))
+	c.log.Debug("Executing QueryRow", logger.String("query", query), logger.Any("args", args))
 
 	return &RowWrapper{row: c.db.QueryRowContext(ctx, query, nargs...), log: c.log.Logger}
 }
@@ -337,7 +337,7 @@ func (c *Client) QueryRow(ctx context.Context, query string, args ...interface{}
 func (c *Client) Exec(ctx context.Context, query string, args ...interface{}) (database.Result, *database.DBError) {
 	nargs := normalizeArgs(args)
 
-	c.log.Debug("Executing Exec", logger.String("query", query))
+	c.log.Debug("Executing Exec", logger.String("query", query), logger.Any("args", args))
 
 	result, err := c.db.ExecContext(ctx, query, nargs...)
 	if err != nil {

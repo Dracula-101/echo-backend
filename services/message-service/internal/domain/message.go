@@ -53,27 +53,28 @@ func NewMessage(model db.Message) Message {
 
 	if model.Metadata != nil {
 		metadata := make(map[string]interface{})
-		_ = json.Unmarshal(model.Metadata, &metadata)
-		msg.Metadata = &MessageMetadata{
-			MediaURL:      utils.GetValue(metadata, "media_url", "").(string),
-			ThumbnailURL:  utils.GetValue(metadata, "thumbnail_url", "").(string),
-			MediaSize:     utils.GetValue(metadata, "media_size", 0).(int),
-			MediaDuration: utils.GetValue(metadata, "media_duration", 0).(int),
-			MimeType:      utils.GetValue(metadata, "mime_type", "").(string),
-			FileName:      utils.GetValue(metadata, "file_name", "").(string),
-			Width:         utils.GetValue(metadata, "width", 0).(int),
-			Height:        utils.GetValue(metadata, "height", 0).(int),
-			Latitude:      utils.GetValue(metadata, "latitude", 0.0).(float64),
-			Longitude:     utils.GetValue(metadata, "longitude", 0.0).(float64),
-			Address:       utils.GetValue(metadata, "address", "").(string),
-		}
-		if lp, ok := metadata["link_preview"].(map[string]interface{}); ok {
-			msg.Metadata.LinkPreview = &LinkPreview{
-				URL:         utils.GetValue(lp, "url", "").(string),
-				Title:       utils.GetValue(lp, "title", "").(string),
-				Description: utils.GetValue(lp, "description", "").(string),
-				Image:       utils.GetValue(lp, "image", "").(string),
-				SiteName:    utils.GetValue(lp, "site_name", "").(string),
+		if err := json.Unmarshal(model.Metadata, &metadata); err == nil {
+			msg.Metadata = &MessageMetadata{
+				MediaURL:      getString(metadata, "media_url"),
+				ThumbnailURL:  getString(metadata, "thumbnail_url"),
+				MediaSize:     getInt(metadata, "media_size"),
+				MediaDuration: getInt(metadata, "media_duration"),
+				MimeType:      getString(metadata, "mime_type"),
+				FileName:      getString(metadata, "file_name"),
+				Width:         getInt(metadata, "width"),
+				Height:        getInt(metadata, "height"),
+				Latitude:      getFloat(metadata, "latitude"),
+				Longitude:     getFloat(metadata, "longitude"),
+				Address:       getString(metadata, "address"),
+			}
+			if lp, ok := metadata["link_preview"].(map[string]interface{}); ok {
+				msg.Metadata.LinkPreview = &LinkPreview{
+					URL:         getString(lp, "url"),
+					Title:       getString(lp, "title"),
+					Description: getString(lp, "description"),
+					Image:       getString(lp, "image"),
+					SiteName:    getString(lp, "site_name"),
+				}
 			}
 		}
 	}
@@ -171,4 +172,36 @@ type TypingIndicator struct {
 // IsActive checks if typing indicator is still active
 func (t *TypingIndicator) IsActive() bool {
 	return time.Now().Before(t.ExpiresAt)
+}
+
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getInt(m map[string]interface{}, key string) int {
+	if v, ok := m[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return int(n)
+		case int:
+			return n
+		case int64:
+			return int(n)
+		}
+	}
+	return 0
+}
+
+func getFloat(m map[string]interface{}, key string) float64 {
+	if v, ok := m[key]; ok {
+		if f, ok := v.(float64); ok {
+			return f
+		}
+	}
+	return 0.0
 }

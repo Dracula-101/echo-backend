@@ -20,6 +20,19 @@ const (
 	StatusDND       PresenceStatus = "dnd"
 )
 
+func (ps PresenceStatus) IsValid() bool {
+	switch ps {
+	case StatusOnline, StatusOffline, StatusAway, StatusBusy, StatusInvisible, StatusDND:
+		return true
+	default:
+		return false
+	}
+}
+
+func (ps PresenceStatus) String() string {
+	return string(ps)
+}
+
 type PresenceInfo struct {
 	UserID        uuid.UUID              `json:"user_id"`
 	Status        PresenceStatus         `json:"status"`

@@ -20,6 +20,18 @@ func NewServerMessage(msgType MessageType, requestID string) *ServerMessage {
 	}
 }
 
+func NewSuccessMessage(requestID string, payload any) *ServerMessage {
+	return &ServerMessage{
+		ID:        uuid.New().String(),
+		Type:      string(StatusSuccess),
+		Version:   ProtocolVersion,
+		Status:    StatusSuccess,
+		Timestamp: time.Now().UTC(),
+		RequestID: requestID,
+		Payload:   payload,
+	}
+}
+
 func NewErrorMessage(requestID string, code ErrorCode, message string) *ServerMessage {
 	return &ServerMessage{
 		ID:        uuid.New().String(),

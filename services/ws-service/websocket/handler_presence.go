@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"shared/pkg/logger"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
 	"ws-service/websocket/tracker"
@@ -13,6 +14,7 @@ import (
 )
 
 func (m *Manager) handlePresenceUpdate(ctx context.Context, msg *router.Message) error {
+	m.log.Debug("Handling presence update message")
 	conn, ok := m.getConnection(msg)
 	if !ok {
 		return nil
@@ -28,7 +30,32 @@ func (m *Manager) handlePresenceUpdate(ctx context.Context, msg *router.Message)
 		return err
 	}
 
-	m.presence.UpdatePresence(userID, tracker.PresenceStatus(payload.Status), payload.CustomStatus)
+	status := tracker.PresenceStatus(payload.Status)
+	if !status.IsValid() {
+		m.log.Warn("Invalid presence status received",
+			logger.String("user_id", userID.String()),
+			logger.String("status", payload.Status),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid presence status")
+	}
+
+	err := m.userRepo.UpdateOnlineStatus(context.Background(), userID, status.String())
+	if err != nil {
+		m.log.Error("Failed to update online status in database",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+	} else {
+		m.presence.UpdatePresence(userID, status, payload.CustomStatus)
+		m.log.Debug("Updated online status in database",
+			logger.String("user_id", userID.String()),
+			logger.String("status", status.String()),
+		)
+		m.SendMessageToUser(userID, protocol.NewSuccessMessage(
+			m.getRequestID(msg),
+			"Presence update successful",
+		))
+	}
 	return nil
 }
 

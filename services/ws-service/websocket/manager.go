@@ -47,6 +47,7 @@ type Manager struct {
 	// Services
 	authzService      service.AuthorizationService
 	deliveryPublisher service.DeliveryEventPublisher
+	wsService         service.WSService
 
 	state          ManagerState
 	startTime      time.Time
@@ -224,6 +225,10 @@ func (m *Manager) GetConfig() *Config {
 	return m.config
 }
 
+func (m *Manager) SetWSService(svc service.WSService) {
+	m.wsService = svc
+}
+
 func (m *Manager) GetState() ManagerState {
 	return m.state
 }
@@ -297,9 +302,16 @@ func (m *Manager) setupLifecycleHooks() {
 		platform := m.getPlatform(conn)
 
 		m.hub.Unregister(userID, deviceID)
+		userStillOnline := m.hub.IsOnline(userID)
+
 		m.subscriptions.UnsubscribeAll(conn.ID())
 		m.typing.StopTypingForUser(userID)
 		m.presence.OnUserDisconnected(userID, deviceID)
+
+		if m.wsService != nil {
+			ctx := context.Background()
+			m.wsService.HandleClientDisconnect(ctx, userID, deviceID, userStillOnline)
+		}
 
 		if m.metrics != nil {
 			m.metrics.OnDisconnect(platform)
@@ -309,6 +321,7 @@ func (m *Manager) setupLifecycleHooks() {
 			logger.String("user_id", userID.String()),
 			logger.String("device_id", deviceID),
 			logger.String("conn_id", conn.ID()),
+			logger.Bool("user_still_online", userStillOnline),
 		)
 	})
 }
