@@ -11,8 +11,8 @@ type Handler func(ctx context.Context, msg *Message) error
 
 // Message represents a routed message
 type Message struct {
-	Type    string
-	Payload []byte
+	Type     string
+	Payload  []byte
 	Metadata map[string]interface{}
 }
 

@@ -17,7 +17,7 @@ func (s *MediaService) GetStorageStats(ctx context.Context, input models.GetStor
 		if err != nil {
 			return nil, pkgErrors.FromError(fmt.Errorf("failed to calculate storage stats: %w", err), pkgErrors.CodeInternal, "failed to calculate storage stats").
 				WithDetail("user_id", input.UserID).
-				WithService("media-service")	
+				WithService("media-service")
 		}
 
 		_ = s.repo.CreateOrUpdateStorageStats(ctx, stats)

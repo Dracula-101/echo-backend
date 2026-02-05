@@ -20,9 +20,9 @@ const (
 	ErrCodeForbidden          ErrorCode = "FORBIDDEN"
 
 	// Server errors (5xxx)
-	ErrCodeInternalError  ErrorCode = "INTERNAL_ERROR"
+	ErrCodeInternalError      ErrorCode = "INTERNAL_ERROR"
 	ErrCodeServiceUnavailable ErrorCode = "SERVICE_UNAVAILABLE"
-	ErrCodeTimeout        ErrorCode = "TIMEOUT"
+	ErrCodeTimeout            ErrorCode = "TIMEOUT"
 )
 
 // ErrorResponse represents a WebSocket error response

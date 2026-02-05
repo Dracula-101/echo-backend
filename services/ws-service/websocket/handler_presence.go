@@ -7,7 +7,7 @@ import (
 
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
-	"ws-service/internal/websocket/tracker"
+	"ws-service/websocket/tracker"
 
 	"github.com/google/uuid"
 )

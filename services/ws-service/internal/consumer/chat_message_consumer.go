@@ -8,7 +8,7 @@ import (
 	"shared/pkg/messaging"
 	"ws-service/internal/domain"
 	"ws-service/internal/protocol"
-	"ws-service/internal/websocket"
+	"ws-service/websocket"
 
 	"github.com/google/uuid"
 )

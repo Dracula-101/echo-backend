@@ -16,8 +16,8 @@ import (
 	"ws-service/internal/protocol"
 	"ws-service/internal/repo"
 	"ws-service/internal/service"
-	"ws-service/internal/websocket/middleware"
-	"ws-service/internal/websocket/tracker"
+	"ws-service/websocket/middleware"
+	"ws-service/websocket/tracker"
 
 	codes "ws-service/internal/domain"
 

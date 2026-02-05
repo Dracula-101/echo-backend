@@ -93,8 +93,8 @@ func (m *Machine) SetOnChange(fn func(from, to State)) {
 func (m *Machine) isValidTransition(from, to State) bool {
 	// Define valid transitions
 	validTransitions := map[State][]State{
-		StateConnecting: {StateConnected, StateDisconnecting, StateDisconnected, StateError},
-		StateConnected:  {StateDisconnecting, StateDisconnected, StateError, StateReconnecting},
+		StateConnecting:    {StateConnected, StateDisconnecting, StateDisconnected, StateError},
+		StateConnected:     {StateDisconnecting, StateDisconnected, StateError, StateReconnecting},
 		StateDisconnecting: {StateDisconnected, StateError},
 		StateDisconnected:  {StateReconnecting, StateConnecting},
 		StateReconnecting:  {StateConnecting, StateDisconnected, StateError},

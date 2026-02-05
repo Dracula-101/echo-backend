@@ -57,7 +57,7 @@ func (sl *StructuredLogger) LogStruct(level string, msg string, s interface{}, a
 func (sl *StructuredLogger) LogStructWithContext(ctx context.Context, level string, msg string, s interface{}, additionalFields ...logger.Field) {
 	// Extract context values
 	contextFields := sl.extractContextFields(ctx)
-	
+
 	allFields := make([]logger.Field, 0, len(additionalFields)+len(contextFields)+1)
 	allFields = append(allFields, contextFields...)
 	allFields = append(allFields, logger.Object("data", s))
@@ -69,7 +69,7 @@ func (sl *StructuredLogger) LogStructWithContext(ctx context.Context, level stri
 // LogComparison logs a before/after comparison of structs
 func (sl *StructuredLogger) LogComparison(msg string, before, after interface{}, additionalFields ...logger.Field) {
 	fields := make([]logger.Field, 0, len(additionalFields)+2)
-	fields = append(fields, 
+	fields = append(fields,
 		logger.Object("before", before),
 		logger.Object("after", after),
 	)
@@ -81,7 +81,7 @@ func (sl *StructuredLogger) LogComparison(msg string, before, after interface{},
 // LogDiff logs the differences between two structs
 func (sl *StructuredLogger) LogDiff(msg string, old, new interface{}, additionalFields ...logger.Field) {
 	diff := sl.computeDiff(old, new)
-	
+
 	fields := make([]logger.Field, 0, len(additionalFields)+1)
 	fields = append(fields, logger.Object("diff", diff))
 	fields = append(fields, additionalFields...)
@@ -92,12 +92,12 @@ func (sl *StructuredLogger) LogDiff(msg string, old, new interface{}, additional
 // LogCollection logs a collection of items with metadata
 func (sl *StructuredLogger) LogCollection(msg string, items interface{}, additionalFields ...logger.Field) {
 	val := reflect.ValueOf(items)
-	
+
 	metadata := map[string]interface{}{
 		"type":  val.Type().String(),
 		"count": val.Len(),
 	}
-	
+
 	if val.Len() > 0 {
 		metadata["first_item"] = val.Index(0).Interface()
 		if val.Len() > 1 {
@@ -122,7 +122,7 @@ func (sl *StructuredLogger) LogMetrics(operation string, duration time.Duration,
 		"duration_ms":  duration.Milliseconds(),
 		"duration_str": duration.String(),
 	}
-	
+
 	for k, v := range metrics {
 		metricsData[k] = v
 	}
@@ -137,17 +137,17 @@ func (sl *StructuredLogger) LogMetrics(operation string, duration time.Duration,
 // LogAudit logs an audit event with detailed tracking
 func (sl *StructuredLogger) LogAudit(ctx context.Context, action string, resource string, details interface{}, additionalFields ...logger.Field) {
 	caller := sl.getCaller(2)
-	
+
 	auditData := map[string]interface{}{
-		"action":     action,
-		"resource":   resource,
-		"timestamp":  time.Now().UTC(),
-		"caller":     caller,
-		"details":    details,
+		"action":    action,
+		"resource":  resource,
+		"timestamp": time.Now().UTC(),
+		"caller":    caller,
+		"details":   details,
 	}
 
 	contextFields := sl.extractContextFields(ctx)
-	
+
 	fields := make([]logger.Field, 0, len(additionalFields)+len(contextFields)+1)
 	fields = append(fields, contextFields...)
 	fields = append(fields, logger.Object("audit", auditData))
@@ -175,12 +175,12 @@ func (sl *StructuredLogger) LogTransaction(transactionID string, phase string, d
 // LogStateChange logs a state transition
 func (sl *StructuredLogger) LogStateChange(entity string, entityID string, fromState, toState string, data interface{}, additionalFields ...logger.Field) {
 	stateData := map[string]interface{}{
-		"entity":      entity,
-		"entity_id":   entityID,
-		"from_state":  fromState,
-		"to_state":    toState,
-		"timestamp":   time.Now().UTC(),
-		"data":        data,
+		"entity":     entity,
+		"entity_id":  entityID,
+		"from_state": fromState,
+		"to_state":   toState,
+		"timestamp":  time.Now().UTC(),
+		"data":       data,
 	}
 
 	fields := make([]logger.Field, 0, len(additionalFields)+1)
@@ -196,7 +196,7 @@ func (sl *StructuredLogger) LogError(ctx context.Context, err error, msg string,
 		"error":     err.Error(),
 		"timestamp": time.Now().UTC(),
 	}
-	
+
 	if data != nil {
 		errorData["context_data"] = data
 	}
@@ -205,7 +205,7 @@ func (sl *StructuredLogger) LogError(ctx context.Context, err error, msg string,
 	pc := make([]uintptr, 15)
 	n := runtime.Callers(2, pc)
 	frames := runtime.CallersFrames(pc[:n])
-	
+
 	var stackTrace []string
 	for {
 		frame, more := frames.Next()
@@ -217,7 +217,7 @@ func (sl *StructuredLogger) LogError(ctx context.Context, err error, msg string,
 	errorData["stack_trace"] = stackTrace
 
 	contextFields := sl.extractContextFields(ctx)
-	
+
 	fields := make([]logger.Field, 0, len(additionalFields)+len(contextFields)+1)
 	fields = append(fields, contextFields...)
 	fields = append(fields, logger.Object("error_details", errorData))
@@ -230,7 +230,7 @@ func (sl *StructuredLogger) LogError(ctx context.Context, err error, msg string,
 func (sl *StructuredLogger) LogPerformanceTrace(operation string, phases map[string]time.Duration, additionalFields ...logger.Field) {
 	var totalDuration time.Duration
 	phaseData := make(map[string]interface{})
-	
+
 	for phase, duration := range phases {
 		totalDuration += duration
 		phaseData[phase] = map[string]interface{}{
@@ -239,7 +239,7 @@ func (sl *StructuredLogger) LogPerformanceTrace(operation string, phases map[str
 			"percentage":  0.0,
 		}
 	}
-	
+
 	// Calculate percentages
 	if totalDuration > 0 {
 		for phase, duration := range phases {
@@ -250,11 +250,11 @@ func (sl *StructuredLogger) LogPerformanceTrace(operation string, phases map[str
 	}
 
 	traceData := map[string]interface{}{
-		"operation":    operation,
-		"total_ms":     totalDuration.Milliseconds(),
-		"total":        totalDuration.String(),
-		"phases":       phaseData,
-		"phase_count":  len(phases),
+		"operation":   operation,
+		"total_ms":    totalDuration.Milliseconds(),
+		"total":       totalDuration.String(),
+		"phases":      phaseData,
+		"phase_count": len(phases),
 	}
 
 	fields := make([]logger.Field, 0, len(additionalFields)+1)
@@ -271,7 +271,7 @@ func (sl *StructuredLogger) LogDataFlow(pipeline string, stage string, input, ou
 		"stage":     stage,
 		"timestamp": time.Now().UTC(),
 	}
-	
+
 	if input != nil {
 		flowData["input"] = sl.summarizeData(input)
 	}
@@ -297,13 +297,13 @@ func (sl *StructuredLogger) LogValidation(entity string, validationResults map[s
 	}
 
 	validationData := map[string]interface{}{
-		"entity":        entity,
-		"is_valid":      errorCount == 0,
-		"error_count":   errorCount,
-		"errors":        validationResults,
-		"validated_at":  time.Now().UTC(),
+		"entity":       entity,
+		"is_valid":     errorCount == 0,
+		"error_count":  errorCount,
+		"errors":       validationResults,
+		"validated_at": time.Now().UTC(),
 	}
-	
+
 	if data != nil {
 		validationData["data"] = data
 	}
@@ -434,7 +434,7 @@ func (sl *StructuredLogger) computeDiff(old, new interface{}) map[string]interfa
 // summarizeData creates a summary of data for logging
 func (sl *StructuredLogger) summarizeData(data interface{}) map[string]interface{} {
 	summary := make(map[string]interface{})
-	
+
 	val := reflect.ValueOf(data)
 	summary["type"] = val.Type().String()
 
@@ -568,7 +568,7 @@ func NewTraceLogger(structuredLogger *StructuredLogger, traceID, spanID, parentS
 // LogSpan logs a span event
 func (tl *TraceLogger) LogSpan(operation string, startTime, endTime time.Time, tags map[string]interface{}, additionalFields ...logger.Field) {
 	duration := endTime.Sub(startTime)
-	
+
 	spanData := map[string]interface{}{
 		"trace_id":       tl.traceID,
 		"span_id":        tl.spanID,

@@ -15,8 +15,8 @@ type Subscriber struct {
 
 // Message represents a pub/sub message
 type Message struct {
-	Topic   string
-	Payload []byte
+	Topic    string
+	Payload  []byte
 	Metadata map[string]interface{}
 }
 

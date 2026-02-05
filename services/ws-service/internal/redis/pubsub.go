@@ -11,12 +11,12 @@ import (
 )
 
 type BroadcastMessage struct {
-	Type       string `json:"type"`
-	TargetType string `json:"target_type"`
-	TargetID   string `json:"target_id"`
-	ExcludeIDs []string `json:"exclude_ids,omitempty"`
-	Payload    []byte `json:"payload"`
-	SourceInstance string `json:"source_instance"`
+	Type           string   `json:"type"`
+	TargetType     string   `json:"target_type"`
+	TargetID       string   `json:"target_id"`
+	ExcludeIDs     []string `json:"exclude_ids,omitempty"`
+	Payload        []byte   `json:"payload"`
+	SourceInstance string   `json:"source_instance"`
 }
 
 type MessageHandler func(msg *BroadcastMessage)

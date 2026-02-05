@@ -35,7 +35,7 @@ type EnrichmentMiddleware func(fields []logger.Field) []logger.Field
 // NewLogEnricher creates a new log enricher
 func NewLogEnricher(appVersion, environment string) *LogEnricher {
 	hostname, _ := os.Hostname()
-	
+
 	return &LogEnricher{
 		hostname:       hostname,
 		processID:      os.Getpid(),
@@ -99,9 +99,9 @@ func (le *LogEnricher) AddMiddleware(middleware EnrichmentMiddleware) {
 // Enrich enriches log fields with contextual information
 func (le *LogEnricher) Enrich(ctx context.Context, fields []logger.Field) []logger.Field {
 	le.mu.RLock()
-	
+
 	enriched := make([]logger.Field, 0, len(fields)+20)
-	
+
 	// Add system information
 	enriched = append(enriched,
 		logger.String("hostname", le.hostname),
@@ -109,7 +109,7 @@ func (le *LogEnricher) Enrich(ctx context.Context, fields []logger.Field) []logg
 		logger.String("app_version", le.appVersion),
 		logger.String("environment", le.environment),
 	)
-	
+
 	if le.region != "" {
 		enriched = append(enriched, logger.String("region", le.region))
 	}
@@ -122,20 +122,20 @@ func (le *LogEnricher) Enrich(ctx context.Context, fields []logger.Field) []logg
 	if le.machineID != "" {
 		enriched = append(enriched, logger.String("machine_id", le.machineID))
 	}
-	
+
 	// Add global tags
 	for key, value := range le.globalTags {
 		enriched = append(enriched, logger.Any(key, value))
 	}
-	
+
 	le.mu.RUnlock()
-	
+
 	// Add runtime information
 	enriched = append(enriched,
 		logger.Int("goroutines", runtime.NumGoroutine()),
 		logger.String("go_version", runtime.Version()),
 	)
-	
+
 	// Add memory statistics
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -145,7 +145,7 @@ func (le *LogEnricher) Enrich(ctx context.Context, fields []logger.Field) []logg
 		logger.Uint64("mem_sys_mb", m.Sys/1024/1024),
 		logger.Uint32("mem_num_gc", m.NumGC),
 	)
-	
+
 	// Add context information
 	if ctx != nil {
 		if correlationID := le.correlationMgr.GetCorrelationID(ctx); correlationID != "" {
@@ -161,17 +161,17 @@ func (le *LogEnricher) Enrich(ctx context.Context, fields []logger.Field) []logg
 			enriched = append(enriched, logger.String("session_id", sessionID))
 		}
 	}
-	
+
 	// Add original fields
 	enriched = append(enriched, fields...)
-	
+
 	// Apply middleware
 	le.mu.RLock()
 	for _, middleware := range le.middleware {
 		enriched = middleware(enriched)
 	}
 	le.mu.RUnlock()
-	
+
 	return enriched
 }
 
@@ -209,19 +209,19 @@ func (le *LogEnricher) extractSessionID(ctx context.Context) string {
 func (le *LogEnricher) GetSystemInfo() map[string]interface{} {
 	le.mu.RLock()
 	defer le.mu.RUnlock()
-	
+
 	info := map[string]interface{}{
-		"hostname":     le.hostname,
-		"pid":          le.processID,
-		"app_version":  le.appVersion,
-		"environment":  le.environment,
-		"go_version":   runtime.Version(),
-		"os":           runtime.GOOS,
-		"arch":         runtime.GOARCH,
-		"num_cpu":      runtime.NumCPU(),
-		"goroutines":   runtime.NumGoroutine(),
+		"hostname":    le.hostname,
+		"pid":         le.processID,
+		"app_version": le.appVersion,
+		"environment": le.environment,
+		"go_version":  runtime.Version(),
+		"os":          runtime.GOOS,
+		"arch":        runtime.GOARCH,
+		"num_cpu":     runtime.NumCPU(),
+		"goroutines":  runtime.NumGoroutine(),
 	}
-	
+
 	if le.region != "" {
 		info["region"] = le.region
 	}
@@ -234,7 +234,7 @@ func (le *LogEnricher) GetSystemInfo() map[string]interface{} {
 	if le.machineID != "" {
 		info["machine_id"] = le.machineID
 	}
-	
+
 	return info
 }
 
@@ -294,7 +294,7 @@ func NewMetadataManager() *MetadataManager {
 func (mm *MetadataManager) SetMetadata(namespace string, key string, value interface{}) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
-	
+
 	if mm.metadata[namespace] == nil {
 		mm.metadata[namespace] = make(map[string]interface{})
 	}
@@ -305,7 +305,7 @@ func (mm *MetadataManager) SetMetadata(namespace string, key string, value inter
 func (mm *MetadataManager) GetMetadata(namespace string) map[string]interface{} {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
-	
+
 	if metadata, ok := mm.metadata[namespace]; ok {
 		// Return a copy
 		copy := make(map[string]interface{})
@@ -321,7 +321,7 @@ func (mm *MetadataManager) GetMetadata(namespace string) map[string]interface{} 
 func (mm *MetadataManager) GetAllMetadata() map[string]map[string]interface{} {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
-	
+
 	// Return a deep copy
 	copy := make(map[string]map[string]interface{})
 	for namespace, metadata := range mm.metadata {
@@ -337,7 +337,7 @@ func (mm *MetadataManager) GetAllMetadata() map[string]map[string]interface{} {
 func (mm *MetadataManager) DeleteMetadata(namespace string, key string) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
-	
+
 	if metadata, ok := mm.metadata[namespace]; ok {
 		delete(metadata, key)
 		if len(metadata) == 0 {
@@ -370,18 +370,18 @@ func NewTagManager() *TagManager {
 func (tm *TagManager) AddTag(category, tag string) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	
+
 	if tm.tags[category] == nil {
 		tm.tags[category] = make([]string, 0)
 	}
-	
+
 	// Check if tag already exists
 	for _, existingTag := range tm.tags[category] {
 		if existingTag == tag {
 			return
 		}
 	}
-	
+
 	tm.tags[category] = append(tm.tags[category], tag)
 }
 
@@ -389,7 +389,7 @@ func (tm *TagManager) AddTag(category, tag string) {
 func (tm *TagManager) RemoveTag(category, tag string) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	
+
 	if tags, ok := tm.tags[category]; ok {
 		for i, existingTag := range tags {
 			if existingTag == tag {
@@ -397,7 +397,7 @@ func (tm *TagManager) RemoveTag(category, tag string) {
 				break
 			}
 		}
-		
+
 		if len(tm.tags[category]) == 0 {
 			delete(tm.tags, category)
 		}
@@ -408,7 +408,7 @@ func (tm *TagManager) RemoveTag(category, tag string) {
 func (tm *TagManager) GetTags(category string) []string {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	if tags, ok := tm.tags[category]; ok {
 		// Return a copy
 		copy := make([]string, len(tags))
@@ -424,7 +424,7 @@ func (tm *TagManager) GetTags(category string) []string {
 func (tm *TagManager) GetAllTags() map[string][]string {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	// Return a deep copy
 	copy := make(map[string][]string)
 	for category, tags := range tm.tags {
@@ -440,7 +440,7 @@ func (tm *TagManager) GetAllTags() map[string][]string {
 func (tm *TagManager) HasTag(category, tag string) bool {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	if tags, ok := tm.tags[category]; ok {
 		for _, existingTag := range tags {
 			if existingTag == tag {
@@ -551,7 +551,7 @@ func (fm *FilterManager) GetFilter(name string) (FilterRule, bool) {
 func (fm *FilterManager) GetAllFilters() []FilterRule {
 	fm.mu.RLock()
 	defer fm.mu.RUnlock()
-	
+
 	rules := make([]FilterRule, 0, len(fm.filters))
 	for _, rule := range fm.filters {
 		rules = append(rules, rule)
@@ -563,7 +563,7 @@ func (fm *FilterManager) GetAllFilters() []FilterRule {
 func (fm *FilterManager) EnableFilter(name string) {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
-	
+
 	if rule, ok := fm.filters[name]; ok {
 		rule.Enabled = true
 		fm.filters[name] = rule
@@ -574,7 +574,7 @@ func (fm *FilterManager) EnableFilter(name string) {
 func (fm *FilterManager) DisableFilter(name string) {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
-	
+
 	if rule, ok := fm.filters[name]; ok {
 		rule.Enabled = false
 		fm.filters[name] = rule
@@ -585,15 +585,15 @@ func (fm *FilterManager) DisableFilter(name string) {
 func (fm *FilterManager) ShouldLog(fields map[string]interface{}) bool {
 	fm.mu.RLock()
 	defer fm.mu.RUnlock()
-	
+
 	for _, rule := range fm.filters {
 		if !rule.Enabled {
 			continue
 		}
-		
+
 		if fieldValue, ok := fields[rule.Field]; ok {
 			matched := fm.evaluateFilter(rule, fieldValue)
-			
+
 			if matched {
 				switch rule.Action {
 				case "drop":
@@ -604,7 +604,7 @@ func (fm *FilterManager) ShouldLog(fields map[string]interface{}) bool {
 			}
 		}
 	}
-	
+
 	return true
 }
 
@@ -637,7 +637,7 @@ func (fm *FilterManager) evaluateFilter(rule FilterRule, fieldValue interface{})
 		pattern := fmt.Sprintf("%v", rule.Value)
 		return strings.Contains(str, pattern)
 	}
-	
+
 	return false
 }
 
@@ -660,14 +660,14 @@ func NewSamplingManager() *SamplingManager {
 func (sm *SamplingManager) SetSamplingRate(category string, rate float64) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	if rate < 0 {
 		rate = 0
 	}
 	if rate > 1 {
 		rate = 1
 	}
-	
+
 	sm.samplingRates[category] = rate
 }
 
@@ -675,21 +675,21 @@ func (sm *SamplingManager) SetSamplingRate(category string, rate float64) {
 func (sm *SamplingManager) ShouldSample(category string) bool {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	rate, ok := sm.samplingRates[category]
 	if !ok {
 		return true // If no rate is set, sample everything
 	}
-	
+
 	sm.counters[category]++
 	count := sm.counters[category]
-	
+
 	// Simple modulo-based sampling
 	sampleEvery := int(1.0 / rate)
 	if sampleEvery <= 0 {
 		return false
 	}
-	
+
 	return count%sampleEvery == 0
 }
 
@@ -697,7 +697,7 @@ func (sm *SamplingManager) ShouldSample(category string) bool {
 func (sm *SamplingManager) GetSamplingRate(category string) float64 {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	
+
 	rate, ok := sm.samplingRates[category]
 	if !ok {
 		return 1.0

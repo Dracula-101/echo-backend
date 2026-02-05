@@ -15,9 +15,9 @@ import (
 
 // Connection represents a WebSocket connection
 type Connection struct {
-	id       string
-	conn     *websocket.Conn
-	connMu   sync.RWMutex
+	id     string
+	conn   *websocket.Conn
+	connMu sync.RWMutex
 
 	// State management
 	stateMachine *state.Machine
@@ -31,7 +31,7 @@ type Connection struct {
 	cancel context.CancelFunc
 
 	// Metadata
-	metadata  map[string]interface{}
+	metadata   map[string]interface{}
 	metadataMu sync.RWMutex
 
 	// Timing

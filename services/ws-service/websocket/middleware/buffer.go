@@ -16,19 +16,19 @@ type BufferedMessage struct {
 }
 
 type MessageBufferConfig struct {
-	MaxSize       int
-	MaxAge        time.Duration
-	MaxRetries    int
-	RetryDelay    time.Duration
+	MaxSize         int
+	MaxAge          time.Duration
+	MaxRetries      int
+	RetryDelay      time.Duration
 	CleanupInterval time.Duration
 }
 
 func DefaultMessageBufferConfig() *MessageBufferConfig {
 	return &MessageBufferConfig{
-		MaxSize:       100,
-		MaxAge:        5 * time.Minute,
-		MaxRetries:    3,
-		RetryDelay:    100 * time.Millisecond,
+		MaxSize:         100,
+		MaxAge:          5 * time.Minute,
+		MaxRetries:      3,
+		RetryDelay:      100 * time.Millisecond,
 		CleanupInterval: 30 * time.Second,
 	}
 }

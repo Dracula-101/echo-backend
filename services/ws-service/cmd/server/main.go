@@ -14,7 +14,7 @@ import (
 	healthCheckers "ws-service/internal/health/checkers"
 	"ws-service/internal/repo"
 	"ws-service/internal/service"
-	wsManager "ws-service/internal/websocket"
+	wsManager "ws-service/websocket"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"

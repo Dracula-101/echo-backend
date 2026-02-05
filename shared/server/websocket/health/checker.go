@@ -47,9 +47,9 @@ type Result struct {
 
 // Checker performs health checks
 type Checker struct {
-	checks   map[string]Check
-	results  map[string]*Result
-	mu       sync.RWMutex
+	checks  map[string]Check
+	results map[string]*Result
+	mu      sync.RWMutex
 
 	status atomic.Value // Status
 

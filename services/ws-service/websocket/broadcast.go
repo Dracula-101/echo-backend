@@ -8,7 +8,7 @@ import (
 	"shared/server/websocket/pubsub"
 	"ws-service/internal/domain"
 	"ws-service/internal/protocol"
-	"ws-service/internal/websocket/tracker"
+	"ws-service/websocket/tracker"
 
 	"github.com/google/uuid"
 )

@@ -17,19 +17,19 @@ type UserPresence struct {
 
 // Device represents a user's device information
 type Device struct {
-	ID             uuid.UUID  `json:"id"`
-	UserID         uuid.UUID  `json:"user_id"`
-	DeviceID       string     `json:"device_id"`
-	DeviceName     string     `json:"device_name,omitempty"`
-	DeviceType     string     `json:"device_type,omitempty"`
-	Platform       string     `json:"platform,omitempty"`
-	AppVersion     string     `json:"app_version,omitempty"`
-	IsActive       bool       `json:"is_active"`
-	LastActiveAt   time.Time  `json:"last_active_at"`
-	RegisteredAt   time.Time  `json:"registered_at"`
-	FCMToken       string     `json:"fcm_token,omitempty"`
-	APNSToken      string     `json:"apns_token,omitempty"`
-	PushEnabled    bool       `json:"push_enabled"`
+	ID           uuid.UUID `json:"id"`
+	UserID       uuid.UUID `json:"user_id"`
+	DeviceID     string    `json:"device_id"`
+	DeviceName   string    `json:"device_name,omitempty"`
+	DeviceType   string    `json:"device_type,omitempty"`
+	Platform     string    `json:"platform,omitempty"`
+	AppVersion   string    `json:"app_version,omitempty"`
+	IsActive     bool      `json:"is_active"`
+	LastActiveAt time.Time `json:"last_active_at"`
+	RegisteredAt time.Time `json:"registered_at"`
+	FCMToken     string    `json:"fcm_token,omitempty"`
+	APNSToken    string    `json:"apns_token,omitempty"`
+	PushEnabled  bool      `json:"push_enabled"`
 }
 
 // PresenceUpdate represents a presence status update
@@ -52,8 +52,8 @@ type TypingIndicator struct {
 // PresencePrivacy represents privacy settings for presence
 type PresencePrivacy struct {
 	UserID                  uuid.UUID `json:"user_id"`
-	LastSeenVisibility      string    `json:"last_seen_visibility"`      // everyone, contacts, nobody
-	OnlineStatusVisibility  string    `json:"online_status_visibility"`  // everyone, contacts, nobody
+	LastSeenVisibility      string    `json:"last_seen_visibility"`     // everyone, contacts, nobody
+	OnlineStatusVisibility  string    `json:"online_status_visibility"` // everyone, contacts, nobody
 	TypingIndicatorsEnabled bool      `json:"typing_indicators_enabled"`
 	ReadReceiptsEnabled     bool      `json:"read_receipts_enabled"`
 }

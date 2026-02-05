@@ -274,7 +274,7 @@ func (h *Handler) startReadPump(conn *Connection, wsConn *websocket.Conn, r *htt
 						nil,
 					))
 				}
-			} 
+			}
 		}
 	}
 }

@@ -5,11 +5,11 @@ import "time"
 // Config holds connection configuration
 type Config struct {
 	// Timeouts
-	WriteTimeout  time.Duration
-	ReadTimeout   time.Duration
-	PingInterval  time.Duration
-	PongTimeout   time.Duration
-	StaleTimeout  time.Duration
+	WriteTimeout     time.Duration
+	ReadTimeout      time.Duration
+	PingInterval     time.Duration
+	PongTimeout      time.Duration
+	StaleTimeout     time.Duration
 	HandshakeTimeout time.Duration
 
 	// Buffer sizes

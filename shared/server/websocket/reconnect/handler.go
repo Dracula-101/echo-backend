@@ -23,12 +23,12 @@ const (
 
 // Config holds reconnection configuration
 type Config struct {
-	Strategy        Strategy
-	MaxAttempts     int
-	InitialDelay    time.Duration
-	MaxDelay        time.Duration
-	Multiplier      float64
-	Jitter          bool
+	Strategy     Strategy
+	MaxAttempts  int
+	InitialDelay time.Duration
+	MaxDelay     time.Duration
+	Multiplier   float64
+	Jitter       bool
 }
 
 // DefaultConfig returns default reconnection config

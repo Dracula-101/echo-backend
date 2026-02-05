@@ -11,10 +11,10 @@ import (
 
 // Manager manages all active connections
 type Manager struct {
-	connections   map[string]*Connection
-	mu            sync.RWMutex
+	connections    map[string]*Connection
+	mu             sync.RWMutex
 	maxConnections int32
-	currentCount  atomic.Int32
+	currentCount   atomic.Int32
 
 	// Lifecycle hooks
 	onConnect    func(*Connection)

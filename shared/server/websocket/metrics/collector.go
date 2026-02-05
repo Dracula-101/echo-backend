@@ -9,33 +9,33 @@ import (
 // Collector collects WebSocket metrics
 type Collector struct {
 	// Connection metrics
-	totalConnections     atomic.Int64
-	activeConnections    atomic.Int64
-	totalDisconnections  atomic.Int64
-	failedConnections    atomic.Int64
+	totalConnections    atomic.Int64
+	activeConnections   atomic.Int64
+	totalDisconnections atomic.Int64
+	failedConnections   atomic.Int64
 
 	// Message metrics
-	messagesSent        atomic.Int64
-	messagesReceived    atomic.Int64
-	messagesSentFailed  atomic.Int64
-	messagesDropped     atomic.Int64
+	messagesSent       atomic.Int64
+	messagesReceived   atomic.Int64
+	messagesSentFailed atomic.Int64
+	messagesDropped    atomic.Int64
 
 	// Byte metrics
-	bytesSent           atomic.Int64
-	bytesReceived       atomic.Int64
+	bytesSent     atomic.Int64
+	bytesReceived atomic.Int64
 
 	// Error metrics
-	totalErrors         atomic.Int64
-	errorsByType        map[string]*atomic.Int64
-	errorsMu            sync.RWMutex
+	totalErrors  atomic.Int64
+	errorsByType map[string]*atomic.Int64
+	errorsMu     sync.RWMutex
 
 	// Latency tracking
-	latencies           []time.Duration
-	latenciesMu         sync.RWMutex
-	maxLatencySamples   int
+	latencies         []time.Duration
+	latenciesMu       sync.RWMutex
+	maxLatencySamples int
 
 	// Start time
-	startTime           time.Time
+	startTime time.Time
 }
 
 // NewCollector creates a new metrics collector
@@ -138,23 +138,23 @@ func (c *Collector) GetSnapshot() *Snapshot {
 	c.latenciesMu.RUnlock()
 
 	return &Snapshot{
-		TotalConnections:     c.totalConnections.Load(),
-		ActiveConnections:    c.activeConnections.Load(),
-		TotalDisconnections:  c.totalDisconnections.Load(),
-		FailedConnections:    c.failedConnections.Load(),
-		MessagesSent:         c.messagesSent.Load(),
-		MessagesReceived:     c.messagesReceived.Load(),
-		MessagesSentFailed:   c.messagesSentFailed.Load(),
-		MessagesDropped:      c.messagesDropped.Load(),
-		BytesSent:            c.bytesSent.Load(),
-		BytesReceived:        c.bytesReceived.Load(),
-		TotalErrors:          c.totalErrors.Load(),
-		ErrorsByType:         errorsByType,
-		AvgLatency:           avgLatency,
-		P50Latency:           p50,
-		P95Latency:           p95,
-		P99Latency:           p99,
-		Uptime:               time.Since(c.startTime),
+		TotalConnections:    c.totalConnections.Load(),
+		ActiveConnections:   c.activeConnections.Load(),
+		TotalDisconnections: c.totalDisconnections.Load(),
+		FailedConnections:   c.failedConnections.Load(),
+		MessagesSent:        c.messagesSent.Load(),
+		MessagesReceived:    c.messagesReceived.Load(),
+		MessagesSentFailed:  c.messagesSentFailed.Load(),
+		MessagesDropped:     c.messagesDropped.Load(),
+		BytesSent:           c.bytesSent.Load(),
+		BytesReceived:       c.bytesReceived.Load(),
+		TotalErrors:         c.totalErrors.Load(),
+		ErrorsByType:        errorsByType,
+		AvgLatency:          avgLatency,
+		P50Latency:          p50,
+		P95Latency:          p95,
+		P99Latency:          p99,
+		Uptime:              time.Since(c.startTime),
 	}
 }
 

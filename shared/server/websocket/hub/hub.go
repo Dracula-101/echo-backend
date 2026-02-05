@@ -60,12 +60,12 @@ func (c *Client) ConnectionCount() int {
 
 // Hub manages clients and their multi-device connections
 type Hub struct {
-	clients       map[uuid.UUID]*Client // userID -> client
-	mu            sync.RWMutex
-	eventEmitter  *event.Emitter
-	log           logger.Logger
-	ctx           context.Context
-	cancel        context.CancelFunc
+	clients      map[uuid.UUID]*Client // userID -> client
+	mu           sync.RWMutex
+	eventEmitter *event.Emitter
+	log          logger.Logger
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 // New creates a new hub

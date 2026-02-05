@@ -26,9 +26,9 @@ type PresenceInfo struct {
 }
 
 type DeviceInfo struct {
-	DeviceID   string
-	Platform   string
-	ConnID     string
+	DeviceID    string
+	Platform    string
+	ConnID      string
 	ConnectedAt time.Time
 }
 

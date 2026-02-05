@@ -3,56 +3,56 @@ package websocket
 import "time"
 
 type Config struct {
-	MaxConnections           int
-	MaxConnectionsPerUser    int
-	MaxSubscriptionsPerConn  int
-	MaxMessageSize           int64
-	DispatcherWorkers        int
-	DispatcherQueueSize      int
-	SessionTTL               time.Duration
-	HealthCheckInterval      time.Duration
-	RateLimitPerSecond       float64
-	RateLimitBurst           int
-	TypingTimeout            time.Duration
-	TypingCleanupInterval    time.Duration
+	MaxConnections             int
+	MaxConnectionsPerUser      int
+	MaxSubscriptionsPerConn    int
+	MaxMessageSize             int64
+	DispatcherWorkers          int
+	DispatcherQueueSize        int
+	SessionTTL                 time.Duration
+	HealthCheckInterval        time.Duration
+	RateLimitPerSecond         float64
+	RateLimitBurst             int
+	TypingTimeout              time.Duration
+	TypingCleanupInterval      time.Duration
 	RateLimiterCleanupInterval time.Duration
-	MessageBufferSize        int
-	MessageRetryAttempts     int
-	MessageRetryDelay        time.Duration
-	MetricsEnabled           bool
-	MetricsPrefix            string
-	GracefulShutdownTimeout  time.Duration
-	HeartbeatInterval        time.Duration
-	HeartbeatTimeout         time.Duration
-	CompressionEnabled       bool
-	CompressionThreshold     int
+	MessageBufferSize          int
+	MessageRetryAttempts       int
+	MessageRetryDelay          time.Duration
+	MetricsEnabled             bool
+	MetricsPrefix              string
+	GracefulShutdownTimeout    time.Duration
+	HeartbeatInterval          time.Duration
+	HeartbeatTimeout           time.Duration
+	CompressionEnabled         bool
+	CompressionThreshold       int
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		MaxConnections:           10000,
-		MaxConnectionsPerUser:    5,
-		MaxSubscriptionsPerConn:  100,
-		MaxMessageSize:           65536,
-		DispatcherWorkers:        10,
-		DispatcherQueueSize:      1000,
-		SessionTTL:               24 * time.Hour,
-		HealthCheckInterval:      30 * time.Second,
-		RateLimitPerSecond:       20,
-		RateLimitBurst:           50,
-		TypingTimeout:            5 * time.Second,
-		TypingCleanupInterval:    5 * time.Second,
+		MaxConnections:             10000,
+		MaxConnectionsPerUser:      5,
+		MaxSubscriptionsPerConn:    100,
+		MaxMessageSize:             65536,
+		DispatcherWorkers:          10,
+		DispatcherQueueSize:        1000,
+		SessionTTL:                 24 * time.Hour,
+		HealthCheckInterval:        30 * time.Second,
+		RateLimitPerSecond:         20,
+		RateLimitBurst:             50,
+		TypingTimeout:              5 * time.Second,
+		TypingCleanupInterval:      5 * time.Second,
 		RateLimiterCleanupInterval: 5 * time.Minute,
-		MessageBufferSize:        100,
-		MessageRetryAttempts:     3,
-		MessageRetryDelay:        100 * time.Millisecond,
-		MetricsEnabled:           true,
-		MetricsPrefix:            "ws",
-		GracefulShutdownTimeout:  30 * time.Second,
-		HeartbeatInterval:        30 * time.Second,
-		HeartbeatTimeout:         10 * time.Second,
-		CompressionEnabled:       true,
-		CompressionThreshold:     1024,
+		MessageBufferSize:          100,
+		MessageRetryAttempts:       3,
+		MessageRetryDelay:          100 * time.Millisecond,
+		MetricsEnabled:             true,
+		MetricsPrefix:              "ws",
+		GracefulShutdownTimeout:    30 * time.Second,
+		HeartbeatInterval:          30 * time.Second,
+		HeartbeatTimeout:           10 * time.Second,
+		CompressionEnabled:         true,
+		CompressionThreshold:       1024,
 	}
 }
 

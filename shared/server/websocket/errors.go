@@ -10,11 +10,11 @@ import (
 // Common WebSocket errors
 var (
 	// Connection errors
-	ErrConnectionClosed       = errors.New("websocket: connection closed")
-	ErrConnectionTimeout      = errors.New("websocket: connection timeout")
-	ErrConnectionRefused      = errors.New("websocket: connection refused")
+	ErrConnectionClosed        = errors.New("websocket: connection closed")
+	ErrConnectionTimeout       = errors.New("websocket: connection timeout")
+	ErrConnectionRefused       = errors.New("websocket: connection refused")
 	ErrConnectionLimitExceeded = errors.New("websocket: connection limit exceeded")
-	ErrInvalidConnection      = errors.New("websocket: invalid connection")
+	ErrInvalidConnection       = errors.New("websocket: invalid connection")
 
 	// Client errors
 	ErrClientNotFound         = errors.New("websocket: client not found")
@@ -23,26 +23,26 @@ var (
 	ErrClientBusy             = errors.New("websocket: client busy")
 
 	// Message errors
-	ErrMessageTooLarge        = errors.New("websocket: message too large")
-	ErrInvalidMessageType     = errors.New("websocket: invalid message type")
-	ErrInvalidMessage         = errors.New("websocket: invalid message")
-	ErrMessageQueueFull       = errors.New("websocket: message queue full")
-	ErrMessageTimeout         = errors.New("websocket: message send timeout")
+	ErrMessageTooLarge    = errors.New("websocket: message too large")
+	ErrInvalidMessageType = errors.New("websocket: invalid message type")
+	ErrInvalidMessage     = errors.New("websocket: invalid message")
+	ErrMessageQueueFull   = errors.New("websocket: message queue full")
+	ErrMessageTimeout     = errors.New("websocket: message send timeout")
 
 	// Hub errors
-	ErrHubClosed              = errors.New("websocket: hub closed")
-	ErrHubNotRunning          = errors.New("websocket: hub not running")
+	ErrHubClosed     = errors.New("websocket: hub closed")
+	ErrHubNotRunning = errors.New("websocket: hub not running")
 
 	// Configuration errors
-	ErrInvalidConfiguration   = errors.New("websocket: invalid configuration")
+	ErrInvalidConfiguration = errors.New("websocket: invalid configuration")
 
 	// Rate limiting errors
-	ErrRateLimitExceeded      = errors.New("websocket: rate limit exceeded")
+	ErrRateLimitExceeded = errors.New("websocket: rate limit exceeded")
 
 	// Upgrade errors
-	ErrUpgradeFailed          = errors.New("websocket: upgrade failed")
-	ErrInvalidUpgrade         = errors.New("websocket: invalid upgrade request")
-	ErrOriginNotAllowed       = errors.New("websocket: origin not allowed")
+	ErrUpgradeFailed    = errors.New("websocket: upgrade failed")
+	ErrInvalidUpgrade   = errors.New("websocket: invalid upgrade request")
+	ErrOriginNotAllowed = errors.New("websocket: origin not allowed")
 )
 
 // Error types for better error handling
@@ -170,14 +170,14 @@ func IsConfigError(err error) bool {
 // IsClosed checks if the error is a close error
 func IsClosed(err error) bool {
 	return errors.Is(err, ErrConnectionClosed) ||
-		   errors.Is(err, ErrHubClosed) ||
-		   websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway)
+		errors.Is(err, ErrHubClosed) ||
+		websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway)
 }
 
 // IsTimeout checks if the error is a timeout error
 func IsTimeout(err error) bool {
 	return errors.Is(err, ErrConnectionTimeout) ||
-		   errors.Is(err, ErrMessageTimeout)
+		errors.Is(err, ErrMessageTimeout)
 }
 
 // IsRateLimit checks if the error is a rate limit error
