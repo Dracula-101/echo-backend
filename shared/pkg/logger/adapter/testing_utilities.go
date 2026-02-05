@@ -417,7 +417,7 @@ func (bl *BenchmarkLogger) GenerateReport() string {
 		if bl.baseline != nil && result.Name != bl.baseline.Name {
 			comp := bl.CompareToBaseline(result)
 			if comp.Valid {
-				sb.WriteString(fmt.Sprintf("  vs Baseline:\n"))
+				fmt.Fprintf(&sb, "  vs Baseline:\n")
 				sb.WriteString(fmt.Sprintf("    Ops/sec:      %+.2f%%\n", comp.OpsPerSecondPct))
 				sb.WriteString(fmt.Sprintf("    Latency:      %+.2f%%\n", comp.LatencyPct))
 				sb.WriteString(fmt.Sprintf("    Memory:       %+.2f%%\n", comp.MemoryPct))

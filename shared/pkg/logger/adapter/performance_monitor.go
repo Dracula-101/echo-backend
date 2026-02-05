@@ -278,10 +278,12 @@ func (pm *PerformanceMonitor) GenerateReport() *PerformanceReport {
 	pm.metrics.mu.RLock()
 	defer pm.metrics.mu.RUnlock()
 
+	metricsSnapshot := pm.metrics.snapshot()
+
 	report := &PerformanceReport{
 		GeneratedAt:     time.Now(),
 		Duration:        time.Since(pm.metrics.WindowStart),
-		Metrics:         *pm.metrics,
+		Metrics:         metricsSnapshot,
 		Samples:         make(map[string][]PerformanceSample),
 		Hotspots:        make([]Hotspot, 0),
 		Recommendations: make([]OptimizationRecommendation, 0),
@@ -309,12 +311,12 @@ func (pm *PerformanceMonitor) GenerateReport() *PerformanceReport {
 
 	// Get optimization recommendations
 	for _, optimizer := range pm.optimizers {
-		recommendations := optimizer.Optimize(&report.Metrics)
+		recommendations := optimizer.Optimize(report.Metrics)
 		report.Recommendations = append(report.Recommendations, recommendations...)
 	}
 
 	// Calculate health score
-	report.Metrics.HealthScore = pm.calculateHealthScore(&report.Metrics)
+	report.Metrics.HealthScore = pm.calculateHealthScore(report.Metrics)
 
 	return report
 }
@@ -352,6 +354,40 @@ func (pm *PerformanceMonitor) calculateHealthScore(metrics *PerformanceMetrics) 
 	}
 
 	return score
+}
+
+// snapshot returns a copy of the metrics without copying the mutex.
+func (pm *PerformanceMetrics) snapshot() *PerformanceMetrics {
+	return &PerformanceMetrics{
+		TotalLogs:             pm.TotalLogs,
+		LogsPerSecond:         pm.LogsPerSecond,
+		AverageLatency:        pm.AverageLatency,
+		MaxLatency:            pm.MaxLatency,
+		MinLatency:            pm.MinLatency,
+		P50Latency:            pm.P50Latency,
+		P95Latency:            pm.P95Latency,
+		P99Latency:            pm.P99Latency,
+		DroppedLogs:           pm.DroppedLogs,
+		BufferUtilization:     pm.BufferUtilization,
+		MemoryUsage:           pm.MemoryUsage,
+		CPUUsage:              pm.CPUUsage,
+		GoroutineCount:        pm.GoroutineCount,
+		AllocationsPerSecond:  pm.AllocationsPerSecond,
+		GCPauseTime:           pm.GCPauseTime,
+		LastReportTime:        pm.LastReportTime,
+		WindowStart:           pm.WindowStart,
+		SampleCount:           pm.SampleCount,
+		ErrorRate:             pm.ErrorRate,
+		SuccessRate:           pm.SuccessRate,
+		AverageProcessingTime: pm.AverageProcessingTime,
+		TotalProcessingTime:   pm.TotalProcessingTime,
+		CacheHitRate:          pm.CacheHitRate,
+		CacheMissRate:         pm.CacheMissRate,
+		QueueDepth:            pm.QueueDepth,
+		BackpressureEvents:    pm.BackpressureEvents,
+		CircuitBreakerState:   pm.CircuitBreakerState,
+		HealthScore:           pm.HealthScore,
+	}
 }
 
 // CheckThresholds checks if any thresholds are exceeded
@@ -438,7 +474,7 @@ type ThresholdViolation struct {
 type PerformanceReport struct {
 	GeneratedAt     time.Time
 	Duration        time.Duration
-	Metrics         PerformanceMetrics
+	Metrics         *PerformanceMetrics
 	Samples         map[string][]PerformanceSample
 	Hotspots        []Hotspot
 	Recommendations []OptimizationRecommendation
@@ -1117,7 +1153,7 @@ func (cm *ConcurrencyMetrics) GetMetrics() map[string]interface{} {
 }
 
 // MarshalJSON custom JSON marshaling for PerformanceMetrics
-func (pm PerformanceMetrics) MarshalJSON() ([]byte, error) {
+func (pm *PerformanceMetrics) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
 		"total_logs":             pm.TotalLogs,
 		"logs_per_second":        pm.LogsPerSecond,

@@ -296,7 +296,52 @@ func (la *LogAnalytics) executeAlertActions(rule *AlertRule, entry *AnalyticsEnt
 func (la *LogAnalytics) GetStatistics() Statistics {
 	la.statistics.mu.RLock()
 	defer la.statistics.mu.RUnlock()
-	return *la.statistics
+
+	entriesByLevel := make(map[string]int64, len(la.statistics.EntriesByLevel))
+	for k, v := range la.statistics.EntriesByLevel {
+		entriesByLevel[k] = v
+	}
+
+	entriesBySource := make(map[string]int64, len(la.statistics.EntriesBySource))
+	for k, v := range la.statistics.EntriesBySource {
+		entriesBySource[k] = v
+	}
+
+	entriesByStatusCode := make(map[int]int64, len(la.statistics.EntriesByStatusCode))
+	for k, v := range la.statistics.EntriesByStatusCode {
+		entriesByStatusCode[k] = v
+	}
+
+	entriesByErrorCode := make(map[string]int64, len(la.statistics.EntriesByErrorCode))
+	for k, v := range la.statistics.EntriesByErrorCode {
+		entriesByErrorCode[k] = v
+	}
+
+	timeSeriesData := make(map[string][]TimeSeriesPoint, len(la.statistics.TimeSeriesData))
+	for k, v := range la.statistics.TimeSeriesData {
+		copied := make([]TimeSeriesPoint, len(v))
+		copy(copied, v)
+		timeSeriesData[k] = copied
+	}
+
+	return Statistics{
+		TotalEntries:        la.statistics.TotalEntries,
+		EntriesByLevel:      entriesByLevel,
+		EntriesBySource:     entriesBySource,
+		EntriesByStatusCode: entriesByStatusCode,
+		EntriesByErrorCode:  entriesByErrorCode,
+		AverageDuration:     la.statistics.AverageDuration,
+		MaxDuration:         la.statistics.MaxDuration,
+		MinDuration:         la.statistics.MinDuration,
+		ErrorRate:           la.statistics.ErrorRate,
+		RequestRate:         la.statistics.RequestRate,
+		UniqueUsers:         la.statistics.UniqueUsers,
+		UniqueSessions:      la.statistics.UniqueSessions,
+		PeakTraffic:         la.statistics.PeakTraffic,
+		PeakTrafficCount:    la.statistics.PeakTrafficCount,
+		TimeSeriesData:      timeSeriesData,
+		LastUpdate:          la.statistics.LastUpdate,
+	}
 }
 
 // GetPatterns returns detected patterns

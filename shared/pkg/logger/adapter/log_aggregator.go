@@ -60,6 +60,18 @@ type AggregationStats struct {
 	bufferUtilization float64
 }
 
+// AggregationStatsSnapshot is a safe, lock-free copy of AggregationStats data
+type AggregationStatsSnapshot struct {
+	TotalProcessed    int64
+	TotalDropped      int64
+	TotalAggregated   int64
+	TotalFlushed      int64
+	LastFlushTime     time.Time
+	ProcessingErrors  int64
+	AverageFlushTime  time.Duration
+	BufferUtilization float64
+}
+
 // NewLogAggregator creates a new log aggregator
 func NewLogAggregator(maxBufferSize int, flushInterval time.Duration) *LogAggregator {
 	la := &LogAggregator{
@@ -204,10 +216,21 @@ func (la *LogAggregator) Close() {
 }
 
 // GetStats returns aggregation statistics
-func (la *LogAggregator) GetStats() AggregationStats {
+
+// GetStats returns aggregation statistics snapshot
+func (la *LogAggregator) GetStats() AggregationStatsSnapshot {
 	la.stats.mu.RLock()
 	defer la.stats.mu.RUnlock()
-	return *la.stats
+	return AggregationStatsSnapshot{
+		TotalProcessed:    la.stats.totalProcessed,
+		TotalDropped:      la.stats.totalDropped,
+		TotalAggregated:   la.stats.totalAggregated,
+		TotalFlushed:      la.stats.totalFlushed,
+		LastFlushTime:     la.stats.lastFlushTime,
+		ProcessingErrors:  la.stats.processingErrors,
+		AverageFlushTime:  la.stats.averageFlushTime,
+		BufferUtilization: la.stats.bufferUtilization,
+	}
 }
 
 // generateFingerprint generates a fingerprint for deduplication
