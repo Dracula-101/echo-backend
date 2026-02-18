@@ -7,15 +7,13 @@ import (
 )
 
 type SubscribePayload struct {
-	Topics          []Topic           `json:"topics"`
-	Filters         map[string]string `json:"filters,omitempty"`
-	ConversationIDs []uuid.UUID       `json:"conversation_ids,omitempty"` // Batch subscribe to multiple conversations
+	Topics  []Topic        `json:"topics"`
+	Filters MessageFilters `json:"filters,omitempty"`
 }
 
 type UnsubscribePayload struct {
-	Topics          []Topic           `json:"topics"`
-	Filters         map[string]string `json:"filters,omitempty"`
-	ConversationIDs []uuid.UUID       `json:"conversation_ids,omitempty"` // Batch unsubscribe from multiple conversations
+	Topics  []Topic        `json:"topics"`
+	Filters MessageFilters `json:"filters,omitempty"`
 }
 
 type PresenceUpdatePayload struct {

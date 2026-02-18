@@ -81,7 +81,7 @@ func (b *Builder) WithDetails(details map[string]any) *Builder {
 	return b
 }
 
-func (b *Builder) WithData(data any) *Builder {
+func (b *Builder) WithData(data interface{}) *Builder {
 	b.response.Data = data
 	return b
 }

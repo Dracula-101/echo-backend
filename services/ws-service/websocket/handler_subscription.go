@@ -34,7 +34,7 @@ func (m *Manager) handleSubscribe(_ context.Context, msg *router.Message) error 
 		logger.String("user_id", userID.String()),
 		logger.String("conn_id", conn.ID()),
 		logger.Int("topic_count", len(payload.Topics)),
-		logger.Int("conversation_count", len(payload.ConversationIDs)),
+		logger.Int("conversation_count", len(*payload.Filters.ConversationIDs)),
 	)
 
 	// Use a detached context with timeout for database operations
@@ -46,19 +46,18 @@ func (m *Manager) handleSubscribe(_ context.Context, msg *router.Message) error 
 
 	for _, topic := range payload.Topics {
 		// Handle batch conversation subscriptions
-		if topic == protocol.TopicConversation && len(payload.ConversationIDs) > 0 {
+		if topic == protocol.TopicConversation && payload.Filters.ConversationIDs != nil && len(*payload.Filters.ConversationIDs) > 0 {
 			successCount := 0
-			for _, convID := range payload.ConversationIDs {
-				resourceID := convID.String()
-				topicKey := string(topic) + ":" + resourceID
+			for _, convID := range *payload.Filters.ConversationIDs {
+				topicKey := string(topic) + ":" + convID
 
 				// Validate conversation access using authorization service
-				allowed, err := m.authzService.CanSubscribeToTopic(dbCtx, userID, topic, resourceID)
+				allowed, err := m.authzService.CanSubscribeToTopic(dbCtx, userID, topic, convID)
 				if err != nil {
 					m.log.Error("Failed to validate conversation subscription",
 						logger.String("user_id", userID.String()),
 						logger.String("topic", string(topic)),
-						logger.String("resource_id", resourceID),
+						logger.String("conversation_id", convID),
 						logger.Error(err),
 					)
 					continue
@@ -68,7 +67,7 @@ func (m *Manager) handleSubscribe(_ context.Context, msg *router.Message) error 
 					m.log.Warn("Conversation subscription denied",
 						logger.String("user_id", userID.String()),
 						logger.String("topic", string(topic)),
-						logger.String("resource_id", resourceID),
+						logger.String("conversation_id", convID),
 					)
 					continue
 				}
@@ -144,10 +143,9 @@ func (m *Manager) handleUnsubscribe(ctx context.Context, msg *router.Message) er
 
 	for _, topic := range payload.Topics {
 		// Handle batch conversation unsubscriptions
-		if topic == protocol.TopicConversation && len(payload.ConversationIDs) > 0 {
-			for _, convID := range payload.ConversationIDs {
-				resourceID := convID.String()
-				topicKey := string(topic) + ":" + resourceID
+		if topic == protocol.TopicConversation && payload.Filters.ConversationIDs != nil && len(*payload.Filters.ConversationIDs) > 0 {
+			for _, convID := range *payload.Filters.ConversationIDs {
+				topicKey := string(topic) + ":" + convID
 				m.subscriptions.Unsubscribe(conn.ID(), topicKey)
 			}
 			continue

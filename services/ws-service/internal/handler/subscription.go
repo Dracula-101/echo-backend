@@ -36,7 +36,6 @@ func (h *SubscriptionHandler) Handle(ctx context.Context, hctx *Context) error {
 		logger.String("user_id", userID.String()),
 		logger.String("conn_id", connID),
 		logger.Int("topic_count", len(payload.Topics)),
-		logger.Int("conversation_count", len(payload.ConversationIDs)),
 	)
 
 	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -45,18 +44,17 @@ func (h *SubscriptionHandler) Handle(ctx context.Context, hctx *Context) error {
 	subscribedTopics := make([]protocol.Topic, 0, len(payload.Topics))
 
 	for _, topic := range payload.Topics {
-		if topic == protocol.TopicConversation && len(payload.ConversationIDs) > 0 {
+		if topic == protocol.TopicConversation && payload.Filters.ConversationIDs != nil && len(*payload.Filters.ConversationIDs) > 0 {
 			successCount := 0
-			for _, convID := range payload.ConversationIDs {
-				resourceID := convID.String()
-				topicKey := string(topic) + ":" + resourceID
+			for _, convID := range *payload.Filters.ConversationIDs {
+				topicKey := string(topic) + ":" + convID
 
-				allowed, err := h.deps.Authz.CanSubscribeToTopic(dbCtx, userID, topic, resourceID)
+				allowed, err := h.deps.Authz.CanSubscribeToTopic(dbCtx, userID, topic, convID)
 				if err != nil {
 					h.log.Error("failed to validate conversation subscription",
 						logger.String("user_id", userID.String()),
 						logger.String("topic", string(topic)),
-						logger.String("resource_id", resourceID),
+						logger.String("conversation_id", convID),
 						logger.Error(err),
 					)
 					continue
@@ -66,7 +64,7 @@ func (h *SubscriptionHandler) Handle(ctx context.Context, hctx *Context) error {
 					h.log.Warn("conversation subscription denied",
 						logger.String("user_id", userID.String()),
 						logger.String("topic", string(topic)),
-						logger.String("resource_id", resourceID),
+						logger.String("conversation_id", convID),
 					)
 					continue
 				}
@@ -150,10 +148,9 @@ func (h *UnsubscribeHandler) Handle(ctx context.Context, hctx *Context) error {
 	connID := hctx.Conn.ID()
 
 	for _, topic := range payload.Topics {
-		if topic == protocol.TopicConversation && len(payload.ConversationIDs) > 0 {
-			for _, convID := range payload.ConversationIDs {
-				resourceID := convID.String()
-				topicKey := string(topic) + ":" + resourceID
+		if topic == protocol.TopicConversation {
+			for _, convID := range *payload.Filters.ConversationIDs {
+				topicKey := string(topic) + ":" + convID
 				h.deps.Subscriptions.Unsubscribe(connID, topicKey)
 			}
 			continue

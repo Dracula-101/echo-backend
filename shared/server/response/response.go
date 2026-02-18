@@ -7,7 +7,7 @@ import "time"
 type Response struct {
 	Success bool           `json:"success"`
 	Message string         `json:"message,omitempty"`
-	Data    any            `json:"data,omitempty"`
+	Data    interface{}    `json:"data,omitempty"`
 	Details map[string]any `json:"details,omitempty"`
 	Error   *ErrorDetails  `json:"error,omitempty"`
 

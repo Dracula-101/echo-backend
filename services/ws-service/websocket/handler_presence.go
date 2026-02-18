@@ -39,7 +39,10 @@ func (m *Manager) handlePresenceUpdate(ctx context.Context, msg *router.Message)
 		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid presence status")
 	}
 
-	err := m.userRepo.UpdateOnlineStatus(context.Background(), userID, status.String())
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := m.userRepo.UpdateOnlineStatus(dbCtx, userID, status.String())
 	if err != nil {
 		m.log.Error("Failed to update online status in database",
 			logger.String("user_id", userID.String()),

@@ -10,14 +10,14 @@ import (
 )
 
 // JSON sends a success response with data
-func JSON(w http.ResponseWriter, statusCode int, data any) error {
+func JSON(w http.ResponseWriter, statusCode int, data interface{}) error {
 	return Success().
 		WithData(data).
 		Send(w, statusCode)
 }
 
 // JSONWithContext sends a success response with context
-func JSONWithContext(ctx context.Context, r *http.Request, w http.ResponseWriter, statusCode int, data any) error {
+func JSONWithContext(ctx context.Context, r *http.Request, w http.ResponseWriter, statusCode int, data interface{}) error {
 	return Success().
 		WithContext(ctx).
 		WithRequest(r).
@@ -26,7 +26,7 @@ func JSONWithContext(ctx context.Context, r *http.Request, w http.ResponseWriter
 }
 
 // JSONWithMessage sends a success response with data and message
-func JSONWithMessage(ctx context.Context, r *http.Request, w http.ResponseWriter, statusCode int, message string, data any) error {
+func JSONWithMessage(ctx context.Context, r *http.Request, w http.ResponseWriter, statusCode int, message string, data interface{}) error {
 	return Success().
 		WithContext(ctx).
 		WithRequest(r).
@@ -36,7 +36,7 @@ func JSONWithMessage(ctx context.Context, r *http.Request, w http.ResponseWriter
 }
 
 // Paginated sends a paginated response
-func Paginated(ctx context.Context, r *http.Request, w http.ResponseWriter, data any, pagination *PaginationInfo) error {
+func Paginated(ctx context.Context, r *http.Request, w http.ResponseWriter, data interface{}, pagination *PaginationInfo) error {
 	return Success().
 		WithContext(ctx).
 		WithRequest(r).
@@ -46,7 +46,7 @@ func Paginated(ctx context.Context, r *http.Request, w http.ResponseWriter, data
 }
 
 // WithHATEOAS sends a response with HATEOAS links
-func WithHATEOAS(ctx context.Context, r *http.Request, w http.ResponseWriter, statusCode int, data any, links ...Link) error {
+func WithHATEOAS(ctx context.Context, r *http.Request, w http.ResponseWriter, statusCode int, data interface{}, links ...Link) error {
 	return Success().
 		WithContext(ctx).
 		WithRequest(r).

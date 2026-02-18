@@ -11,29 +11,29 @@ const (
 	TopicNotifications Topic = "notifications"
 )
 
-func GetResourceID(topic Topic, filters map[string]string) string {
+func GetResourceID(topic Topic, filters MessageFilters) string {
 	switch topic {
 	case TopicUser:
-		if userID, ok := filters["user_id"]; ok {
-			return userID
+		if filters.UserID != nil {
+			return *filters.UserID
 		}
 	case TopicConversation:
-		if convID, ok := filters["conversation_id"]; ok {
-			return convID
+		if filters.ConversationIDs != nil && len(*filters.ConversationIDs) > 0 {
+			return (*filters.ConversationIDs)[0]
 		}
 	case TopicPresence:
 		return "global"
 	case TopicTyping:
-		if convID, ok := filters["conversation_id"]; ok {
-			return convID
+		if filters.ConversationID != nil {
+			return *filters.ConversationID
 		}
 	case TopicCalls:
-		if callID, ok := filters["call_id"]; ok {
-			return callID
+		if filters.ConversationID != nil {
+			return *filters.ConversationID
 		}
 	case TopicNotifications:
-		if userID, ok := filters["user_id"]; ok {
-			return userID
+		if filters.UserID != nil {
+			return *filters.UserID
 		}
 	}
 	return "default"

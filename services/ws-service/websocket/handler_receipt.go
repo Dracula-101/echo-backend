@@ -80,9 +80,7 @@ func (m *Manager) handleMarkDelivered(_ context.Context, msg *router.Message) er
 
 	now := time.Now()
 
-	// Publish delivery event to Kafka for persistence
 	if m.deliveryPublisher != nil {
-		// Use detached context to avoid cancellation from WebSocket
 		publishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
