@@ -474,5 +474,5 @@ services:
     depends_on: *depends-full
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD", "curl", "-f", "http://localhost:8087/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
     labels: { com.echo.service: ws-service, com.echo.mode: development }

@@ -29,9 +29,6 @@ COPY --from=builder /app/services/api-gateway/main .
 COPY --from=builder /app/services/api-gateway/configs ./configs
 COPY --from=builder /app/services/api-gateway/tls ./tls
 
-# Copy environment file
-COPY services/api-gateway/.env .env
-
 EXPOSE 8080 9090
 
 CMD ["./main"]

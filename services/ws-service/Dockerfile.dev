@@ -23,7 +23,7 @@ COPY services/ws-service/.air.toml .air.toml
 # Copy environment file
 COPY services/ws-service/.env .env
 
-EXPOSE 8087 9097
+EXPOSE 8086
 
 # Add a development stage for Docker Compose build target
 CMD ["air", "-c", ".air.toml"]

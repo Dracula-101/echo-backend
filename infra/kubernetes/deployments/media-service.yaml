@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: echo-backend
+  labels:
+    app: media-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: media-service
+  template:
+    metadata:
+      labels:
+        app: media-service
+        version: v1
+    spec:
+      containers:
+      - name: media-service
+        image: gcr.io/PROJECT_ID/echo-media-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8085
+          name: http
+          protocol: TCP
+        env:
+        - name: ENV
+          valueFrom:
+            configMapKeyRef:
+              name: echo-config
+              key: ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: echo-config
+              key: LOG_LEVEL
+        - name: SERVER_PORT
+          value: "8085"
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_DB
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: redis-config
+              key: REDIS_HOST
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: REDIS_PASSWORD
+        - name: REDIS_DB
+          value: "3"
+        - name: R2_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-r2-secret
+              key: R2_ACCOUNT_ID
+        - name: R2_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-r2-secret
+              key: R2_ACCESS_KEY
+        - name: R2_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-r2-secret
+              key: R2_SECRET_KEY
+        - name: R2_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-r2-secret
+              key: R2_BUCKET
+        - name: MAX_FILE_SIZE
+          value: "52428800"
+        - name: ALLOWED_MIME_TYPES
+          value: "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8085
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8085
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-service
+  namespace: echo-backend
+  labels:
+    app: media-service
+spec:
+  type: ClusterIP
+  selector:
+    app: media-service
+  ports:
+  - name: http
+    port: 8085
+    targetPort: 8085
+    protocol: TCP

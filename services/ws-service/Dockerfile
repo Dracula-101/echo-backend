@@ -43,11 +43,11 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose port
-EXPOSE 8087
+EXPOSE 8086
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8087/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8086/health || exit 1
 
 # Run the application
 CMD ["./ws-service"]

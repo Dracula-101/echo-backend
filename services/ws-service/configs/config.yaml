@@ -4,7 +4,7 @@ service:
   environment: ${ENV:development}
 
 server:
-  port: ${SERVER_PORT:8087}
+  port: ${SERVER_PORT:8086}
   host: ${SERVER_HOST:0.0.0.0}
   read_timeout: ${SERVER_READ_TIMEOUT:15s}
   write_timeout: ${SERVER_WRITE_TIMEOUT:15s}

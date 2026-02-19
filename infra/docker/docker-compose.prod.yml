@@ -232,7 +232,6 @@ services:
         --protected-mode yes
     volumes:
       - redis_data:/data
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks: [ echo-internal ]
     logging: *logging-small
     deploy:
@@ -268,6 +267,7 @@ services:
       KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
       KAFKA_LOG_CLEANUP_POLICY: delete
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
     networks: [ echo-internal ]
     depends_on:
       zookeeper: { condition: service_healthy }
@@ -295,8 +295,8 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8081
       USER_SERVICE_URL: http://user-service:8082
       MESSAGE_SERVICE_URL: http://message-service:8083
-      MEDIA_SERVICE_URL: http://media-service:8084
-      PRESENCE_SERVICE_URL: http://presence-service:8085
+      MEDIA_SERVICE_URL: http://media-service:8085
+      PRESENCE_SERVICE_URL: http://presence-service:8084
       ENABLE_CORS: ${ENABLE_CORS:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       ENABLE_RATE_LIMIT: "true"
@@ -452,7 +452,7 @@ services:
       PORT: 8090
     volumes:
       - location-service-logs:/var/log/location-service
-      - ./data/location:/app/data:ro
+      - ${PWD}/services/location-service/data:/app/data:ro
     healthcheck:
       <<: *healthcheck
       timeout: 3s
@@ -512,11 +512,11 @@ services:
       dockerfile: services/presence-service/Dockerfile
     # container_name removed - incompatible with deploy.replicas
     image: echo/presence-service:${VERSION:-latest}
-    expose: [ "8086" ]
+    expose: [ "8084" ]
     environment:
       <<: [ *env-common, *env-performance-small, *env-db, *env-redis ]
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8086
+      SERVER_PORT: 8084
       CONFIG_PATH: /app/configs/config.yaml
       REDIS_DB: 4
       PRESENCE_UPDATE_INTERVAL: 30s
@@ -527,8 +527,43 @@ services:
     depends_on: *depends-db
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8086/health" ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health" ]
     deploy:
       <<: *deploy-standard
       resources: *resources-small
     labels: { com.echo.service: presence-service, com.echo.tier: application, com.echo.version: "${VERSION:-latest}" }
+
+  # ---------------------------------------------------------------------------
+  # WebSocket Service
+  # ---------------------------------------------------------------------------
+  ws-service:
+    <<: *service-base
+    build:
+      <<: *build-base
+      dockerfile: services/ws-service/Dockerfile
+    image: echo/ws-service:${VERSION:-latest}
+    expose: [ "8086" ]
+    environment:
+      <<: [ *env-full, *env-kafka ]
+      SERVER_PORT: 8086
+      CONFIG_PATH: /app/configs/config.yaml
+      REDIS_DB: 5
+      REDIS_POOL_SIZE: 20
+      KAFKA_TOPIC: chat-messages
+      KAFKA_CLIENT_ID: ws-service
+      KAFKA_GROUP_ID: ws-delivery-group
+      WS_WRITE_WAIT: 10s
+      WS_PONG_WAIT: 60s
+      WS_PING_PERIOD: 54s
+      WS_MAX_MESSAGE_SIZE: 10485760
+      WS_CLIENT_BUFFER_SIZE: 256
+      WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS}
+    depends_on: *depends-full
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8086/health" ]
+    deploy:
+      <<: *deploy-standard
+      replicas: 3
+      resources: *resources-standard
+    labels: { com.echo.service: ws-service, com.echo.tier: application, com.echo.version: "${VERSION:-latest}", com.echo.critical: "true" }

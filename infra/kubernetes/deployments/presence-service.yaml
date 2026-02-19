@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: presence-service
+  namespace: echo-backend
+  labels:
+    app: presence-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: presence-service
+  template:
+    metadata:
+      labels:
+        app: presence-service
+        version: v1
+    spec:
+      containers:
+      - name: presence-service
+        image: gcr.io/PROJECT_ID/echo-presence-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8084
+          name: http
+          protocol: TCP
+        env:
+        - name: ENV
+          valueFrom:
+            configMapKeyRef:
+              name: echo-config
+              key: ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: echo-config
+              key: LOG_LEVEL
+        - name: SERVER_PORT
+          value: "8084"
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_DB
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: redis-config
+              key: REDIS_HOST
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: REDIS_PASSWORD
+        - name: REDIS_DB
+          value: "4"
+        - name: PRESENCE_UPDATE_INTERVAL
+          value: "30s"
+        - name: PRESENCE_TIMEOUT
+          value: "300s"
+        - name: PRESENCE_CLEANUP_INTERVAL
+          value: "60s"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8084
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8084
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: presence-service
+  namespace: echo-backend
+  labels:
+    app: presence-service
+spec:
+  type: ClusterIP
+  selector:
+    app: presence-service
+  ports:
+  - name: http
+    port: 8084
+    targetPort: 8084
+    protocol: TCP
