@@ -15,6 +15,7 @@ import (
 	env "shared/server/env"
 	"shared/server/headers"
 	coreMiddleware "shared/server/middleware"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -186,7 +187,7 @@ func createRouter(cfg *config.Config, proxyManager *proxy.Manager, tokenService 
 			healthHandler.Health(rh.Writer(), rh.Request())
 		}).
 		WithMetricsEndpoint("/metrics", func(rh request.RequestHandler) {
-			response.JSONWithMessage(rh.Context(), rh.Request(), rh.Writer(), response.StatusOK, "OK", nil)
+			prommetrics.Handler().ServeHTTP(rh.Writer(), rh.Request())
 		}).
 		WithNotFoundHandlerRequest(func(rh request.RequestHandler) {
 			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("The requested URL %s was not found on this server.", rh.Request().URL.Path))

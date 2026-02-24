@@ -290,8 +290,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
-      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource,redis-datasource
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/home.json
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/echo-overview.json
       GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS:-false}
       GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ROLE:-Viewer}
     volumes:
@@ -305,29 +305,3 @@ services:
       <<: *healthcheck-db
       test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:3000/api/health" ]
     labels: { com.echo.service: grafana, com.echo.tier: monitoring }
-
-  jaeger:
-    <<: *service-base
-    image: jaegertracing/all-in-one:latest
-    container_name: echo-jaeger
-    profiles: [ "monitoring" ]
-    ports:
-      - "5775:5775/udp"
-      - "6831:6831/udp"
-      - "6832:6832/udp"
-      - "5778:5778"
-      - "16686:16686"
-      - "14268:14268"
-      - "14250:14250"
-      - "9411:9411"
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-      SPAN_STORAGE_TYPE: memory
-      QUERY_MAX_CLOCK_SKEW_ADJUSTMENT: 30s
-    networks:
-      echo-network:
-        aliases: [ jaeger.echo.local ]
-    healthcheck:
-      <<: *healthcheck-fast
-      test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:14269/" ]
-    labels: { com.echo.service: jaeger, com.echo.tier: monitoring }

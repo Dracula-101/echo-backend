@@ -1,0 +1,59 @@
+global:
+  scrape_interval: 15s      # How often to scrape each target
+  evaluation_interval: 15s  # How often to evaluate alert rules
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus scrapes itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ---------------------------------------------------------------------------
+  # Application services — scraped through the API gateway.
+  # The gateway routes /api/v1/<prefix>/metrics → <service>/metrics internally.
+  # JWT is bypassed for all /**/metrics paths (see gateway config skip_paths).
+  # ---------------------------------------------------------------------------
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/metrics'
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/auth/metrics'
+
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/users/metrics'
+
+  - job_name: 'message-service'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/messages/metrics'
+
+  - job_name: 'media-service'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/media/metrics'
+
+  - job_name: 'presence-service'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/presence/metrics'
+
+  - job_name: 'location-service'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/api/v1/location/metrics'
+
+  # ws-service is not behind the gateway (it's a WebSocket service),
+  # so Prometheus scrapes it directly over the internal Docker network.
+  - job_name: 'ws-service'
+    static_configs:
+      - targets: ['ws-service:8086']
+    metrics_path: '/metrics'

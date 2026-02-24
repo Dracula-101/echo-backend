@@ -21,6 +21,7 @@ import (
 
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	req "shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -148,6 +149,9 @@ func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log log
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh req.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
+		}).
+		WithMetricsEndpoint("/metrics", func(rh req.RequestHandler) {
+			prommetrics.Handler().ServeHTTP(rh.Writer(), rh.Request())
 		}).
 		WithNotFoundHandler(func(rh req.RequestHandler) {
 			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("Endpoint %s not found", rh.Request().URL.Path))

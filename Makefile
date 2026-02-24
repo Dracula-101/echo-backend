@@ -102,4 +102,5 @@ include infra/make/kafka.mk
 include infra/make/database.mk
 include infra/make/redis.mk
 include infra/make/dev.mk
+include infra/make/monitoring.mk
 include infra/make/utils.mk

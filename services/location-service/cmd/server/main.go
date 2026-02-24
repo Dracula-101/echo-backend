@@ -11,6 +11,7 @@ import (
 	"shared/pkg/database"
 	"shared/pkg/logger"
 	"shared/pkg/logger/adapter"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/pkg/utils"
 	"shared/server/env"
 	"shared/server/response"
@@ -51,6 +52,7 @@ func (s *Server) Start() error {
 
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/lookup", s.handleLookup)
+	mux.Handle("/metrics", prommetrics.Handler())
 
 	handler := loggingMiddleware(corsMiddleware(mux), s.log)
 

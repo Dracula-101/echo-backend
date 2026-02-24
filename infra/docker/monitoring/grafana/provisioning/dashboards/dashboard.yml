@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: echo-dashboards
+    type: file
+    disableDeletion: true     # Don't let UI delete provisioned dashboards
+    updateIntervalSeconds: 30 # Reload JSON files every 30s (handy during development)
+    options:
+      path: /var/lib/grafana/dashboards

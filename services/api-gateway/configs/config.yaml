@@ -102,6 +102,19 @@ services:
     loadbalancer: roundrobin
     timeout: 10s
 
+  location-service:
+    protocol: http
+    addresses:
+      - ${LOCATION_SERVICE_URL:http://location-service:8090}
+    health_check:
+      enabled: true
+      path: /health
+      interval: 10s
+      timeout: 5s
+      failure_threshold: 3
+    loadbalancer: roundrobin
+    timeout: 10s
+
 router_groups:
   - name: auth_routes
     prefix: /auth
@@ -160,6 +173,13 @@ router_groups:
       - PUT
       - DELETE
       - OPTIONS
+
+  - name: location_routes
+    prefix: /location
+    service: location-service
+    transform: true
+    methods:
+      - GET
 
 ratelimit:
   enabled: true

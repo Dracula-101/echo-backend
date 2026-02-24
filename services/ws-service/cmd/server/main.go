@@ -26,6 +26,7 @@ import (
 	"shared/pkg/messaging/kafka"
 	env "shared/server/env"
 	"shared/server/middleware"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -314,6 +315,9 @@ func createRouter(
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
+		}).
+		WithMetricsEndpoint("/metrics", func(rh request.RequestHandler) {
+			prommetrics.Handler().ServeHTTP(rh.Writer(), rh.Request())
 		}).
 		WithNotFoundHandler(func(rh request.RequestHandler) {
 			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("Endpoint %s not found", rh.Request().URL.Path))
