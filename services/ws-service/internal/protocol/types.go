@@ -29,4 +29,5 @@ const (
 
 	MsgTypePresenceChanged  MessageType = "presence.changed"
 	MsgTypeConnectionStatus MessageType = "connection.status"
+	MsgTypeSyncRequired     MessageType = "sync.required"
 )

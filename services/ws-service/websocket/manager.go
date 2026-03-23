@@ -287,6 +287,9 @@ func (m *Manager) setupLifecycleHooks() {
 		)
 
 		m.sendConnectionStatus(conn, "connected", "")
+
+		// Auto-subscribe to all user's conversations and send sync metadata
+		go m.autoSubscribeAndSync(conn, userID)
 	})
 
 	m.engine.ConnectionManager().SetOnDisconnect(func(conn *connection.Connection) {
@@ -552,4 +555,89 @@ type ManagerStats struct {
 // SetDeliveryPublisher sets the delivery event publisher for receipt tracking
 func (m *Manager) SetDeliveryPublisher(publisher service.DeliveryEventPublisher) {
 	m.deliveryPublisher = publisher
+}
+
+// autoSubscribeAndSync subscribes the connection to all user's conversations
+// and sends sync metadata for conversations with unread messages.
+// Runs in a goroutine to avoid blocking the connect flow.
+func (m *Manager) autoSubscribeAndSync(conn *connection.Connection, userID uuid.UUID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Auto-subscribe to all active conversations
+	conversations, err := m.conversationRepo.GetUserConversations(ctx, userID)
+	if err != nil {
+		m.log.Error("Failed to get user conversations for auto-subscribe",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return
+	}
+
+	for _, convID := range conversations {
+		topicKey := "conversation:" + convID.String()
+		m.subscriptions.Subscribe(conn.ID(), topicKey)
+	}
+
+	m.log.Info("Auto-subscribed user to conversations",
+		logger.String("user_id", userID.String()),
+		logger.String("conn_id", conn.ID()),
+		logger.Int("conversation_count", len(conversations)),
+	)
+
+	// Send sync metadata for conversations with unread messages
+	syncStates, err := m.conversationRepo.GetUserConversationSyncState(ctx, userID)
+	if err != nil {
+		m.log.Error("Failed to get conversation sync state",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return
+	}
+
+	if len(syncStates) == 0 {
+		return
+	}
+
+	convSyncInfos := make([]protocol.ConversationSyncInfo, 0, len(syncStates))
+	for _, state := range syncStates {
+		info := protocol.ConversationSyncInfo{
+			ConversationID: state.ConversationID.String(),
+			UnreadCount:    state.UnreadCount,
+		}
+		if state.LastMessageID != nil {
+			info.LastMessageID = state.LastMessageID.String()
+		}
+		if state.LastMessageAt != nil {
+			info.LastMessageAt = state.LastMessageAt.UTC().Format(time.RFC3339)
+		}
+		convSyncInfos = append(convSyncInfos, info)
+	}
+
+	syncMsg := protocol.NewServerMessage(protocol.MsgTypeSyncRequired, "").
+		WithPayload(protocol.SyncRequiredPayload{
+			Conversations: convSyncInfos,
+		})
+
+	data, err := json.Marshal(syncMsg)
+	if err != nil {
+		m.log.Error("Failed to marshal sync.required message",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return
+	}
+
+	if err := conn.Send(data); err != nil {
+		m.log.Error("Failed to send sync.required message",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return
+	}
+
+	m.log.Info("Sent sync.required to user",
+		logger.String("user_id", userID.String()),
+		logger.Int("conversations_with_unread", len(syncStates)),
+	)
 }

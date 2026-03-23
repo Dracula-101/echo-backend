@@ -2,6 +2,7 @@ package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
+	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -14,13 +15,15 @@ import (
 //
 // Flow:
 //
-//	[1] Parse and validate query parameters (conversation_id, limit, before_message_id)
-//	[2] Call MessageService.GetMessages with pagination params
+//	[1] Parse and validate query parameters (conversation_id, limit, before/after cursor)
+//	[2] Call MessageService.GetMessages or GetMessagesAfter with pagination params
 //	[3] Return paginated response with messages and hasMore flag
 //
 // Pagination:
-//   - Uses cursor-based pagination with before_message_id for better performance
-//   - Returns hasMore flag to indicate if there are more messages to load
+//   - Uses cursor-based pagination with before or after message ID
+//   - "before" returns older messages in DESC order (scrolling back)
+//   - "after" returns newer messages in ASC order (sync/catch-up)
+//   - before and after are mutually exclusive
 //   - Default limit: 20, max: 100
 func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 	ctx := handler.Context()
@@ -76,20 +79,39 @@ func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 		return
 	}
 
-	// Parse cursor (optional)
+	// Parse cursors (optional, mutually exclusive)
+	beforeCursor := handler.QueryParam("before")
+	afterCursor := handler.QueryParam("after")
+
+	if beforeCursor != "" && afterCursor != "" {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "cannot specify both 'before' and 'after' cursors", nil)
+		return
+	}
+
 	var beforeMessageID *string
-	if cursor := handler.QueryParam("before"); cursor != "" {
-		// Validate cursor format
-		if _, err := uuid.Parse(cursor); err != nil {
-			h.log.Warn("Invalid cursor format",
+	if beforeCursor != "" {
+		if _, err := uuid.Parse(beforeCursor); err != nil {
+			h.log.Warn("Invalid before cursor format",
 				logger.String("service", msgError.ServiceName),
 				logger.String("request_id", requestID),
-				logger.String("cursor", cursor),
+				logger.String("cursor", beforeCursor),
 			)
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "cursor must be a valid message ID (UUID)", nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "before cursor must be a valid message ID (UUID)", nil)
 			return
 		}
-		beforeMessageID = &cursor
+		beforeMessageID = &beforeCursor
+	}
+
+	if afterCursor != "" {
+		if _, err := uuid.Parse(afterCursor); err != nil {
+			h.log.Warn("Invalid after cursor format",
+				logger.String("service", msgError.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("cursor", afterCursor),
+			)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "after cursor must be a valid message ID (UUID)", nil)
+			return
+		}
 	}
 
 	h.log.Debug("Fetching messages",
@@ -97,10 +119,19 @@ func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 		logger.String("conversation_id", conversationID),
 		logger.Int("limit", limit),
 		logger.Any("before_message_id", beforeMessageID),
+		logger.String("after_cursor", afterCursor),
 	)
 
 	// Fetch messages from service
-	messages, hasMore, msgErr := h.messageService.GetMessages(ctx, conversationID, limit, beforeMessageID)
+	var messages []*domain.Message
+	var hasMore bool
+	var msgErr *msgError.MessageError
+
+	if afterCursor != "" {
+		messages, hasMore, msgErr = h.messageService.GetMessagesAfter(ctx, conversationID, afterCursor, limit)
+	} else {
+		messages, hasMore, msgErr = h.messageService.GetMessages(ctx, conversationID, limit, beforeMessageID)
+	}
 	if msgErr != nil {
 		h.log.Error("Failed to fetch messages",
 			logger.String("service", msgError.ServiceName),

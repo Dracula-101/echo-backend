@@ -19,6 +19,7 @@ type MessageRepository interface {
 	InsertMessage(ctx context.Context, message *dbModels.Message) pkgErrors.AppError
 	InsertMessages(ctx context.Context, messages []*dbModels.Message) pkgErrors.AppError
 	GetMessagesByConversationID(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*dbModels.Message, pkgErrors.AppError)
+	GetMessagesAfterID(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*dbModels.Message, pkgErrors.AppError)
 	GetMessageByID(ctx context.Context, messageID string) (*dbModels.Message, pkgErrors.AppError)
 	GetMessageCount(ctx context.Context, conversationID string) (int64, pkgErrors.AppError)
 	// Delivery status methods
@@ -345,6 +346,80 @@ func (r *messageRepository) GetMessagesByConversationID(ctx context.Context, con
 
 	r.logger.Debug("messages fetched successfully",
 		logger.String("conversation_id", conversationID),
+		logger.Int("count", len(messages)),
+	)
+
+	return messages, nil
+}
+
+// GetMessagesAfterID retrieves messages created after a specific message, in chronological order (ASC)
+func (r *messageRepository) GetMessagesAfterID(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*dbModels.Message, pkgErrors.AppError) {
+	r.logger.Debug("fetching messages after ID",
+		logger.String("conversation_id", conversationID),
+		logger.String("after_message_id", afterMessageID),
+		logger.Int("limit", limit),
+	)
+
+	query := `
+		SELECT
+			id, conversation_id, sender_user_id, parent_message_id,
+			message_type, content, content_encrypted, content_hash,
+			format_type, mentions, hashtags, links, status,
+			delivered_at, delivery_count, read_count, reply_count,
+			last_reply_at, reaction_count, is_forwarded,
+			forwarded_from_message_id, forward_count, sent_from_device_id,
+			sent_from_ip, created_at, updated_at, edited_at, deleted_at, metadata
+		FROM messages.messages
+		WHERE conversation_id = $1
+		  AND deleted_at IS NULL
+		  AND created_at > (SELECT created_at FROM messages.messages WHERE id = $2)
+		ORDER BY created_at ASC
+		LIMIT $3
+	`
+
+	rows, err := r.db.Query(ctx, query, conversationID, afterMessageID, limit)
+	if err != nil {
+		r.logger.Error("failed to query messages after ID",
+			logger.String("conversation_id", conversationID),
+			logger.String("after_message_id", afterMessageID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query messages")
+	}
+	defer rows.Close()
+
+	var messages []*dbModels.Message
+	for rows.Next() {
+		var msg dbModels.Message
+		if err := rows.Scan(
+			&msg.ID, &msg.ConversationID, &msg.SenderUserID, &msg.ParentMessageID,
+			&msg.MessageType, &msg.Content, &msg.ContentEncrypted, &msg.ContentHash,
+			&msg.FormatType, &msg.Mentions, pq.Array(&msg.Hashtags), &msg.Links,
+			&msg.Status, &msg.DeliveredAt, &msg.DeliveryCount, &msg.ReadCount,
+			&msg.ReplyCount, &msg.LastReplyAt, &msg.ReactionCount, &msg.IsForwarded,
+			&msg.ForwardedFromMessageID, &msg.ForwardCount, &msg.SentFromDeviceID,
+			&msg.SentFromIP, &msg.CreatedAt, &msg.UpdatedAt, &msg.EditedAt, &msg.DeletedAt, &msg.Metadata,
+		); err != nil {
+			r.logger.Error("failed to scan message row",
+				logger.String("conversation_id", conversationID),
+				logger.Error(err),
+			)
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan message row")
+		}
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("error iterating messages after ID",
+			logger.String("conversation_id", conversationID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "error iterating messages")
+	}
+
+	r.logger.Debug("messages after ID fetched successfully",
+		logger.String("conversation_id", conversationID),
+		logger.String("after_message_id", afterMessageID),
 		logger.Int("count", len(messages)),
 	)
 

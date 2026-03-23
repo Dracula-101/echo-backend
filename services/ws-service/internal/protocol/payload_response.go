@@ -42,3 +42,14 @@ type PongPayload struct {
 	ServerTimestamp time.Time `json:"server_timestamp"`
 	Latency         int64     `json:"latency_ms,omitempty"`
 }
+
+type SyncRequiredPayload struct {
+	Conversations []ConversationSyncInfo `json:"conversations"`
+}
+
+type ConversationSyncInfo struct {
+	ConversationID string `json:"conversation_id"`
+	UnreadCount    int    `json:"unread_count"`
+	LastMessageID  string `json:"last_message_id,omitempty"`
+	LastMessageAt  string `json:"last_message_at,omitempty"`
+}
