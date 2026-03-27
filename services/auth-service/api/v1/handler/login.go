@@ -159,7 +159,12 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			Metadata: map[string]any{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
-				"device-id":      utils.SafePtrString(&device.ID),
+				"device-id": func() string {
+					if device != nil {
+						return device.ID
+					}
+					return ""
+				}(),
 			},
 		})
 		if err != nil {

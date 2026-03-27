@@ -8,6 +8,7 @@ import (
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
+	pkgErrors "shared/pkg/errors"
 )
 
 // Register flow at a glance:
@@ -67,7 +68,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 			logger.String("request_id", requestID),
 			logger.String("email", reqBody.Email),
 		)
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
 		return
 	}
 
@@ -82,7 +83,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 	})
 	if authErr != nil {
 		if authErr.Code == authErrors.CodePasswordTooWeak || authErr.Code == authErrors.CodeInvalidEmail {
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message, nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
 		} else {
 			response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
 		}
