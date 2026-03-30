@@ -102,6 +102,9 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 			output.UserID,
 			output.Email,
 			output.EmailVerificationSent,
+			output.AccessToken,
+			output.RefreshToken,
+			output.ExpiresIn,
 		),
 	)
 }

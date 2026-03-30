@@ -2,6 +2,7 @@ package dto
 
 import (
 	"shared/server/request"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -72,17 +73,23 @@ func (r *RegisterRequest) ValidateErrors(ve validator.ValidationErrors) ([]reque
 
 // RegisterResponse communicates the outcome of the registration flow.
 type RegisterResponse struct {
-	UserID                string `json:"user_id"`
-	Email                 string `json:"email"`
-	EmailVerificationSent bool   `json:"email_verification_sent"`
-	Message               string `json:"message"`
-	RequiresVerification  bool   `json:"requires_verification"`
+	UserID                string    `json:"user_id"`
+	Email                 string    `json:"email"`
+	EmailVerificationSent bool      `json:"email_verification_sent"`
+	Message               string    `json:"message"`
+	RequiresVerification  bool      `json:"requires_verification"`
+	AccessToken           string    `json:"access_token,omitempty"`
+	RefreshToken          string    `json:"refresh_token,omitempty"`
+	ExpiresAt             time.Time `json:"expires_at,omitempty"`
 }
 
-func NewRegisterResponse(userID, email string, emailVerificationSent bool) *RegisterResponse {
+func NewRegisterResponse(userID, email string, emailVerificationSent bool, accessToken, refreshToken string, expires_at time.Time) *RegisterResponse {
 	return &RegisterResponse{
 		UserID:                userID,
 		Email:                 email,
 		EmailVerificationSent: emailVerificationSent,
+		AccessToken:           accessToken,
+		RefreshToken:          refreshToken,
+		ExpiresAt:             expires_at,
 	}
 }

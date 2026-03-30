@@ -47,7 +47,7 @@ func (h *Handler) UploadProfilePhoto(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Profile photo uploaded successfully", output)
 	defer func() {
 		h.log.Info("Starting async image processing for profile photo",
 			logger.String("file_id", output.FileID))

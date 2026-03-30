@@ -39,6 +39,7 @@ type CreateProfileInput struct {
 	LanguageCode *string
 	Timezone     *string
 	CountryCode  *string
+	Searchable   bool
 	IsVerified   bool
 }
 

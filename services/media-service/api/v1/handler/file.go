@@ -55,7 +55,7 @@ func (h *Handler) GetFile(handler *req.RequestHandler) {
 		ViewCount:        output.ViewCount,
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, responseDTO)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "File retrieved successfully", responseDTO)
 }
 
 // DeleteFile handles file deletion
@@ -106,5 +106,5 @@ func (h *Handler) DeleteFile(handler *req.RequestHandler) {
 		FileID:  fileID,
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, responseDTO)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "File deleted successfully", responseDTO)
 }

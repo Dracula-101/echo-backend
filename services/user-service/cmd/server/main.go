@@ -17,10 +17,10 @@ import (
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
 
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/common/token"
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
-	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -159,6 +159,7 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/profile", request.Adapt(h.CreateProfile))
 		r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
+		r.Get("/search", request.Adapt(h.SearchProfiles))
 	})
 	log.Debug("User routes registered successfully")
 	return builder
@@ -181,7 +182,7 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptUserId("/profile")),
-			router.Middleware(coreMiddleware.InterceptSessionId()),
+			router.Middleware(coreMiddleware.InterceptSessionId("/profile")),
 			router.Middleware(coreMiddleware.InterceptSessionToken()),
 		).
 		WithLateMiddleware(
@@ -299,7 +300,9 @@ func main() {
 		log.Fatal("Failed to build services", logger.Error(buildErr))
 	}
 
-	userHandler := handler.NewUserHandler(services.User, services.Location, tokenService, log)
+	searchService := service.NewSearchService(userRepo, log)
+
+	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

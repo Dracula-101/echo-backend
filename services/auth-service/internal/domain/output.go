@@ -15,6 +15,9 @@ type RegisterUserOutput struct {
 	Email                 string
 	EmailVerificationSent bool
 	VerificationToken     string
+	AccessToken           string
+	RefreshToken          string
+	ExpiresIn             time.Time
 }
 
 // PasswordHashResult contains the result of password hashing

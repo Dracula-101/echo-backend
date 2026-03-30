@@ -47,7 +47,7 @@ func (h *Handler) CreateAlbum(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Album created successfully", output)
 }
 
 func (h *Handler) GetAlbum(handler *req.RequestHandler) {
@@ -71,7 +71,7 @@ func (h *Handler) GetAlbum(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, output)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Album retrieved successfully", output)
 }
 
 func (h *Handler) ListAlbums(handler *req.RequestHandler) {
@@ -112,7 +112,7 @@ func (h *Handler) ListAlbums(handler *req.RequestHandler) {
 		"offset": offset,
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, result)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Albums listed successfully", result)
 }
 
 func (h *Handler) AddFileToAlbum(handler *req.RequestHandler) {
@@ -149,7 +149,7 @@ func (h *Handler) AddFileToAlbum(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, map[string]string{"message": "file added to album successfully"})
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "File added to album successfully", nil)
 }
 
 func (h *Handler) RemoveFileFromAlbum(handler *req.RequestHandler) {
@@ -174,5 +174,5 @@ func (h *Handler) RemoveFileFromAlbum(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, map[string]string{"message": "file removed from album successfully"})
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "File removed from album successfully", nil)
 }

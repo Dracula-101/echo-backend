@@ -261,6 +261,7 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile domain.Profi
 		LanguageCode:      profile.LanguageCode,
 		OnlineStatus:      dbModels.OnlineStatusOffline,
 		ProfileVisibility: dbModels.ProfileVisibilityPublic,
+		SearchVisibility:  profile.SearchVisibility,
 		Timezone:          profile.Timezone,
 		CountryCode:       profile.CountryCode,
 		IsVerified:        profile.IsVerified,
@@ -602,19 +603,25 @@ func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit
 	)
 
 	searchQuery := `
-		SELECT * FROM users.profiles
-		WHERE (
-			username ILIKE $1 OR
-			display_name ILIKE $1 OR
-			first_name ILIKE $1 OR
-			last_name ILIKE $1
-		)
-		AND deactivated_at IS NULL
-		AND search_visibility = true
+		SELECT *
+			FROM users.profiles
+			WHERE
+				deactivated_at IS NULL
+				AND search_visibility = true
+				AND (
+					username ILIKE '%' || $1 || '%'
+					OR display_name ILIKE '%' || $1 || '%'
+				)
 		ORDER BY
-			CASE WHEN username ILIKE $1 THEN 1 ELSE 2 END,
+			CASE WHEN username ILIKE $1 THEN 1 ELSE 0 END DESC,
+			CASE WHEN username ILIKE $1 || '%' THEN 1 ELSE 0 END DESC,
+			LEAST(
+				NULLIF(POSITION(LOWER($1) IN LOWER(username)), 0),
+				NULLIF(POSITION(LOWER($1) IN LOWER(display_name)), 0)
+			) ASC NULLS LAST,
+			LENGTH(username) ASC,
 			created_at DESC
-		LIMIT $2 OFFSET $3
+		LIMIT $2 OFFSET $3;
 	`
 
 	searchPattern := "%" + query + "%"
@@ -631,15 +638,30 @@ func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit
 
 	var profiles []*domain.Profile
 	for rows.Next() {
-		var profile domain.Profile
-		if err := rows.Scan(&profile); err != nil {
+		var profile dbModels.Profile
+		if err := rows.ScanModel(&profile); err != nil {
 			r.log.Error("Failed to scan profile",
 				logger.String("service", userErrors.ServiceName),
 				logger.Error(err),
 			)
 			continue
 		}
-		profiles = append(profiles, &profile)
+		profiles = append(profiles, &domain.Profile{
+			ID:           profile.ID,
+			UserID:       profile.UserID,
+			Username:     profile.Username,
+			DisplayName:  profile.DisplayName,
+			FirstName:    profile.FirstName,
+			LastName:     profile.LastName,
+			Bio:          profile.Bio,
+			AvatarURL:    profile.AvatarURL,
+			LanguageCode: profile.LanguageCode,
+			Timezone:     profile.Timezone,
+			CountryCode:  profile.CountryCode,
+			IsVerified:   profile.IsVerified,
+			CreatedAt:    profile.CreatedAt,
+			UpdatedAt:    profile.UpdatedAt,
+		})
 	}
 
 	// Get total count

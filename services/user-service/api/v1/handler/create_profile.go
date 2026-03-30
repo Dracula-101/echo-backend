@@ -66,6 +66,7 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		LastName:     &createProfileRequest.LastName,
 		Timezone:     &location.Timezone,
 		CountryCode:  &location.CountryCode,
+		Searchable:   true,
 		IsVerified:   false,
 	})
 	if err != nil {

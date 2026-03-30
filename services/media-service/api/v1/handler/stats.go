@@ -27,5 +27,5 @@ func (h *Handler) GetStorageStats(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, output)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Storage stats retrieved successfully", output)
 }

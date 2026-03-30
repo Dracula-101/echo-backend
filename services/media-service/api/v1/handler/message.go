@@ -58,5 +58,5 @@ func (h *Handler) UploadMessageMedia(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Message media uploaded successfully", output)
 }

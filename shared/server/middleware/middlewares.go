@@ -924,9 +924,9 @@ func InterceptUserId(skipPaths ...string) Handler {
 	}
 }
 
-func InterceptSessionId() Handler {
+func InterceptSessionId(skipPaths ...string) Handler {
 	// Paths that don't require session ID authentication
-	skipPaths := []string{"/health", "/live", "/ready", "/health/liveness", "/health/readiness", "/metrics"}
+	skipPaths = append(skipPaths, "/health", "/live", "/ready", "/health/liveness", "/health/readiness", "/metrics")
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

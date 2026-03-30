@@ -1,45 +1,41 @@
 -- =====================================================
--- AUTH SCHEMA - FUNCTIONS
+-- AUTH SCHEMA — UTILITY FUNCTIONS
+-- =====================================================
+--
+-- Description:  Callable utility functions for the auth
+--               schema. These are invoked by application
+--               code or other SQL functions — NOT by
+--               triggers.
+--
+-- Note:         Trigger handler functions (RETURNS TRIGGER)
+--               live in auth.trigger_functions.sql.
+--
+-- Dependencies: auth schema tables must exist.
+--               pgcrypto extension (for digest/encode).
+--               users.profiles, media.files (for soft_delete_user).
+--               Multiple schemas (for hard_delete_user).
+--
 -- =====================================================
 
--- Function to update updated_at timestamp
-CREATE OR REPLACE FUNCTION auth.update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
--- Function to update last_failed_login_at and increment failed_login_attempts
-CREATE OR REPLACE FUNCTION auth.update_failed_login_attempts()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.status = 'failed' THEN
-        UPDATE auth.users
-        SET failed_login_attempts = failed_login_attempts + 1,
-            last_failed_login_at = NOW()
-        WHERE id = NEW.user_id;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to update last_successful_login_at when session is created
-CREATE OR REPLACE FUNCTION auth.update_last_successful_login()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.status = 'success' THEN
-        UPDATE auth.users
-        SET last_successful_login_at = NOW(),
-            failed_login_attempts = 0
-        WHERE id = NEW.user_id;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to create device fingerprint
+-- -------------------------------------------------
+-- auth.generate_device_fingerprint(...)
+-- -------------------------------------------------
+-- Generates a deterministic SHA-256 fingerprint from
+-- a device's identifying attributes. Used to detect
+-- whether a login comes from a previously-seen device.
+--
+-- Parameters:
+--   p_device_id           — unique device identifier
+--   p_device_name         — user-facing device name
+--   p_device_type         — phone / tablet / desktop
+--   p_device_os           — iOS / Android / Windows / macOS
+--   p_device_os_version   — e.g. "17.2"
+--   p_device_model        — e.g. "iPhone 15 Pro"
+--   p_device_manufacturer — e.g. "Apple"
+--
+-- Returns: hex-encoded SHA-256 string
+-- -------------------------------------------------
 CREATE OR REPLACE FUNCTION auth.generate_device_fingerprint(
     p_device_id TEXT,
     p_device_name TEXT,
@@ -60,7 +56,7 @@ BEGIN
                             COALESCE(p_device_type, '') || '|' ||
                             COALESCE(p_device_os, '') || '|' ||
                             COALESCE(p_device_os_version, '') || '|' ||
-                            COALESCE(p_device_model, '') || '|' ||  
+                            COALESCE(p_device_model, '') || '|' ||
                             COALESCE(p_device_manufacturer, '');
     v_fingerprint := encode(digest(v_fingerprint_source, 'sha256'), 'hex');
     RETURN v_fingerprint;
@@ -68,34 +64,17 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- Function to update device fingerprint
-CREATE OR REPLACE FUNCTION auth.update_device_fingerprint()
-RETURNS TRIGGER AS $$
-BEGIN
-    -- get the device info from auth.sessions
-    DECLARE
-        v_device_info RECORD;
-    BEGIN
-        SELECT device_id, device_name, device_type, device_os, device_os_version, device_model, device_manufacturer
-        INTO v_device_info
-        FROM auth.sessions
-        WHERE id = NEW.session_id;
-
-        NEW.device_fingerprint = auth.generate_device_fingerprint(
-            v_device_info.device_id,
-            v_device_info.device_name,
-            v_device_info.device_type,
-            v_device_info.device_os,
-            v_device_info.device_os_version,
-            v_device_info.device_model,
-            v_device_info.device_manufacturer
-        );
-    END;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to log security events
+-- -------------------------------------------------
+-- auth.log_security_event(...)
+-- -------------------------------------------------
+-- Inserts a row into auth.security_events. Called by
+-- trigger functions (log_password_change, log_2fa_change,
+-- log_session_creation, etc.) and may also be called
+-- directly from application code for custom events.
+--
+-- Parameters: see auth.security_events columns.
+-- Returns:    UUID of the newly created event row.
+-- -------------------------------------------------
 CREATE OR REPLACE FUNCTION auth.log_security_event(
     p_user_id UUID,
     p_session_id UUID,
@@ -124,195 +103,298 @@ BEGIN
         p_severity, p_status, p_description, p_ip_address,
         p_user_agent, p_device_id, p_location_country, p_location_city, p_metadata
     ) RETURNING id INTO v_event_id;
-    
+
     RETURN v_event_id;
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger to log security event on password change
-CREATE OR REPLACE FUNCTION auth.log_password_change()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF OLD.password_hash IS DISTINCT FROM NEW.password_hash THEN
-        PERFORM auth.log_security_event(
-            NEW.id,
-            NULL,
-            'password_change',
-            'account_management',
-            'info',
-            'success',
-            'User password was changed',
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            '{}'::JSONB
-        );
-        NEW.password_last_changed_at = NOW();
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
--- Trigger to log security event on 2FA enable/disable
-CREATE OR REPLACE FUNCTION auth.log_2fa_change()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF OLD.two_factor_enabled IS DISTINCT FROM NEW.two_factor_enabled THEN
-        PERFORM auth.log_security_event(
-            NEW.id,
-            NULL,
-            CASE WHEN NEW.two_factor_enabled THEN '2fa_enable' ELSE '2fa_disable' END,
-            'security',
-            'info',
-            'success',
-            CASE WHEN NEW.two_factor_enabled THEN 'Two-factor authentication enabled' ELSE 'Two-factor authentication disabled' END,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            '{}'::JSONB
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to log failed login attempts
-CREATE OR REPLACE FUNCTION auth.log_failed_login_attempt()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.status = 'failure' THEN
-        UPDATE auth.users
-        SET failed_login_attempts = failed_login_attempts + 1,
-            last_failed_login_at = NOW()
-        WHERE id = NEW.user_id;
-        
-        PERFORM auth.log_security_event(
-            NEW.user_id,
-            NULL,
-            'failed_login',
-            'authentication',
-            'warning',
-            'failure',
-            'Failed login attempt',
-            NEW.ip_address,
-            NEW.user_agent,
-            NEW.device_id,
-            NEW.location_country,
-            NEW.location_city,
-            jsonb_build_object(
-                'reason', NEW.failure_reason
-            )
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to log session creation
-CREATE OR REPLACE FUNCTION auth.log_session_creation()
-RETURNS TRIGGER AS $$
+-- -------------------------------------------------
+-- auth.soft_delete_user(p_user_id)
+-- -------------------------------------------------
+-- Performs a reversible (soft) deletion of a user
+-- account. The auth.users row is preserved with
+-- account_status = 'deleted' and deleted_at set.
+--
+-- Actions taken:
+--   1. Revoke all active sessions
+--   2. Mark auth.users as deleted
+--   3. Deactivate and anonymize the user's profile
+--   4. Soft-delete the user's media files (scheduled
+--      for permanent removal after 30 days)
+--   5. Log a security event for the deletion
+--
+-- This does NOT remove data from other tables — the
+-- user row remains so FK references stay valid. Use
+-- auth.hard_delete_user() for full GDPR purge.
+--
+-- Returns TRUE on success, raises exception on failure.
+-- -------------------------------------------------
+CREATE OR REPLACE FUNCTION auth.soft_delete_user(p_user_id UUID)
+RETURNS BOOLEAN AS $$
 DECLARE
-    v_login_history_row RECORD;
+    v_user RECORD;
+    v_revoked_sessions INTEGER;
 BEGIN
-    UPDATE auth.users
-    SET last_successful_login_at = NOW(),
-        failed_login_attempts = 0
-    WHERE id = NEW.user_id;
+    -- -----------------------------------------------
+    -- 1. Validate the user exists and is not already deleted
+    -- -----------------------------------------------
+    SELECT id, account_status, deleted_at
+    INTO v_user
+    FROM auth.users
+    WHERE id = p_user_id;
 
-    -- insert into login_history and get the inserted row back
-    INSERT INTO auth.login_history (
-        user_id, session_id, login_method, status,
-        ip_address, user_agent, device_id,
-        location_country, location_city, latitude, longitude,
-        is_new_device, is_new_location
-    ) VALUES (
-        NEW.user_id, NEW.id, 'password', 'success',
-        NEW.ip_address, NEW.user_agent, NEW.device_id,
-        NEW.ip_country, NEW.ip_city, NEW.latitude, NEW.longitude,
-        NOT NEW.is_trusted_device, FALSE
-    ) RETURNING * INTO v_login_history_row;
-    
+    IF v_user IS NULL THEN
+        RAISE EXCEPTION 'User % does not exist', p_user_id;
+    END IF;
+
+    IF v_user.account_status = 'deleted' OR v_user.deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'User % is already deleted', p_user_id;
+    END IF;
+
+    -- -----------------------------------------------
+    -- 2. Revoke all active sessions
+    -- -----------------------------------------------
+    UPDATE auth.sessions
+    SET revoked_at = NOW(),
+        revoked_reason = 'account_deleted'
+    WHERE user_id = p_user_id
+      AND revoked_at IS NULL;
+
+    GET DIAGNOSTICS v_revoked_sessions = ROW_COUNT;
+
+    -- -----------------------------------------------
+    -- 3. Mark the user as deleted
+    -- -----------------------------------------------
+    UPDATE auth.users
+    SET account_status = 'deleted',
+        deleted_at = NOW(),
+        updated_at = NOW()
+    WHERE id = p_user_id;
+
+    -- -----------------------------------------------
+    -- 4. Deactivate and anonymize the profile
+    -- -----------------------------------------------
+    -- Clear PII from the profile while preserving the
+    -- row so conversations still show "Deleted User"
+    UPDATE users.profiles
+    SET deactivated_at = NOW(),
+        online_status = 'offline',
+        display_name = 'Deleted User',
+        bio = NULL,
+        avatar_url = NULL,
+        cover_photo_url = NULL,
+        website_url = NULL,
+        location = NULL,
+        search_visibility = FALSE,
+        updated_at = NOW()
+    WHERE user_id = p_user_id;
+
+    -- -----------------------------------------------
+    -- 5. Soft-delete the user's media files
+    -- -----------------------------------------------
+    -- Schedule files for permanent removal after 30 days
+    -- (handled by media.cleanup_deleted_files() cron job)
+    UPDATE media.files
+    SET deleted_at = NOW(),
+        permanently_delete_at = NOW() + INTERVAL '30 days'
+    WHERE uploader_user_id = p_user_id
+      AND deleted_at IS NULL;
+
+    -- -----------------------------------------------
+    -- 6. Log the deletion as a security event
+    -- -----------------------------------------------
     PERFORM auth.log_security_event(
-        NEW.user_id,
-        NEW.id,
-        'login',
-        'authentication',
-        'info',
+        p_user_id,
+        NULL,                          -- no session (already revoked)
+        'account_soft_delete',
+        'account_management',
+        'warning',
         'success',
-        'User logged in successfully',
-        NEW.ip_address,
-        NEW.user_agent,
-        NEW.device_id,
-        NEW.ip_country,
-        NEW.ip_city,
-        -- include inserted login_history row as JSONB along with existing metadata
+        'User account soft-deleted. Sessions revoked: ' || v_revoked_sessions,
+        NULL, NULL, NULL, NULL, NULL,
         jsonb_build_object(
-            'is_new_device', NOT NEW.is_trusted_device,
-            'device_type', NEW.device_type,
-            'device_fingerprint', v_login_history_row.device_fingerprint
+            'deletion_type', 'soft',
+            'sessions_revoked', v_revoked_sessions
         )
     );
-    
-    RETURN NEW;
+
+    RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;
 
 
-
--- Trigger to log session revocation
-CREATE OR REPLACE FUNCTION auth.log_session_revocation()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL THEN
-        PERFORM auth.log_security_event(
-            NEW.user_id,
-            NEW.id,
-            'logout',
-            'authentication',
-            'info',
-            'success',
-            'Session revoked: ' || COALESCE(NEW.revoked_reason, 'User logged out'),
-            NEW.ip_address,
-            NEW.user_agent,
-            NEW.device_id,
-            NEW.ip_country,
-            NEW.ip_city,
-            jsonb_build_object()
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to prevent user deletion if active sessions exist
-CREATE OR REPLACE FUNCTION auth.prevent_user_deletion_with_active_sessions()
-RETURNS TRIGGER AS $$
+-- -------------------------------------------------
+-- auth.hard_delete_user(p_user_id)
+-- -------------------------------------------------
+-- Performs an irreversible (hard) deletion of a user
+-- account. This permanently removes the auth.users
+-- row and all associated data across all schemas.
+--
+-- Intended for GDPR "right to erasure" requests.
+--
+-- Actions taken:
+--   1. Revoke all active sessions (required by the
+--      prevent_user_deletion_with_active_sessions trigger)
+--   2. Manually clean up 15+ tables that lack
+--      ON DELETE CASCADE on their user FK
+--   3. Log the deletion event (before removing user)
+--   4. DELETE FROM auth.users — cascades handle 50+ tables
+--
+-- Tables with ON DELETE CASCADE are handled automatically.
+-- Tables with ON DELETE SET NULL keep their rows but
+-- lose the user reference (e.g. messages retain content
+-- but sender_user_id becomes NULL).
+--
+-- Admin-created resources (templates, announcements,
+-- batches, reports) are preserved with their
+-- created_by / assigned_to fields nullified.
+--
+-- Returns TRUE on success, raises exception on failure.
+-- -------------------------------------------------
+CREATE OR REPLACE FUNCTION auth.hard_delete_user(p_user_id UUID)
+RETURNS BOOLEAN AS $$
 DECLARE
-    v_active_sessions INTEGER;
+    v_user_exists BOOLEAN;
 BEGIN
-    SELECT COUNT(*) INTO v_active_sessions
-    FROM auth.sessions
-    WHERE user_id = OLD.id
-    AND revoked_at IS NULL
-    AND expires_at > NOW();
-    
-    IF v_active_sessions > 0 THEN
-        RAISE EXCEPTION 'Cannot delete user with active sessions. Revoke all sessions first.';
-    END IF;
-    
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
+    -- -----------------------------------------------
+    -- 1. Validate the user exists
+    -- -----------------------------------------------
+    SELECT EXISTS (
+        SELECT 1 FROM auth.users WHERE id = p_user_id
+    ) INTO v_user_exists;
 
--- Trigger to clean up related OAuth providers on user deletion
-CREATE OR REPLACE FUNCTION auth.cleanup_user_oauth_providers()
-RETURNS TRIGGER AS $$
-BEGIN
-    DELETE FROM auth.oauth_providers WHERE user_id = OLD.id;
-    RETURN OLD;
+    IF NOT v_user_exists THEN
+        RAISE EXCEPTION 'User % does not exist', p_user_id;
+    END IF;
+
+    -- -----------------------------------------------
+    -- 2. Revoke all active sessions
+    -- -----------------------------------------------
+    -- The BEFORE DELETE trigger
+    -- auth.prevent_user_deletion_with_active_sessions()
+    -- will block the DELETE if any active sessions remain.
+    UPDATE auth.sessions
+    SET revoked_at = NOW(),
+        revoked_reason = 'account_hard_deleted'
+    WHERE user_id = p_user_id
+      AND revoked_at IS NULL;
+
+    -- -----------------------------------------------
+    -- 3. Log the deletion event BEFORE removing the user
+    -- -----------------------------------------------
+    -- This must happen before the DELETE because the
+    -- security_events FK cascades on user deletion.
+    -- The event will be deleted along with the user,
+    -- but if security_events are replicated to an
+    -- external audit log, this ensures the event is
+    -- captured before cascade.
+    PERFORM auth.log_security_event(
+        p_user_id,
+        NULL,
+        'account_hard_delete',
+        'account_management',
+        'critical',
+        'success',
+        'User account permanently deleted (GDPR purge)',
+        NULL, NULL, NULL, NULL, NULL,
+        jsonb_build_object(
+            'deletion_type', 'hard',
+            'gdpr_purge', TRUE
+        )
+    );
+
+    -- -----------------------------------------------
+    -- 4. Clean up tables WITHOUT ON DELETE CASCADE
+    -- -----------------------------------------------
+    -- These tables have FK references to auth.users
+    -- but no cascade rule, so they would cause FK
+    -- violation errors if we just DELETE the user.
+
+    -- === messages schema: user-specific data (DELETE) ===
+
+    -- Message reactions posted by this user
+    DELETE FROM messages.reactions
+    WHERE user_id = p_user_id;
+
+    -- Message delivery status records for this user
+    DELETE FROM messages.delivery_status
+    WHERE user_id = p_user_id;
+
+    -- Poll votes cast by this user
+    DELETE FROM messages.poll_votes
+    WHERE user_id = p_user_id;
+
+    -- Call participation records for this user
+    DELETE FROM messages.call_participants
+    WHERE user_id = p_user_id;
+
+    -- Messages pinned by this user (unpin, not delete message)
+    DELETE FROM messages.pinned_messages
+    WHERE pinned_by_user_id = p_user_id;
+
+    -- Message reports filed by this user
+    DELETE FROM messages.message_reports
+    WHERE reporter_user_id = p_user_id;
+
+    -- Calls initiated by this user (nullify, keep call record)
+    UPDATE messages.calls
+    SET initiator_user_id = NULL
+    WHERE initiator_user_id = p_user_id;
+
+    -- === notifications schema: user-specific data (DELETE) ===
+
+    -- Notification action responses from this user
+    DELETE FROM notifications.action_responses
+    WHERE user_id = p_user_id;
+
+    -- Announcement views by this user
+    DELETE FROM notifications.announcement_views
+    WHERE user_id = p_user_id;
+
+    -- === notifications schema: admin references (NULLIFY) ===
+    -- Preserve admin-created resources but remove user link
+
+    -- Announcements created by this user
+    UPDATE notifications.announcements
+    SET created_by_user_id = NULL
+    WHERE created_by_user_id = p_user_id;
+
+    -- Notification batches created by this user
+    UPDATE notifications.batches
+    SET created_by_user_id = NULL
+    WHERE created_by_user_id = p_user_id;
+
+    -- Notification templates created by this user
+    UPDATE notifications.templates
+    SET created_by_user_id = NULL
+    WHERE created_by_user_id = p_user_id;
+
+    -- === users schema: reports ===
+
+    -- Reports filed ABOUT this user (remove, reporter stays)
+    DELETE FROM users.reports
+    WHERE reported_user_id = p_user_id;
+
+    -- Reports assigned to this user for review (nullify)
+    UPDATE users.reports
+    SET assigned_to = NULL
+    WHERE assigned_to = p_user_id;
+
+    -- === analytics schema: admin references (NULLIFY) ===
+
+    -- A/B tests created by this user
+    UPDATE analytics.ab_tests
+    SET created_by_user_id = NULL
+    WHERE created_by_user_id = p_user_id;
+
+    -- -----------------------------------------------
+    -- 5. Delete the user — ON DELETE CASCADE handles
+    --    the remaining 50+ tables automatically
+    -- -----------------------------------------------
+    DELETE FROM auth.users
+    WHERE id = p_user_id;
+
+    RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;

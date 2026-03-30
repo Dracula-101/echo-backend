@@ -82,5 +82,5 @@ func (h *Handler) Upload(handler *req.RequestHandler) {
 		AccessToken:      output.AccessToken,
 		UploadedAt:       output.UploadedAt,
 	}
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, responseDTO)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "File uploaded successfully", responseDTO)
 }

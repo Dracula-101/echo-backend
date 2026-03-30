@@ -61,7 +61,7 @@ func (h *Handler) CreateShare(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), http.StatusCreated, output)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Share created successfully", output)
 }
 
 func (h *Handler) RevokeShare(handler *req.RequestHandler) {
@@ -84,5 +84,5 @@ func (h *Handler) RevokeShare(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithContext(ctx, handler.Request(), handler.Writer(), response.StatusOK, map[string]string{"message": "share revoked successfully"})
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Share revoked successfully", map[string]string{"message": "share revoked successfully"})
 }

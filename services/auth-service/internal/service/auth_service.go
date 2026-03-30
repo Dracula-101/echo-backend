@@ -227,6 +227,47 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		}
 	}
 
+	// generate tokens
+	accessToken, tokenErr := s.tokenService.IssueAccessToken(ctx, userID, token.IssueOptions{
+		ExpiresIn: s.cfg.JWT.AccessTokenTTL,
+		Metadata: map[string]interface{}{
+			"purpose": "access_token",
+			"user_id": userID,
+			"email":   input.Email,
+		},
+		Audience: []string{s.cfg.JWT.Audience},
+	})
+	if tokenErr != nil {
+		return nil, &error.AuthError{
+			Message: "Failed to generate token",
+			Code:    authErrors.CodeTokenGenerationFailed,
+			Error: pkgErrors.FromError(tokenErr, authErrors.CodeTokenGenerationFailed, "failed to generate access token").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", userID).
+				WithDetail("email", input.Email).
+				WithDetail("purpose", "access_token"),
+		}
+	}
+
+	refreshToken, refreshErr := s.tokenService.IssueRefreshToken(ctx, userID, token.IssueOptions{
+		ExpiresIn: s.cfg.JWT.RefreshTokenTTL,
+		Metadata: map[string]interface{}{
+			"purpose": "refresh_token",
+		},
+		Audience: []string{s.cfg.JWT.Audience},
+	})
+	if refreshErr != nil {
+		return nil, &error.AuthError{
+			Message: "Failed to generate token",
+			Code:    authErrors.CodeTokenGenerationFailed,
+			Error: pkgErrors.FromError(refreshErr, authErrors.CodeTokenGenerationFailed, "failed to generate refresh token").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", userID).
+				WithDetail("email", input.Email).
+				WithDetail("purpose", "refresh_token"),
+		}
+	}
+
 	s.log.Info("User registered successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -238,6 +279,9 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		Email:                 input.Email,
 		EmailVerificationSent: true,
 		VerificationToken:     tokenResult.Token,
+		AccessToken:           accessToken.Token,
+		RefreshToken:          refreshToken.Token,
+		ExpiresIn:             accessToken.Claims.IssuedAt.Add(s.cfg.JWT.AccessTokenTTL),
 	}, nil
 }
 

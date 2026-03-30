@@ -259,3 +259,4 @@ func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 
 	return nil
 }
+

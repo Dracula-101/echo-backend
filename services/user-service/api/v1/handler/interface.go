@@ -10,6 +10,7 @@ type UserHandlerInterface interface {
 	// Profile endpoints
 	GetProfile(handler *req.RequestHandler)
 	CreateProfile(handler *req.RequestHandler)
+	SearchProfiles(handler *req.RequestHandler)
 }
 
 // Compile-time interface compliance check
