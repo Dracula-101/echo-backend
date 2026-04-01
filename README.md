@@ -219,4 +219,4 @@ Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for branching, style, and PR gu
 
 ## License
 
-No `LICENSE` file is present in the repository. `CONTRIBUTING.md` states that contributions are licensed under the MIT License.
+The repository does not include a `LICENSE` file, so the project license is currently unspecified. `CONTRIBUTING.md` notes that contributions are under the MIT License; consider adding a LICENSE file to make the project license explicit.
