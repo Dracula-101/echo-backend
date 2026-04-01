@@ -1,575 +1,222 @@
 # Echo Backend
 
-A production-ready, scalable microservices architecture for a real-time messaging platform built with Go. Echo Backend implements WhatsApp/Telegram-inspired design patterns with emphasis on clean architecture, observability, and developer experience.
-
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
-[![Architecture](https://img.shields.io/badge/Architecture-Microservices-blue)](./docs/ARCHITECTURE.md)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+Echo Backend is a Go-based microservices backend for a real-time messaging platform. It provides an API gateway and a set of services for authentication, messaging, media handling, presence, and location lookup. The project is aimed at backend engineers who want a reference implementation or a starting point for building messaging systems.
 
 ## Documentation
 
-📚 **[Complete Documentation](./docs/)** - Comprehensive guides for development, API reference, and architecture
+- [Architecture](./docs/ARCHITECTURE.md)
+- [API Reference](./docs/API_REFERENCE.md)
+- [WebSocket Protocol](./docs/WEBSOCKET_PROTOCOL.md)
+- [Usage Guide](./docs/USAGE.md)
+- [Database Schema](./docs/DATABASE_SCHEMA.md)
+- [Contributing](./CONTRIBUTING.md)
 
-**Quick Links:**
-- [Usage Guide](./docs/USAGE.md) - Developer workflows and commands
-- [API Reference](./docs/API_REFERENCE.md) - REST API endpoints
-- [WebSocket Protocol](./docs/WEBSOCKET_PROTOCOL.md) - Real-time messaging
-- [Server Architecture](./docs/SERVER_ARCHITECTURE.md) - Implementation details
-- [Database Schema](./docs/DATABASE_SCHEMA.md) - Complete schema reference
-- [Guidelines](./docs/GUIDELINES.md) - Coding standards
-- [Contributing](./docs/CONTRIBUTING.md) - How to contribute
+## Architecture & Entry Points
+
+- **Microservices layout**: Each service lives under `services/<service>` with its entry point at `services/<service>/cmd/server/main.go` (see `go.work` for the full workspace list).
+- **API Gateway**: Routes `/api/v1/*` traffic to internal services and enforces JWT validation and rate limiting (see `services/api-gateway/configs/config.yaml`).
+- **WebSocket service**: Dedicated WebSocket server (`services/ws-service`) that upgrades connections at `/` and handles real-time events.
+- **Shared libraries**: Common infrastructure lives in `shared/pkg` (database, cache, messaging, logging) and `shared/server` (router, middleware, health, shutdown, response envelope).
+
+### Services
+
+| Service | Purpose | Status |
+| --- | --- | --- |
+| api-gateway | Routing, JWT validation, rate limiting | Implemented |
+| auth-service | Register, login, refresh tokens | Implemented |
+| user-service | Profile creation, lookup, search | Implemented |
+| message-service | Messages + conversations APIs | Implemented |
+| presence-service | Presence and typing APIs | Implemented |
+| media-service | Uploads, albums, file management | Implemented |
+| location-service | IP-based location lookup | Implemented |
+| ws-service | WebSocket real-time events | Implemented |
+| notification-service | Push notifications | Placeholder (stub entry point) |
+| analytics-service | Analytics | Placeholder (stub entry point) |
+
+## Tech Stack
+
+- **Language**: Go 1.25 (see `go.work` and service `go.mod` files)
+- **HTTP**: Gorilla Mux
+- **WebSocket**: Gorilla WebSocket
+- **Database**: PostgreSQL (via `database/sql` + `lib/pq`)
+- **Cache**: Redis (`go-redis`)
+- **Messaging**: Kafka (IBM/Sarama)
+- **Configuration**: Viper (YAML + env interpolation)
+- **Logging**: Zap
+- **Metrics**: Prometheus
+- **Infra**: Docker + Docker Compose, Make
 
 ## Features
 
-- **Real-time Messaging** - WebSocket-based messaging with multi-device support
-- **Phone-First Authentication** - OTP verification with JWT/refresh token flow
-- **Multi-Device Support** - Hub-based architecture managing user sessions across devices
-- **Microservices Architecture** - 9 independent, scalable services
-- **Clean Architecture** - Interface-based design with clear separation of concerns
-- **Production Ready** - Graceful shutdown, health checks, structured logging, metrics
-- **Developer Friendly** - Comprehensive tooling, hot reload, Make targets
-
-## Quick Start
-
-### Prerequisites
-
-- **Go** 1.21 or higher
-- **Docker** and **Docker Compose**
-- **Make** (for convenience commands)
-- **PostgreSQL** 15+ (via Docker)
-- **Redis** 7+ (via Docker)
-- **Kafka** 3+ (via Docker)
-
-### Get Started in 3 Minutes
-
-```bash
-# Clone the repository
-git clone https://github.com/Dracula-101/echo-backend.git
-git clone https://github.com/Dracula-101/echo-backend.git
-cd echo-backend
-
-# Start all services (infrastructure + microservices)
-make up
-
-# Check service health
-make health
-
-# View logs
-make logs
-
-# Stop all services
-make down
-```
-
-That's it! Your messaging platform is now running:
-- **API Gateway**: http://localhost:8080
-- **Auth Service**: http://localhost:8081 (internal)
-- **Message Service**: http://localhost:8083 (internal)
-- **User Service**: http://localhost:8082 (internal)
-
-### Test the System
-
-```bash
-# Register a new user
-curl -X POST http://localhost:8080/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "phone": "+1234567890",
-    "password": "SecurePass123!",
-    "name": "John Doe"
-  }'
-
-# Verify OTP (check logs for OTP code)
-curl -X POST http://localhost:8080/api/v1/auth/verify-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "phone": "+1234567890",
-    "otp": "123456"
-  }'
-
-# Login
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "phone": "+1234567890",
-    "password": "SecurePass123!"
-  }'
-```
-
-## Architecture Overview
-
-```mermaid
-graph TB
-    Client[Client Applications]
-
-    subgraph "API Layer"
-        Gateway[API Gateway :8080]
-    end
-
-    subgraph "Microservices"
-        Auth[Auth Service :8081]
-        User[User Service :8082]
-        Message[Message Service :8083]
-        Presence[Presence Service :8084]
-        Media[Media Service :8085]
-        Notification[Notification Service :8086]
-        Analytics[Analytics Service :8087]
-        Location[Location Service :8090]
-    end
-
-    subgraph "Infrastructure"
-        DB[(PostgreSQL)]
-        Redis[(Redis)]
-        Kafka[Kafka]
-    end
-
-    Client --> Gateway
-    Gateway --> Auth & User & Message & Presence
-    Auth & User & Message & Presence --> DB
-    Auth & Message --> Redis
-    Message --> Kafka
-```
-
-For detailed architecture documentation, see [ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-
-## Services
-
-| Service | Port | Status | Description |
-|---------|------|--------|-------------|
-| **api-gateway** | 8080 | ✅ Production | Reverse proxy, JWT validation, rate limiting |
-| **auth-service** | 8081 | ✅ Production | Authentication, sessions, OTP verification |
-| **message-service** | 8083 | ✅ Production | Real-time messaging, WebSocket, conversations |
-| **user-service** | 8082 | ✅ Implemented | User profiles, contacts management |
-| **location-service** | 8090 | ✅ Implemented | Phone number geolocation lookup |
-| **presence-service** | 8084 | ✅ Implemented | Online status tracking |
-| **media-service** | 8085 | 🚧 Placeholder | Media uploads, thumbnails, storage |
-| **notification-service** | 8086 | 🚧 Placeholder | Push notifications (FCM/APNS) |
-| **analytics-service** | 8087 | 🚧 Placeholder | Usage metrics and analytics |
+- API Gateway routing with JWT validation and rate limiting.
+- Auth flows for registration, login, and refresh tokens.
+- Messaging APIs for conversations and messages with Kafka integration.
+- WebSocket service for real-time events (typing, presence, receipts, calls).
+- Media upload and file management endpoints.
+- Presence and typing indicator HTTP endpoints.
+- Health, readiness, and metrics endpoints for observability.
 
 ## Project Structure
 
 ```
 echo-backend/
-├── services/              # Microservices
-│   ├── api-gateway/      # Entry point for all client requests
-│   ├── auth-service/     # Authentication & authorization
-│   ├── message-service/  # Real-time messaging
-│   ├── user-service/     # User management
-│   ├── presence-service/ # Online status
-│   ├── location-service/ # Geolocation
-│   ├── media-service/    # Media handling
-│   ├── notification-service/  # Push notifications
-│   └── analytics-service/     # Analytics
-├── shared/               # Shared libraries
-│   ├── pkg/             # Core infrastructure
-│   │   ├── database/    # PostgreSQL abstraction
-│   │   ├── cache/       # Redis abstraction
-│   │   ├── messaging/   # Kafka abstraction
-│   │   ├── logger/      # Structured logging
-│   │   └── ...
-│   └── server/          # HTTP utilities
-│       ├── router/      # Router with builder pattern
-│       ├── middleware/  # 15+ middleware components
-│       ├── response/    # Standardized responses
-│       ├── shutdown/    # Graceful shutdown
-│       └── health/      # Health check system
-├── database/            # Database schemas & migrations
-│   └── schemas/         # Domain-specific SQL schemas
-├── infra/              # Infrastructure & deployment
-│   ├── docker/         # Docker Compose files
-│   └── scripts/        # Utility scripts
-├── Makefile            # Development commands
-└── go.work             # Go workspace configuration
+├── services/              # Microservices (entry points under cmd/server)
+├── shared/                # Shared libraries (db/cache/messaging/router/etc.)
+├── database/              # SQL schemas, indexes, triggers, RLS
+├── migrations/            # Database migration files
+├── infra/                 # Docker Compose, scripts, and makefiles
+├── scripts/               # Helper scripts (e.g., start-auth.sh)
+├── docs/                  # Architecture and API docs
+├── .env.example           # Root environment template
+├── go.work                # Go workspace configuration
+└── Makefile               # Development commands
 ```
 
-## Development
+## Getting Started
 
-### Available Make Commands
+### Prerequisites
+
+- Go 1.25
+- Docker + Docker Compose
+- Make
+
+### Installation
 
 ```bash
-# Service Management
-make up                  # Start all services
-make down                # Stop all services
-make rerun               # Rebuild and restart all services
-make logs                # View logs from all services
-make status              # Check service health
-make health              # Run health checks
+git clone https://github.com/Dracula-101/echo-backend.git
+cd echo-backend
 
-# Individual Service Commands
-make auth-up             # Start auth service
-make auth-down           # Stop auth service
-make auth-rerun          # Rebuild and restart auth service
-make auth-logs           # View auth service logs
+# Root environment
+cp .env.example .env
 
-# Database Operations
-make db-init             # Initialize database schemas
-make db-migrate          # Run migrations
-make db-migrate-down     # Rollback last migration
-make db-seed             # Seed test data
-make db-reset            # Drop and recreate database
-make db-connect          # Connect to PostgreSQL CLI
+# Service environments
+for service in api-gateway auth-service message-service user-service location-service media-service presence-service ws-service; do
+  cp services/$service/.env.example services/$service/.env
+done
 
-# Testing
-make test                # Run all tests
-make test-auth           # Test auth endpoints
-
-# Infrastructure
-make kafka-topics        # List Kafka topics
-make redis-connect       # Connect to Redis CLI
+# Start the stack
+make up
 ```
 
-For complete usage guide, see [USAGE.md](./USAGE.md)
+### Database setup
 
-### Development Workflow
+Database initialization and migrations are handled by scripts under `infra/scripts` and make targets:
 
-1. **Start services**: `make up`
-2. **Make changes** to your code
-3. **Hot reload** will automatically restart the service
-4. **View logs**: `make <service>-logs`
-5. **Test changes**: `make test` or manual testing
-6. **Stop services**: `make down`
-
-## Technology Stack
-
-### Backend
-- **Language**: Go 1.21+
-- **Web Framework**: Gorilla Mux
-- **Database**: PostgreSQL 15 with pgx driver
-- **Cache**: Redis 7
-- **Message Queue**: Apache Kafka 3
-- **WebSocket**: Gorilla WebSocket
-
-### Infrastructure
-- **Containerization**: Docker & Docker Compose
-- **Logging**: Zap (structured logging)
-- **Configuration**: Viper (YAML + env variables)
-- **Authentication**: JWT with refresh tokens
-- **Password Hashing**: Argon2id, bcrypt, scrypt
-
-### Observability
-- Structured JSON logging
-- Request/correlation ID tracking
-- Health check endpoints
-- Graceful shutdown hooks
-- Request duration tracking
-
-## Key Features
-
-### Builder Pattern
-All services use the Builder pattern for safe dependency injection:
-
-```go
-authService := service.NewAuthServiceBuilder().
-    WithRepo(authRepo).
-    WithTokenService(tokenService).
-    WithHashingService(hashingService).
-    WithCache(cacheClient).
-    WithConfig(&cfg.Auth).
-    WithLogger(log).
-    Build()  // Validates all dependencies
+```bash
+make db-init
+make db-migrate
 ```
 
-### Graceful Shutdown
-Priority-based shutdown hooks ensure clean service termination:
+### Run locally
 
-```go
-shutdown.Register(shutdown.HighPriority, "http-server", func(ctx context.Context) error {
-    return server.Shutdown(ctx)
-})
+```bash
+make up      # Start all services
+make logs    # Follow logs
+make health  # Health checks
+make down    # Stop services
 ```
 
-### Middleware Chain
-Composable middleware with early/late execution:
+## Usage
 
-```go
-router.NewBuilder().
-    WithEarlyMiddleware(RequestID, CorrelationID, RateLimiting).
-    WithLateMiddleware(Recovery, RequestLogger).
-    Build()
-```
+### REST API (via API Gateway)
 
-### Health Checks
-Comprehensive health checking with custom checkers:
-
-```go
-healthManager.RegisterChecker("database", func(ctx context.Context) health.CheckResult {
-    return health.CheckResult{Status: health.StatusUp}
-})
-```
-
-## Configuration
-
-Services use hierarchical configuration:
-- Base: `config.yaml`
-- Environment overrides: `config.dev.yaml`, `config.prod.yaml`
-- Environment variable interpolation: `${DB_HOST:localhost}`
-
-Example:
-```yaml
-database:
-  host: ${DB_HOST:localhost}
-  port: ${DB_PORT:5432}
-  name: ${DB_NAME:echo}
-  user: ${DB_USER:echo}
-  password: ${DB_PASSWORD:echo}
-```
-
-## Database
-
-### Multi-Schema Design
-- `auth` - Authentication, sessions, OTP
-- `users` - User profiles, contacts
-- `messages` - Messages, conversations
-- `media` - Media files, thumbnails
-- `notifications` - Push tokens, preferences
-- `analytics` - Usage metrics
-- `location` - Phone number geolocation
-
-### Key Features
-- UUID primary keys
-- Soft deletes (`deleted_at`)
-- Automatic timestamps (`created_at`, `updated_at`)
-- Row-Level Security (RLS)
-- Full audit trail
-- Device tracking with metadata
-
-## API Documentation
-
-### Authentication Endpoints
-
-**Register User**
-```http
-POST /api/v1/auth/register
-Content-Type: application/json
-
-{
-  "phone": "+1234567890",
-  "password": "SecurePass123!",
-  "name": "John Doe"
-}
-```
-
-**Verify OTP**
-```http
-POST /api/v1/auth/verify-otp
-Content-Type: application/json
-
-{
-  "phone": "+1234567890",
-  "otp": "123456"
-}
+**Register**
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!",
+    "accept_terms": true
+  }'
 ```
 
 **Login**
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-  "phone": "+1234567890",
-  "password": "SecurePass123!"
-}
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+  }'
 ```
 
-### Real-time Messaging
-
-**WebSocket Connection**
+**Send a message**
+```bash
+curl -X POST http://localhost:8080/api/v1/messages \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "660e8400-e29b-41d4-a716-446655440001",
+    "content": "Hello!",
+    "message_type": "text"
+  }'
 ```
-ws://localhost:8083/ws
+
+**Location lookup**
+```bash
+curl "http://localhost:8080/api/v1/location/lookup?ip=8.8.8.8"
+```
+
+Responses are wrapped in a standard envelope with `success`, `data`, and `error` fields (see `shared/server/response/response.go`).
+
+### WebSocket
+
+The WebSocket service listens at `/` (see `services/ws-service/cmd/server/main.go`). Provide the user ID via header or query param:
+
+```
+ws://localhost:8086/
 Headers:
   X-User-ID: <uuid>
-  X-Device-ID: <device-id>
-  X-Platform: ios|android|web
+  X-Device-ID: <string>
+  X-Platform: <string>
 ```
 
-**Send Message**
-```http
-POST /api/v1/messages
-Authorization: Bearer <token>
-Content-Type: application/json
+See [docs/WEBSOCKET_PROTOCOL.md](./docs/WEBSOCKET_PROTOCOL.md) for message formats and event types.
 
-{
-  "to_user_id": "uuid",
-  "content": "Hello!",
-  "type": "text"
-}
+## Configuration
+
+- **Root environment**: `.env.example` → `.env` (database, Redis, Kafka, JWT settings).
+- **Service environments**: `services/*/.env.example` → `services/*/.env` (ports, logging, service-specific config).
+- **Config files**: `services/<service>/configs/config.yaml` loaded via `CONFIG_PATH` and `APP_ENV`.
+
+Key environment variables used across services:
+
+- `POSTGRES_*`, `REDIS_*`, `KAFKA_BROKERS`
+- `JWT_SECRET_KEY`, `JWT_ACCESS_TOKEN_TTL`, `JWT_REFRESH_TOKEN_TTL`
+- `CONFIG_PATH`, `APP_ENV`, `LOG_LEVEL`, `LOG_FORMAT`
+
+## Make Commands
+
+```bash
+make help        # List all commands
+make up          # Start all services
+make down        # Stop all services
+make logs        # Tail logs
+make health      # Health checks
+make test        # Run tests
+make db-init     # Initialize database
+make db-migrate  # Run migrations
 ```
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-### Development Guidelines
-
-1. Follow the established service structure
-2. Use the Builder pattern for service initialization
-3. Write comprehensive tests
-4. Use structured logging
-5. Implement health checks
-6. Add graceful shutdown hooks
-7. Document your changes
-
-See [GUIDELINES.md](./GUIDELINES.md) for detailed coding standards.
 
 ## Testing
 
 ```bash
-# Run all tests
 make test
-
-# Test specific service
-cd services/auth-service && go test -v ./...
-
-# Test with coverage
-go test -v -cover ./...
-
-# Integration tests
-make test-auth
 ```
 
 ## Deployment
 
-### Docker Compose (Development)
-```bash
-ENV=dev make up
-```
+Docker Compose supports dev/prod overlays (see `infra/docker`):
 
-### Docker Compose (Production)
 ```bash
 ENV=prod make up
 ```
 
-### Environment Variables
-```bash
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=echo
-DB_USER=echo
-DB_PASSWORD=echo
+## Contributing
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# Kafka
-KAFKA_BROKERS=localhost:9092
-
-# JWT
-JWT_SECRET=your-secret-key
-JWT_ACCESS_EXPIRY=15m
-JWT_REFRESH_EXPIRY=7d
-```
-
-## Monitoring
-
-### Health Endpoints
-- `/health` - Liveness probe
-- `/ready` - Readiness probe (checks dependencies)
-
-### Logging
-All services use structured JSON logging with:
-- Request ID tracking
-- Correlation ID propagation
-- Request/response logging
-- Error context
-
-### Metrics
-- Request duration tracking
-- Connection pool stats
-- Cache hit/miss rates
-- WebSocket connection metrics
-
-## Troubleshooting
-
-### Services not starting
-```bash
-# Check Docker status
-docker ps
-
-# View service logs
-make logs
-
-# Check health
-make health
-
-# Rebuild services
-make rerun
-```
-
-### Database connection issues
-```bash
-# Connect to database
-make db-connect
-
-# Check database status
-docker exec -it echo-postgres pg_isready
-
-# Reinitialize database
-make db-reset
-```
-
-### Port conflicts
-```bash
-# Check if ports are in use
-lsof -i :8080
-lsof -i :5432
-
-# Stop conflicting services
-make down
-```
-
-## Performance
-
-- **Concurrent Connections**: 10,000+ WebSocket connections per instance
-- **Message Throughput**: 50,000+ messages/second
-- **Response Time**: < 10ms (p50), < 50ms (p99)
-- **Database**: Connection pooling with configurable limits
-- **Cache**: Redis for sub-millisecond lookups
-
-## Security
-
-- Phone-first authentication with OTP verification
-- JWT access tokens (15min) + refresh tokens (7 days)
-- Password hashing with Argon2id
-- Token blacklisting via Redis
-- Rate limiting (fixed window, sliding window, token bucket)
-- CORS protection
-- Security headers
-- Input validation
-- SQL injection protection (parameterized queries)
-
-## Roadmap
-
-- [ ] Message encryption (E2E)
-- [ ] Group messaging
-- [ ] Voice/video calling
-- [ ] Message reactions
-- [ ] File attachments
-- [ ] Message search
-- [ ] Admin dashboard
-- [ ] Kubernetes deployment
-- [ ] Monitoring (Prometheus/Grafana)
-- [ ] Distributed tracing (Jaeger)
+Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for branching, style, and PR guidelines.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Documentation**: [Complete Documentation](./docs/) | [Architecture](./docs/ARCHITECTURE.md) | [Usage Guide](./docs/USAGE.md) | [API Reference](./docs/API_REFERENCE.md)
-- **Issues**: [GitHub Issues](https://github.com/Dracula-101/echo-backend/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Dracula-101/echo-backend/discussions)
-
-## Acknowledgments
-
-Built with inspiration from:
-- WhatsApp's messaging architecture
-- Telegram's multi-device support
-- Slack's real-time communication
-- Discord's scalability patterns
-
----
-
-**Built with ❤️ using Go**
+No `LICENSE` file is present in the repository. `CONTRIBUTING.md` states that contributions are licensed under the MIT License.
