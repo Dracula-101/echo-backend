@@ -133,18 +133,11 @@ logging:
 
 email:
   enabled: ${EMAIL_ENABLED:false}
-  provider: ${EMAIL_PROVIDER:smtp}
-  smtp:
-    host: ${SMTP_HOST:smtp.gmail.com}
-    port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME}
-    password: ${SMTP_PASSWORD}
-    from_email: ${SMTP_FROM_EMAIL:noreply@example.com}
-    from_name: ${SMTP_FROM_NAME:Auth Service}
-    use_tls: ${SMTP_USE_TLS:true}
-  templates:
-    verification_subject: ${EMAIL_VERIFICATION_SUBJECT:Verify Your Email}
-    password_reset_subject: ${EMAIL_PASSWORD_RESET_SUBJECT:Reset Your Password}
+  provider: ${EMAIL_PROVIDER:mailgun}
+  mailgun:
+    domain: ${MAILGUN_DOMAIN:}
+    api_key: ${MAILGUN_API_KEY:}
+    base_url: ${MAILGUN_BASE_URL:https://api.mailgun.net/v3}
 
 observability:
   metrics:

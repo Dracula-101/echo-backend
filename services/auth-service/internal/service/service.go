@@ -4,19 +4,24 @@ import (
 	"auth-service/internal/config"
 	repository "auth-service/internal/repo"
 	"shared/pkg/cache"
+	"shared/pkg/email"
 	"shared/pkg/logger"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
 )
 
 type AuthService struct {
-	repo             repository.AuthRepositoryInterface
-	loginHistoryRepo repository.LoginHistoryRepositoryInterface
-	tokenService     token.JWTTokenService
-	hashingService   hashing.HashingService
-	cache            cache.Cache
-	cfg              *config.AuthConfig
-	log              logger.Logger
+	repo                  repository.AuthRepositoryInterface
+	loginHistoryRepo      repository.LoginHistoryRepositoryInterface
+	sessionRepo           repository.SessionRepositoryInterface
+	passwordResetRepo     repository.PasswordResetTokenRepositoryInterface
+	emailVerificationRepo repository.EmailVerificationTokenRepositoryInterface
+	emailService          email.EmailService
+	tokenService          token.JWTTokenService
+	hashingService        hashing.HashingService
+	cache                 cache.Cache
+	cfg                   *config.AuthConfig
+	log                   logger.Logger
 }
 
 func NewAuthServiceBuilder() *AuthServiceBuilder {
@@ -24,13 +29,17 @@ func NewAuthServiceBuilder() *AuthServiceBuilder {
 }
 
 type AuthServiceBuilder struct {
-	repo             repository.AuthRepositoryInterface
-	loginHistoryRepo repository.LoginHistoryRepositoryInterface
-	tokenService     token.JWTTokenService
-	hashingService   hashing.HashingService
-	cache            cache.Cache
-	cfg              *config.AuthConfig
-	log              logger.Logger
+	repo                  repository.AuthRepositoryInterface
+	loginHistoryRepo      repository.LoginHistoryRepositoryInterface
+	sessionRepo           repository.SessionRepositoryInterface
+	passwordResetRepo     repository.PasswordResetTokenRepositoryInterface
+	emailVerificationRepo repository.EmailVerificationTokenRepositoryInterface
+	emailService          email.EmailService
+	tokenService          token.JWTTokenService
+	hashingService        hashing.HashingService
+	cache                 cache.Cache
+	cfg                   *config.AuthConfig
+	log                   logger.Logger
 }
 
 func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepositoryInterface) *AuthServiceBuilder {
@@ -40,6 +49,26 @@ func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepositoryInterface) *
 
 func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo repository.LoginHistoryRepositoryInterface) *AuthServiceBuilder {
 	b.loginHistoryRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithSessionRepo(repo repository.SessionRepositoryInterface) *AuthServiceBuilder {
+	b.sessionRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithPasswordResetRepo(repo repository.PasswordResetTokenRepositoryInterface) *AuthServiceBuilder {
+	b.passwordResetRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithEmailVerificationRepo(repo repository.EmailVerificationTokenRepositoryInterface) *AuthServiceBuilder {
+	b.emailVerificationRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithEmailService(emailService email.EmailService) *AuthServiceBuilder {
+	b.emailService = emailService
 	return b
 }
 
@@ -87,13 +116,17 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 	)
 
 	return &AuthService{
-		repo:             b.repo,
-		loginHistoryRepo: b.loginHistoryRepo,
-		tokenService:     b.tokenService,
-		hashingService:   b.hashingService,
-		cache:            b.cache,
-		cfg:              b.cfg,
-		log:              b.log,
+		repo:                  b.repo,
+		loginHistoryRepo:      b.loginHistoryRepo,
+		sessionRepo:           b.sessionRepo,
+		passwordResetRepo:     b.passwordResetRepo,
+		emailVerificationRepo: b.emailVerificationRepo,
+		emailService:          b.emailService,
+		tokenService:          b.tokenService,
+		hashingService:        b.hashingService,
+		cache:                 b.cache,
+		cfg:                   b.cfg,
+		log:                   b.log,
 	}
 }
 

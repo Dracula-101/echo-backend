@@ -220,21 +220,16 @@ type LogFileConfig struct {
 
 // EmailConfig contains email configuration
 type EmailConfig struct {
-	Enabled   bool           `yaml:"enabled" mapstructure:"enabled"`
-	Provider  string         `yaml:"provider" mapstructure:"provider"`
-	SMTP      SMTPConfig     `yaml:"smtp" mapstructure:"smtp"`
-	Templates TemplateConfig `yaml:"templates" mapstructure:"templates"`
+	Enabled  bool          `yaml:"enabled" mapstructure:"enabled"`
+	Provider string        `yaml:"provider" mapstructure:"provider"`
+	Mailgun  MailgunConfig `yaml:"mailgun" mapstructure:"mailgun"`
 }
 
-// SMTPConfig contains SMTP configuration
-type SMTPConfig struct {
-	Host      string `yaml:"host" mapstructure:"host"`
-	Port      int    `yaml:"port" mapstructure:"port"`
-	Username  string `yaml:"username" mapstructure:"username"`
-	Password  string `yaml:"password" mapstructure:"password"`
-	FromEmail string `yaml:"from_email" mapstructure:"from_email"`
-	FromName  string `yaml:"from_name" mapstructure:"from_name"`
-	UseTLS    bool   `yaml:"use_tls" mapstructure:"use_tls"`
+// MailgunConfig contains Mailgun specific email configuration
+type MailgunConfig struct {
+	Domain  string `yaml:"domain" mapstructure:"domain"`
+	APIKey  string `yaml:"api_key" mapstructure:"api_key"`
+	BaseURL string `yaml:"base_url" mapstructure:"base_url"`
 }
 
 // TemplateConfig contains email template configuration

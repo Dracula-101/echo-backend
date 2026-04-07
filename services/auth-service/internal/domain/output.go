@@ -31,3 +31,8 @@ type CreateSessionOutput struct {
 	SessionId    string
 	SessionToken string
 }
+
+type MFAEnableOutput struct {
+	Secret    string
+	QRCodeURL string
+}

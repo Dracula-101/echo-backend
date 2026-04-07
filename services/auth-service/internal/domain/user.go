@@ -19,6 +19,7 @@ type User struct {
 	PhoneVerified          bool
 	AccountStatus          models.AccountStatus
 	TwoFactorEnabled       bool
+	TwoFactorSecret        string
 	PasswordHash           string
 	PasswordSalt           string
 	PasswordAlgorithm      string
@@ -81,6 +82,7 @@ func toUserFromModel(m *models.AuthUser) *User {
 		PhoneVerified:          m.PhoneVerified,
 		AccountStatus:          m.AccountStatus,
 		TwoFactorEnabled:       m.TwoFactorEnabled,
+		TwoFactorSecret:        utils.DerefString(m.TwoFactorSecret),
 		PasswordHash:           m.PasswordHash,
 		PasswordSalt:           m.PasswordSalt,
 		PasswordAlgorithm:      m.PasswordAlgorithm,

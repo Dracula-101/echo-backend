@@ -18,8 +18,12 @@ type SessionRepositoryInterface interface {
 	// Session management
 	CreateSession(ctx context.Context, session *domain.Session) pkgErrors.AppError
 	GetSessionByUserId(ctx context.Context, userID string, deviceID *string) (*domain.Session, pkgErrors.AppError)
+	GetAllSessionsByUserId(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError)
+	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
+	RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError
+	RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError
 }
 
 // ============================================================================
@@ -294,6 +298,106 @@ func (r *SessionRepo) DeleteSessionByID(ctx context.Context, sessionID string) p
 	}
 	r.log.Debug("Session deleted successfully",
 		logger.String("session_id", sessionID),
+	)
+	return nil
+}
+
+func (r *SessionRepo) GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError) {
+	r.log.Debug("Fetching session by ID",
+		logger.String("session_id", sessionID),
+	)
+	var session models.AuthSession
+	query := `SELECT * FROM auth.sessions WHERE id = $1 LIMIT 1`
+	err := r.db.QueryRow(ctx, query, sessionID).ScanModel(&session)
+	if err != nil {
+		if postgres.IsNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by ID").
+			WithDetail("session_id", sessionID)
+	}
+
+	metaData := make(map[string]interface{})
+	if session.Metadata != nil {
+		json.Unmarshal(*session.Metadata, &metaData)
+	}
+
+	return &domain.Session{
+		ID:                 session.ID,
+		SessionToken:       session.SessionToken,
+		UserID:             session.UserID,
+		RefreshToken:       utils.DerefString(session.RefreshToken),
+		DeviceID:           utils.DerefString(session.DeviceID),
+		DeviceType:         utils.DerefString(session.DeviceType),
+		DeviceName:         utils.DerefString(session.DeviceName),
+		IPAddress:          session.IPAddress,
+		CreatedAt:          session.CreatedAt,
+		ExpiresAt:          session.ExpiresAt,
+		DeviceOS:           utils.DerefString(session.DeviceOS),
+		BrowserName:        utils.DerefString(session.BrowserName),
+		BrowserVersion:     utils.DerefString(session.BrowserVersion),
+		City:               utils.DerefString(session.IPCity),
+		Region:             utils.DerefString(session.IPRegion),
+		Country:            utils.DerefString(session.IPCountry),
+		Timezone:           utils.DerefString(session.IPTimezone),
+		Latitude:           session.Latitude,
+		Longitude:          session.Longitude,
+		IsTrustedDevice:    session.IsTrustedDevice,
+		IsMobile:           session.IsMobile,
+		SessionType:        models.SessionTypeMobile,
+		UserAgent:          utils.DerefString(session.UserAgent),
+		LastActivityAt:     session.LastActivityAt,
+		DeviceOSVersion:    utils.DerefString(session.DeviceOSVersion),
+		DeviceModel:        utils.DerefString(session.DeviceModel),
+		DeviceManufacturer: utils.DerefString(session.DeviceManufacturer),
+		IPISP:              utils.DerefString(session.IPISP),
+		FCMToken:           utils.DerefString(session.FCMToken),
+		APNSToken:          utils.DerefString(session.APNSToken),
+		PushEnabled:        session.PushEnabled,
+		RevokedAt:          session.RevokedAt,
+		RevokedReason:      session.RevokedReason,
+		Metadata:           metaData,
+	}, nil
+}
+
+func (r *SessionRepo) RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError {
+	r.log.Info("Revoking session",
+		logger.String("session_id", sessionID),
+		logger.String("reason", reason),
+	)
+	query := `UPDATE auth.sessions
+		SET revoked_at = NOW(),
+		    revoked_reason = $1
+		WHERE id = $2 AND revoked_at IS NULL`
+	_, err := r.db.Exec(ctx, query, reason, sessionID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke session").
+			WithDetail("session_id", sessionID)
+	}
+	r.log.Info("Session revoked",
+		logger.String("session_id", sessionID),
+	)
+	return nil
+}
+
+func (r *SessionRepo) RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError {
+	r.log.Info("Revoking all sessions for user",
+		logger.String("user_id", userID),
+		logger.String("reason", reason),
+	)
+	query := `UPDATE auth.sessions
+		SET revoked_at = NOW(),
+		    revoked_reason = $1
+		WHERE user_id = $2 AND revoked_at IS NULL`
+	result, err := r.db.Exec(ctx, query, reason, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke all user sessions").
+			WithDetail("user_id", userID)
+	}
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("All user sessions revoked",
+		logger.String("user_id", userID),
+		logger.Int64("sessions_revoked", rowsAffected),
 	)
 	return nil
 }

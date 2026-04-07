@@ -87,6 +87,7 @@ func NewRegisterResponse(userID, email string, emailVerificationSent bool, acces
 	return &RegisterResponse{
 		UserID:                userID,
 		Email:                 email,
+		Message:               "Registration successful",
 		EmailVerificationSent: emailVerificationSent,
 		AccessToken:           accessToken,
 		RefreshToken:          refreshToken,

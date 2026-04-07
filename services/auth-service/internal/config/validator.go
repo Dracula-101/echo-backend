@@ -356,41 +356,14 @@ func validateEmail(cfg *Config) error {
 	}
 
 	// Validate SMTP configuration
-	if cfg.Email.Provider == "smtp" {
-		smtp := &cfg.Email.SMTP
-
-		if smtp.Host == "" {
-			return fmt.Errorf("email.smtp.host is required when email is enabled")
+	if cfg.Email.Provider == "mailgun" {
+		if cfg.Email.Mailgun.Domain == "" {
+			return fmt.Errorf("email.mailgun.domain is required when provider is 'mailgun'")
+		}
+		if cfg.Email.Mailgun.APIKey == "" {
+			return fmt.Errorf("email.mailgun.api_key is required when provider is 'mailgun'")
 		}
 
-		if smtp.Port <= 0 || smtp.Port > 65535 {
-			return fmt.Errorf("email.smtp.port must be between 1 and 65535, got %d", smtp.Port)
-		}
-
-		if smtp.Username == "" {
-			return fmt.Errorf("email.smtp.username is required when email is enabled")
-		}
-
-		if smtp.Password == "" {
-			return fmt.Errorf("email.smtp.password is required when email is enabled")
-		}
-
-		if smtp.FromEmail == "" {
-			return fmt.Errorf("email.smtp.from_email is required when email is enabled")
-		}
-
-		if smtp.FromName == "" {
-			smtp.FromName = "Auth Service"
-		}
-	}
-
-	// Validate email templates
-	if cfg.Email.Templates.VerificationSubject == "" {
-		cfg.Email.Templates.VerificationSubject = "Verify Your Email"
-	}
-
-	if cfg.Email.Templates.PasswordResetSubject == "" {
-		cfg.Email.Templates.PasswordResetSubject = "Reset Your Password"
 	}
 
 	return nil

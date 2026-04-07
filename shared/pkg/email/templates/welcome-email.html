@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Echo</title>
+    <style>
+        @media only screen and (max-width: 560px) {
+            .outer {
+                padding: 0 !important;
+            }
+
+            .card {
+                border-radius: 0 !important;
+            }
+
+            .hero {
+                padding: 48px 28px 40px !important;
+            }
+
+            .body {
+                padding: 36px 28px !important;
+            }
+
+            .foot {
+                padding: 24px 28px !important;
+            }
+
+            h1 {
+                font-size: 30px !important;
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .page {
+                background-color: #0e0e0e !important;
+            }
+
+            .card {
+                background-color: #181818 !important;
+            }
+
+            .pill-row td {
+                background-color: #1e1e1e !important;
+                border-color: #2a2a2a !important;
+            }
+
+            .pill-icon {
+                background-color: #2a1a1a !important;
+            }
+
+            .pill-text {
+                color: #999 !important;
+            }
+
+            .foot-td {
+                background-color: #131313 !important;
+                border-top-color: #242424 !important;
+            }
+
+            .foot-p {
+                color: #3a3a3a !important;
+            }
+        }
+    </style>
+</head>
+
+<body style="margin:0;padding:0;background:#EEECE8;" class="page">
+
+    <!-- Preview -->
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Hey {{name}}, your Echo account is ready. Start
+        messaging.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEECE8;" class="page">
+        <tr>
+            <td align="center" style="padding:52px 16px;" class="outer">
+
+                <table role="presentation" width="520" cellpadding="0" cellspacing="0"
+                    style="max-width:520px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;"
+                    class="card">
+
+                    <!-- ── HERO ── -->
+                    <tr>
+                        <td align="center" style="background:#0f0c0e;padding:56px 48px 48px;" class="hero">
+
+                            <!-- Logo -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 40px;">
+                                <tr>
+                                    <td style="vertical-align:middle;padding-right:9px;">
+                                        <svg width="24" height="38" viewBox="0 0 67 106" fill="none"
+                                            xmlns="http://www.w3.org/2000/svg">
+                                            <rect x="55.5448" y="0" width="10.4918" height="105.227" rx="5.2459"
+                                                fill="#FF6B6B" fill-opacity="0.45" />
+                                            <rect x="37.0298" y="19.7493" width="10.4918" height="65.728" rx="5.2459"
+                                                fill="#FF6B6B" fill-opacity="0.7" />
+                                            <rect x="18.515" y="6.78882" width="10.4918" height="91.9575" rx="5.2459"
+                                                fill="#FF6B6B" />
+                                            <rect x="0" y="33.0183" width="10.4918" height="39.4985" rx="5.2459"
+                                                fill="#FF6B6B" fill-opacity="0.35" />
+                                        </svg>
+                                    </td>
+                                    <td style="vertical-align:middle;">
+                                        <span
+                                            style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:19px;font-weight:700;color:#ffffff;letter-spacing:-0.2px;">Echo</span>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Headline -->
+                            <h1
+                                style="margin:0 0 14px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:36px;font-weight:800;color:#ffffff;letter-spacing:-0.8px;line-height:1.15;">
+                                Hi {{name}},<br>welcome aboard.
+                            </h1>
+                            <p
+                                style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:rgba(255,255,255,0.38);line-height:1.65;">
+                                Your account is ready. Start a conversation.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- Coral bar -->
+                    <tr>
+                        <td style="padding:0;font-size:0;line-height:0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="background:#FF6B6B;height:4px;width:40%;"></td>
+                                    <td style="background:#FF6B6B;height:4px;width:20%;opacity:0.6;"></td>
+                                    <td style="background:#FF6B6B;height:4px;width:25%;opacity:0.25;"></td>
+                                    <td style="background:#FF6B6B;height:4px;opacity:0.08;"></td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- ── BODY ── -->
+                    <tr>
+                        <td style="padding:44px 44px 16px;" class="body">
+                            <p
+                                style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#555;line-height:1.8;">
+                                Echo is the place to message the people who matter. Instant, clear, and always in sync —
+                                everything you need to stay connected is right here.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- ── FEATURE PILLS ── -->
+                    <tr>
+                        <td style="padding:28px 44px;" class="body">
+                            <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+
+                                <!-- Pill 1 -->
+                                <tr class="pill-row">
+                                    <td
+                                        style="background:#fafafa;border:1px solid #efefef;border-radius:12px;padding:16px 18px;margin-bottom:10px;display:block;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="vertical-align:middle;padding-right:14px;width:40px;">
+                                                    <div style="width:38px;height:38px;border-radius:10px;background:#fff0f0;display:flex;align-items:center;justify-content:center;text-align:center;line-height:38px;font-size:18px;"
+                                                        class="pill-icon">💬</div>
+                                                </td>
+                                                <td style="vertical-align:middle;">
+                                                    <p
+                                                        style="margin:0 0 2px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;color:#111;">
+                                                        Instant messaging</p>
+                                                    <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#999;line-height:1.5;"
+                                                        class="pill-text">Send messages that arrive in real time</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="height:10px;"></td>
+                                </tr>
+
+                                <!-- Pill 2 -->
+                                <tr class="pill-row">
+                                    <td
+                                        style="background:#fafafa;border:1px solid #efefef;border-radius:12px;padding:16px 18px;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="vertical-align:middle;padding-right:14px;width:40px;">
+                                                    <div style="width:38px;height:38px;border-radius:10px;background:#fff0f0;display:flex;align-items:center;justify-content:center;text-align:center;line-height:38px;font-size:18px;"
+                                                        class="pill-icon">🔒</div>
+                                                </td>
+                                                <td style="vertical-align:middle;">
+                                                    <p
+                                                        style="margin:0 0 2px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;color:#111;">
+                                                        Private & secure</p>
+                                                    <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#999;line-height:1.5;"
+                                                        class="pill-text">Your conversations belong to you only</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="height:10px;"></td>
+                                </tr>
+
+                                <!-- Pill 3 -->
+                                <tr class="pill-row">
+                                    <td
+                                        style="background:#fafafa;border:1px solid #efefef;border-radius:12px;padding:16px 18px;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="vertical-align:middle;padding-right:14px;width:40px;">
+                                                    <div style="width:38px;height:38px;border-radius:10px;background:#fff0f0;display:flex;align-items:center;justify-content:center;text-align:center;line-height:38px;font-size:18px;"
+                                                        class="pill-icon">⚡</div>
+                                                </td>
+                                                <td style="vertical-align:middle;">
+                                                    <p
+                                                        style="margin:0 0 2px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;color:#111;">
+                                                        Always in sync</p>
+                                                    <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#999;line-height:1.5;"
+                                                        class="pill-text">Pick up any conversation on any device</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Sign off -->
+                    <tr>
+                        <td style="padding:4px 44px 44px;" class="body">
+                            <p
+                                style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#555;line-height:1.8;">
+                                Welcome to Echo, {{name}}. We're glad you're here.
+                            </p>
+                            <p
+                                style="margin:12px 0 0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#111;font-weight:600;">
+                                — The Echo Team</p>
+                        </td>
+                    </tr>
+
+                    <!-- ── FOOTER ── -->
+                    <tr>
+                        <td style="background:#f9f9f9;border-top:1px solid #f0f0f0;padding:22px 44px;text-align:center;"
+                            class="foot-td foot">
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 10px;">
+                                <tr>
+                                    <td align="center">
+                                        <svg width="14" height="22" viewBox="0 0 67 106" fill="none"
+                                            xmlns="http://www.w3.org/2000/svg">
+                                            <rect x="55.5448" y="0" width="10.4918" height="105.227" rx="5.2459"
+                                                fill="#FF6B6B" fill-opacity="0.45" />
+                                            <rect x="37.0298" y="19.7493" width="10.4918" height="65.728" rx="5.2459"
+                                                fill="#FF6B6B" fill-opacity="0.7" />
+                                            <rect x="18.515" y="6.78882" width="10.4918" height="91.9575" rx="5.2459"
+                                                fill="#FF6B6B" />
+                                            <rect x="0" y="33.0183" width="10.4918" height="39.4985" rx="5.2459"
+                                                fill="#FF6B6B" fill-opacity="0.35" />
+                                        </svg>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#bbb;line-height:1.7;"
+                                class="foot-p">
+                                © 2025 Echo &nbsp;·&nbsp; You received this because you created an account.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+
+</body>
+
+</html>

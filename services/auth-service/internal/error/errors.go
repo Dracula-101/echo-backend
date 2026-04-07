@@ -44,4 +44,22 @@ var (
 	// Validation errors
 	ErrInvalidEmail = errors.New("invalid email format")
 	ErrInvalidInput = errors.New("invalid input parameters")
+
+	// Password reset errors
+	ErrPasswordResetTokenExpired = errors.New("password reset token has expired")
+	ErrPasswordResetTokenUsed    = errors.New("password reset token has already been used")
+	ErrSamePassword              = errors.New("new password must be different from the current password")
+
+	// Email verification errors
+	ErrEmailAlreadyVerified     = errors.New("email is already verified")
+	ErrVerificationTokenExpired = errors.New("verification token has expired")
+	ErrVerificationCooldown     = errors.New("please wait before requesting another verification email")
+
+	// MFA errors
+	ErrMFAAlreadyEnabled = errors.New("MFA is already enabled")
+	ErrMFANotEnabled     = errors.New("MFA is not enabled on this account")
+
+	// Account errors
+	ErrAccountAlreadyDeleted    = errors.New("account has already been deleted")
+	ErrSessionOwnershipMismatch = errors.New("session does not belong to this user")
 )

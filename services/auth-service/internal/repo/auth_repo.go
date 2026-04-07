@@ -32,6 +32,20 @@ type AuthRepositoryInterface interface {
 	UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError)
 	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError
 	RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError
+
+	// Password management
+	UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError
+
+	// Email verification
+	MarkEmailVerified(ctx context.Context, userID string) pkgErrors.AppError
+
+	// Two-factor authentication
+	Update2FASecret(ctx context.Context, userID string, secret string) pkgErrors.AppError
+	Enable2FA(ctx context.Context, userID string) pkgErrors.AppError
+	Disable2FA(ctx context.Context, userID string) pkgErrors.AppError
+
+	// Account management
+	SoftDeleteUser(ctx context.Context, userID string) pkgErrors.AppError
 }
 
 // ============================================================================
@@ -231,6 +245,7 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 		EmailVerified:          user.EmailVerified,
 		PhoneVerified:          user.PhoneVerified,
 		TwoFactorEnabled:       user.TwoFactorEnabled,
+		TwoFactorSecret:        utils.DerefString(user.TwoFactorSecret),
 		AccountStatus:          user.AccountStatus,
 		AccountLockedUntil:     user.AccountLockedUntil,
 		FailedLoginAttempts:    user.FailedLoginAttempts,
@@ -283,6 +298,7 @@ func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domai
 		EmailVerified:          user.EmailVerified,
 		PhoneVerified:          user.PhoneVerified,
 		TwoFactorEnabled:       user.TwoFactorEnabled,
+		TwoFactorSecret:        utils.DerefString(user.TwoFactorSecret),
 		AccountStatus:          user.AccountStatus,
 		AccountLockedUntil:     user.AccountLockedUntil,
 		FailedLoginAttempts:    user.FailedLoginAttempts,
@@ -509,6 +525,172 @@ func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID strin
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
+// ============================================================================
+// Password Management
+// ============================================================================
+
+func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError {
+	r.log.Info("Updating user password",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("algorithm", algorithm),
+	)
+
+	query := `UPDATE auth.users
+		SET password_hash = $1,
+		    password_salt = $2,
+		    password_algorithm = $3,
+		    password_last_changed_at = NOW(),
+		    requires_password_change = FALSE,
+		    updated_at = NOW()
+		WHERE id = $4`
+	result, err := r.db.Exec(ctx, query, hash, salt, algorithm, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update password").
+			WithDetail("user_id", userID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("Password updated successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
+// ============================================================================
+// Email Verification
+// ============================================================================
+
+func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Marking email as verified",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET email_verified = TRUE,
+		    updated_at = NOW()
+		WHERE id = $1`
+	result, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to mark email as verified").
+			WithDetail("user_id", userID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("Email marked as verified",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
+// ============================================================================
+// Two-Factor Authentication
+// ============================================================================
+
+func (r *AuthRepository) Update2FASecret(ctx context.Context, userID string, secret string) pkgErrors.AppError {
+	r.log.Info("Updating 2FA secret",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET two_factor_secret = $1,
+		    updated_at = NOW()
+		WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, secret, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update 2FA secret").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("2FA secret updated",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+	return nil
+}
+
+func (r *AuthRepository) Enable2FA(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Enabling 2FA",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET two_factor_enabled = TRUE,
+		    updated_at = NOW()
+		WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to enable 2FA").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("2FA enabled",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+	return nil
+}
+
+func (r *AuthRepository) Disable2FA(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Disabling 2FA",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET two_factor_enabled = FALSE,
+		    two_factor_secret = NULL,
+		    two_factor_backup_codes = NULL,
+		    updated_at = NOW()
+		WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to disable 2FA").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("2FA disabled",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+	return nil
+}
+
+// ============================================================================
+// Account Management
+// ============================================================================
+
+func (r *AuthRepository) SoftDeleteUser(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Soft deleting user",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET account_status = $1,
+		    deleted_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, models.AccountStatusDeleted, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to soft delete user").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("User soft deleted",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
 	)
 	return nil
 }

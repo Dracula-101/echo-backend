@@ -27,6 +27,8 @@ type SessionServiceInterface interface {
 	CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError)
 	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError)
+	GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError)
+	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
@@ -293,4 +295,34 @@ func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string
 	)
 
 	return nil
+}
+
+func (s *SessionService) GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
+	s.log.Debug("Fetching all sessions for user",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	sessions, err := s.repo.GetAllSessionsByUserId(ctx, userID)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get all sessions").
+			WithService(authErrors.ServiceName).
+			WithDetail("user_id", userID)
+	}
+	return sessions, nil
+}
+
+func (s *SessionService) GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError) {
+	s.log.Debug("Fetching session by ID",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("session_id", sessionID),
+	)
+
+	session, err := s.repo.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get session by ID").
+			WithService(authErrors.ServiceName).
+			WithDetail("session_id", sessionID)
+	}
+	return session, nil
 }

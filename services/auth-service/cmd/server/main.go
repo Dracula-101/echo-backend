@@ -19,9 +19,11 @@ import (
 	"shared/server/common/hashing"
 	"shared/server/common/token"
 
+	email "shared/pkg/email"
+	mailgun "shared/pkg/email/mailgun"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	env "shared/server/env"
 	coreMiddleware "shared/server/middleware"
-	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	req "shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -117,6 +119,23 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
+func setupEmailService(cfg config.Config, log logger.Logger) *email.EmailService {
+	log.Debug("Setting up Email service with provider", logger.String("provider", cfg.Email.Provider))
+	var emailService email.EmailService
+	switch cfg.Email.Provider {
+	case "mailgun":
+		emailService = mailgun.New(mailgun.MailgunConfig{
+			Domain:  cfg.Email.Mailgun.Domain,
+			APIKey:  cfg.Email.Mailgun.APIKey,
+			BaseURL: cfg.Email.Mailgun.BaseURL,
+		})
+		log.Info("Mailgun Email service initialized successfully")
+	default:
+		log.Warn("No valid email provider configured, email functionality will be disabled")
+	}
+	return &emailService
+}
+
 func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
 	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
 
@@ -140,6 +159,23 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 		r.Post("/register", req.Adapt(h.Register))
 		r.Post("/login", req.Adapt(h.Login))
 		r.Post("/refresh-token", req.Adapt(h.RefreshToken))
+		r.Post("/logout", req.Adapt(h.Logout))
+
+		r.Post("/forgot-password", req.Adapt(h.ForgotPassword))
+		r.Post("/reset-password", req.Adapt(h.ResetPassword))
+		r.Post("/change-password", req.Adapt(h.ChangePassword))
+
+		r.Post("/verify-email", req.Adapt(h.VerifyEmail))
+		r.Post("/resend-verification", req.Adapt(h.ResendVerification))
+
+		r.Get("/sessions", req.Adapt(h.GetSessions))
+		r.Delete("/sessions/{id}", req.Adapt(h.DeleteSession))
+
+		r.Post("/mfa/enable", req.Adapt(h.MFAEnable))
+		r.Post("/mfa/disable", req.Adapt(h.MFADisable))
+		r.Post("/mfa/verify", req.Adapt(h.MFAVerify))
+
+		r.Delete("/account", req.Adapt(h.DeleteAccount))
 	})
 	log.Debug("Auth routes registered successfully")
 	return builder
@@ -161,6 +197,7 @@ func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log log
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
+			router.Middleware(coreMiddleware.InterceptUserId("/login", "/register", "/refresh-token", "/forgot-password")),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
@@ -314,22 +351,30 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
+	emailService := setupEmailService(*cfg, log)
+
 	tokenService := createTokenManager(*cfg, log)
 	hashingService := createHashingService(*cfg, log)
 
 	locationService := service.NewLocationService(cfg.LocationService.Endpoint, log)
 
 	loginHistoryRepo := repository.NewLoginHistoryRepo(dbClient, log)
-
 	sessionRepo := repository.NewSessionRepo(dbClient, log)
 	sessionService := service.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
+	emailVerificationRepo := repository.NewEmailVerificationTokenRepo(dbClient, log)
+	resetTokenRepo := repository.NewPasswordResetTokenRepo(dbClient, log)
 
 	authRepo := repository.NewAuthRepository(dbClient, log)
 	authService := service.NewAuthServiceBuilder().
 		WithRepo(authRepo).
 		WithLoginHistoryRepo(loginHistoryRepo).
+		WithEmailVerificationRepo(emailVerificationRepo).
+		WithPasswordResetRepo(resetTokenRepo).
+		WithSessionRepo(sessionRepo).
+		WithLoginHistoryRepo(loginHistoryRepo).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
+		WithEmailService(*emailService).
 		WithCache(cacheClient).
 		WithConfig(&cfg.Auth).
 		WithLogger(log).

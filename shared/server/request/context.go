@@ -14,6 +14,9 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 
 func GetUserIDFromContext(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(sContext.UserIDKey).(string)
+	if userID == "" {
+		return "", false
+	}
 	return userID, ok
 }
 
