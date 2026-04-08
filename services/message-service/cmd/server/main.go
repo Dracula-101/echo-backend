@@ -232,7 +232,25 @@ func setupAPIRoutes(
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/", request.Adapt(messageHandler.SendMessage))
 		r.Get("/", request.Adapt(messageHandler.GetMessages))
+		r.Post("/search", request.Adapt(messageHandler.SearchMessages))
 		r.Get("/{id}", request.Adapt(messageHandler.GetMessageByID))
+		r.Put("/{id}", request.Adapt(messageHandler.EditMessage))
+		r.Delete("/{id}", request.Adapt(messageHandler.DeleteMessage))
+		r.Post("/{id}/reactions", request.Adapt(messageHandler.AddReaction))
+		r.Delete("/{id}/reactions/{reaction_id}", request.Adapt(messageHandler.RemoveReaction))
+		r.Get("/{id}/reactions", request.Adapt(messageHandler.GetReactions))
+		r.Post("/{id}/read", request.Adapt(messageHandler.MarkAsRead))
+		r.Get("/{id}/delivery", request.Adapt(messageHandler.GetDeliveryStatus))
+		r.Post("/{id}/forward", request.Adapt(messageHandler.ForwardMessage))
+		r.Post("/{id}/pin", request.Adapt(messageHandler.PinMessage))
+		r.Delete("/{id}/pin", request.Adapt(messageHandler.UnpinMessage))
+	})
+
+	// Poll endpoints
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Post("/polls", request.Adapt(messageHandler.CreatePoll))
+		r.Post("/polls/{id}/vote", request.Adapt(messageHandler.VotePoll))
+		r.Get("/polls/{id}/results", request.Adapt(messageHandler.GetPollResults))
 	})
 
 	// Conversation endpoints
@@ -240,6 +258,14 @@ func setupAPIRoutes(
 		r.Post("/conversations", request.Adapt(conversationHandler.CreateConversation))
 		r.Get("/conversations/me", request.Adapt(conversationHandler.GetUserConversations))
 		r.Get("/conversations/{id}", request.Adapt(conversationHandler.GetConversationByID))
+		r.Put("/conversations/{id}", request.Adapt(conversationHandler.UpdateConversation))
+		r.Delete("/conversations/{id}", request.Adapt(conversationHandler.DeleteConversation))
+		r.Post("/conversations/{id}/participants", request.Adapt(conversationHandler.AddParticipants))
+		r.Delete("/conversations/{id}/participants/{user_id}", request.Adapt(conversationHandler.RemoveParticipant))
+		r.Put("/conversations/{id}/participants/{user_id}", request.Adapt(conversationHandler.UpdateParticipantRole))
+		r.Get("/conversations/{id}/pinned", request.Adapt(conversationHandler.GetPinnedMessages))
+		r.Post("/conversations/{id}/mute", request.Adapt(conversationHandler.MuteConversation))
+		r.Delete("/conversations/{id}/mute", request.Adapt(conversationHandler.UnmuteConversation))
 	})
 	log.Debug("API routes registered successfully")
 	return builder

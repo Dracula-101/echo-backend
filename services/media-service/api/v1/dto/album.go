@@ -11,3 +11,13 @@ type AddFileToAlbumRequest struct {
 	FileID       string `json:"file_id" validate:"required"`
 	DisplayOrder int    `json:"display_order"`
 }
+
+type UpdateAlbumRequest struct {
+	Title       string `json:"title,omitempty" validate:"omitempty,min=1,max=255"`
+	Description string `json:"description,omitempty"`
+	Visibility  string `json:"visibility,omitempty" validate:"omitempty,oneof=public private"`
+}
+
+type DeleteAlbumRequest struct {
+	Permanent bool `json:"permanent,omitempty"`
+}

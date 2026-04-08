@@ -1,6 +1,11 @@
 package dto
 
-import "time"
+import (
+	"shared/server/request"
+	"time"
+
+	"github.com/go-playground/validator/v10"
+)
 
 // UpdateProfileRequest represents a request to update a user profile
 type UpdateProfileRequest struct {
@@ -13,6 +18,89 @@ type UpdateProfileRequest struct {
 	LanguageCode *string `json:"language_code,omitempty" validate:"omitempty,len=2"`
 	Timezone     *string `json:"timezone,omitempty"`
 	CountryCode  *string `json:"country_code,omitempty" validate:"omitempty,len=2"`
+}
+
+func NewUpdateProfileRequest() *UpdateProfileRequest {
+	return &UpdateProfileRequest{}
+}
+
+func (r *UpdateProfileRequest) GetValue() interface{} {
+	return r
+}
+
+func (r *UpdateProfileRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
+	var errors []request.ValidationErrorDetail
+	for _, err := range ve {
+		switch err.Field() {
+		case "Username":
+			if err.Tag() == "min" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Username must be at least 3 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			} else if err.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Username must be at most 30 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			} else if err.Tag() == "alphanum" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Username must contain only alphanumeric characters",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "DisplayName":
+			if err.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Display name must be at most 100 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "FirstName":
+			if err.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "First name must be at most 50 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "LastName":
+			if err.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Last name must be at most 50 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "Bio":
+			if err.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Bio must be at most 500 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "AvatarURL":
+			if err.Tag() == "url" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Avatar URL must be a valid URL",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "LanguageCode":
+			if err.Tag() == "len" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Language code must be 2 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "CountryCode":
+			if err.Tag() == "len" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Country code must be 2 characters long",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		}
+	}
+	return errors, nil
 }
 
 // UpdateProfileResponse represents the response for updating a user profile

@@ -179,14 +179,20 @@ func setupRoutes(builder *router.Builder, h *handler.Handler, cfg *config.Config
 		))
 
 		r.Get("/files/{file_id}", request.Adapt(h.GetFile))
+		r.Put("/files/{file_id}", request.Adapt(h.UpdateFile))
 		r.Delete("/files/{file_id}", request.Adapt(h.DeleteFile))
+		r.Get("/files", request.Adapt(h.ListFiles))
 		r.Post("/albums", request.Adapt(h.CreateAlbum))
 		r.Get("/albums/{id}", request.Adapt(h.GetAlbum))
 		r.Get("/albums", request.Adapt(h.ListAlbums))
+		r.Put("/albums/{id}", request.Adapt(h.UpdateAlbum))
+		r.Delete("/albums/{id}", request.Adapt(h.DeleteAlbum))
 		r.Post("/albums/{id}/files", request.Adapt(h.AddFileToAlbum))
 		r.Delete("/albums/{id}/files/{file_id}", request.Adapt(h.RemoveFileFromAlbum))
 
 		r.Post("/shares", request.Adapt(h.CreateShare))
+		r.Get("/shares/{id}", request.Adapt(h.GetShare))
+		r.Get("/shares", request.Adapt(h.ListShares))
 		r.Delete("/shares/{id}", request.Adapt(h.RevokeShare))
 
 		r.Get("/stats", request.Adapt(h.GetStorageStats))

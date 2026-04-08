@@ -66,3 +66,21 @@ type DeleteFileResponse struct {
 	Message string `json:"message"`
 	FileID  string `json:"file_id"`
 }
+
+type UpdateFileRequest struct {
+	FileName   string `json:"file_name,omitempty" validate:"omitempty,min=1,max=255"`
+	Visibility string `json:"visibility,omitempty" validate:"omitempty,oneof=public private"`
+}
+
+func NewUpdateFileRequest() *UpdateFileRequest {
+	return &UpdateFileRequest{}
+}
+
+func (r *UpdateFileRequest) GetValue() interface{} {
+	return r
+}
+
+func (r *UpdateFileRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
+	var errors []request.ValidationErrorDetail
+	return errors, nil
+}

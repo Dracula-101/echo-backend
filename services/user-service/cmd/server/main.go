@@ -156,11 +156,76 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 
 func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Logger) *router.Builder {
 	log.Debug("Registering user routes")
+
+	// Profile routes
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post("/profile", request.Adapt(h.CreateProfile))
 		r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
+		r.Put("/profile", request.Adapt(h.UpdateProfile))
+		r.Delete("/profile", request.Adapt(h.DeleteProfile))
 		r.Get("/search", request.Adapt(h.SearchProfiles))
 	})
+
+	// Contact routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/contacts", request.Adapt(h.ListContacts))
+		r.Post("/contacts", request.Adapt(h.AddContact))
+		r.Put("/contacts/{contact_id}", request.Adapt(h.UpdateContact))
+		r.Delete("/contacts/{contact_id}", request.Adapt(h.RemoveContact))
+	})
+
+	// Contact group routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/contacts/groups", request.Adapt(h.ListContactGroups))
+		r.Post("/contacts/groups", request.Adapt(h.CreateContactGroup))
+		r.Put("/contacts/groups/{group_id}", request.Adapt(h.UpdateContactGroup))
+		r.Delete("/contacts/groups/{group_id}", request.Adapt(h.DeleteContactGroup))
+	})
+
+	// Settings routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/settings", request.Adapt(h.GetSettings))
+		r.Put("/settings", request.Adapt(h.UpdateSettings))
+	})
+
+	// Blocked users routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/blocked", request.Adapt(h.ListBlocked))
+		r.Post("/blocked", request.Adapt(h.BlockUser))
+		r.Delete("/blocked/{user_id}", request.Adapt(h.UnblockUser))
+	})
+
+	// Status routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Post("/status", request.Adapt(h.SetStatus))
+		r.Get("/status/{user_id}", request.Adapt(h.GetStatus))
+		r.Delete("/status/{status_id}", request.Adapt(h.DeleteStatus))
+		r.Get("/status/{status_id}/views", request.Adapt(h.GetStatusViews))
+	})
+
+	// Device routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/devices", request.Adapt(h.ListDevices))
+		r.Put("/devices/{device_id}", request.Adapt(h.UpdateDevice))
+		r.Delete("/devices/{device_id}", request.Adapt(h.RemoveDevice))
+	})
+
+	// Preferences routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/preferences", request.Adapt(h.GetPreferences))
+		r.Put("/preferences", request.Adapt(h.UpdatePreferences))
+	})
+
+	// Achievements routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/achievements", request.Adapt(h.ListAchievements))
+	})
+
+	// Reports routes
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Post("/reports", request.Adapt(h.SubmitReport))
+	})
+
 	log.Debug("User routes registered successfully")
 	return builder
 }

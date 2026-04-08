@@ -118,10 +118,14 @@ func setupRoutes(
 		r.UseChain(chain)
 		r.Get("/", presenceHandler.GetPresence)                                 // Get user presence
 		r.Post("/", presenceHandler.UpdatePresence)                             // Update presence
+		r.Delete("/", presenceHandler.ClearPresence)                            // Clear presence (go offline)
 		r.Post("/heartbeat", presenceHandler.Heartbeat)                         // Send heartbeat
 		r.Get("/devices", presenceHandler.GetActiveDevices)                     // Get active devices
 		r.Post("/typing", presenceHandler.SetTypingIndicator)                   // Set typing indicator
 		r.Get("/typing/{conversation_id}", presenceHandler.GetTypingIndicators) // Get typing indicators
+		r.Get("/history/{user_id}", presenceHandler.GetPresenceHistory)         // Get presence history
+		r.Put("/status", presenceHandler.UpdateCustomStatus)                    // Update custom status
+		r.Delete("/status", presenceHandler.ClearCustomStatus)                  // Clear custom status
 	})
 	return builder
 }
