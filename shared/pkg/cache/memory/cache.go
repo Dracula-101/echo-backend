@@ -20,7 +20,7 @@ type memoryCache struct {
 	items map[string]*item
 }
 
-func New() cache.Cache {
+func NewMemCache() cache.Cache {
 	c := &memoryCache{
 		items: make(map[string]*item),
 	}

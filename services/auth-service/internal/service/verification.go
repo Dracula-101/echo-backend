@@ -2,7 +2,6 @@ package service
 
 import (
 	"auth-service/internal/error"
-	repository "auth-service/internal/repo"
 	"context"
 	"time"
 
@@ -17,7 +16,6 @@ const (
 	resendRateLimitWindow    = 1 * time.Hour
 	maxResendTokensPerWindow = 3
 )
-
 
 func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID string, ipAddress string, userAgent string) *error.AuthError {
 	s.log.Info("Processing email verification",
@@ -137,20 +135,6 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 				logger.Error(activateErr),
 			)
 		}
-	}
-
-	// ── 9. Log security event ────────────────────────────────────────────
-	if s.securityEventRepo != nil {
-		_ = s.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-			UserID:        userID,
-			EventType:     models.SecurityEventEmailVerified,
-			EventCategory: "account_management",
-			Severity:      models.SecuritySeverityLow,
-			Status:        "success",
-			Description:   "Email address verified successfully",
-			IPAddress:     ipAddress,
-			UserAgent:     userAgent,
-		})
 	}
 
 	s.log.Info("Email verified successfully",
@@ -288,20 +272,6 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 			Message: "Failed to send verification email. Please try again.",
 			Error:   pkgErrors.FromError(emailErr, error.CodeEmailSendFailed, "failed to send verification email"),
 		}
-	}
-
-	// ── 7. Log security event ────────────────────────────────────────────
-	if s.securityEventRepo != nil {
-		_ = s.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-			UserID:        user.ID,
-			EventType:     models.SecurityEventVerificationEmailResent,
-			EventCategory: "account_management",
-			Severity:      models.SecuritySeverityLow,
-			Status:        "success",
-			Description:   "Verification email resent",
-			IPAddress:     ipAddress,
-			UserAgent:     userAgent,
-		})
 	}
 
 	s.log.Info("Verification email resent successfully",

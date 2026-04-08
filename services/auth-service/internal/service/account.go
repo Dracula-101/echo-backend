@@ -8,11 +8,9 @@ import (
 	"auth-service/internal/domain"
 	"auth-service/internal/error"
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
 	repoModels "auth-service/internal/repo/model"
 
 	"shared/pkg/database/postgres"
-	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -495,19 +493,6 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password
 
 	if s.sessionRepo != nil {
 		_ = s.sessionRepo.RevokeAllUserSessions(ctx, userID, "account_deleted")
-	}
-
-	if s.securityEventRepo != nil {
-		_ = s.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-			UserID:        userID,
-			EventType:     models.SecurityEventAccountDeleted,
-			EventCategory: "account_management",
-			Severity:      models.SecuritySeverityCritical,
-			Status:        "success",
-			Description:   "User account deleted",
-			IPAddress:     ipAddress,
-			UserAgent:     userAgent,
-		})
 	}
 
 	s.log.Info("Account deleted successfully",

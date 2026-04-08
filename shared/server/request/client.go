@@ -21,9 +21,9 @@ type DeviceInfo struct {
 
 // IsMobile returns true if the device is mobile
 func (d DeviceInfo) IsMobile() bool {
-	mobileOS := []string{"iOS", "Android", "Windows Phone", "BlackBerry", "Symbian"}
+	mobileOS := []string{"iOS", "Android", "Windows Phone", "BlackBerry", "Symbian", "webOS", "Tizen", "Sailfish", "KaiOS", "Ubuntu Touch", "Firefox OS", "Palm OS", "MeeGo", "Bada", "LiMo", "Maemo", "Moblin", "Open webOS", "QNX", "RIM Tablet OS"}
 	for _, os := range mobileOS {
-		if strings.EqualFold(d.OS, os) {
+		if strings.Contains(d.OS, os) {
 			return true
 		}
 	}

@@ -3,8 +3,6 @@ package handler
 import (
 	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
-	"shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -52,16 +50,5 @@ func (h *AuthHandler) ForgotPassword(handler *req.RequestHandler) {
 		logger.String("service", authErrors.ServiceName),
 		logger.String("request_id", requestID),
 	)
-	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-		UserID:        "N/A", // No user ID since we don't want to reveal if the email exists
-		EventType:     models.SecurityEventPasswordResetRequested,
-		IPAddress:     handler.GetClientIP(),
-		UserAgent:     handler.GetUserAgent(),
-		EventCategory: string(models.SecurityEventPasswordResetRequested),
-		Severity:      models.SecuritySeverityLow,
-		Status:        "success",
-		Description:   "Password reset requested",
-	})
-
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Password reset instructions sent to email", nil)
 }

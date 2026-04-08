@@ -18,4 +18,5 @@ const (
 	EnvKey           ContextKey = "env"
 	APIVersionKey    ContextKey = "api_version"
 	ResponseKey      ContextKey = "response"
+	IPAddressInfoKey ContextKey = "ip_address_info"
 )

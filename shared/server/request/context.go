@@ -54,6 +54,17 @@ func GetRequestIDFromContext(ctx context.Context) (string, bool) {
 	return requestID, ok
 }
 
+// Correlation ID adds correlation ID to context
+func WithCorrelationID(ctx context.Context, correlationID string) context.Context {
+	return context.WithValue(ctx, sContext.CorrelationIDKey, correlationID)
+}
+
+// GetCorrelationIDFromContext retrieves correlation ID from context
+func GetCorrelationIDFromContext(ctx context.Context) (string, bool) {
+	correlationID, ok := ctx.Value(sContext.CorrelationIDKey).(string)
+	return correlationID, ok
+}
+
 // WithClientIP adds client IP to context
 func WithClientIP(ctx context.Context, ip string) context.Context {
 	return context.WithValue(ctx, sContext.ClientIPKey, ip)
@@ -63,4 +74,15 @@ func WithClientIP(ctx context.Context, ip string) context.Context {
 func GetClientIPFromContext(ctx context.Context) (string, bool) {
 	ip, ok := ctx.Value(sContext.ClientIPKey).(string)
 	return ip, ok
+}
+
+// WithIPAddress adds request ID to context
+func WithIPAddressInfo(ctx context.Context, info IpAddressInfo) context.Context {
+	return context.WithValue(ctx, sContext.IPAddressInfoKey, info)
+}
+
+// GetIPAddressInfoFromContext retrieves IP address info from context
+func GetIPAddressInfoFromContext(ctx context.Context) (IpAddressInfo, bool) {
+	ipInfo, ok := ctx.Value(sContext.IPAddressInfoKey).(IpAddressInfo)
+	return ipInfo, ok
 }

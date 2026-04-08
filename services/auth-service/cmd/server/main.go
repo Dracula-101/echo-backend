@@ -7,10 +7,12 @@ import (
 	"auth-service/internal/health/checkers"
 	repository "auth-service/internal/repo"
 	"auth-service/internal/service"
+	middleware "auth-service/internal/utils"
 	"context"
 	"fmt"
 
 	"shared/pkg/cache"
+	"shared/pkg/cache/memory"
 	"shared/pkg/cache/redis"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
@@ -18,6 +20,7 @@ import (
 	adapter "shared/pkg/logger/adapter"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
+	"shared/server/headers"
 
 	email "shared/pkg/email"
 	mailgun "shared/pkg/email/mailgun"
@@ -119,6 +122,12 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
+func createMemCacheClient(log logger.Logger) cache.Cache {
+	log.Info("Initializing in-memory cache")
+	memCache := memory.NewMemCache()
+	return memCache
+}
+
 func setupEmailService(cfg config.Config, log logger.Logger) *email.EmailService {
 	log.Debug("Setting up Email service with provider", logger.String("provider", cfg.Email.Provider))
 	var emailService email.EmailService
@@ -181,7 +190,7 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 	return builder
 }
 
-func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService service.LocationService, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh req.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
@@ -196,6 +205,9 @@ func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log log
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
+			router.Middleware(middleware.LocationFromIP(locationService, memCache)),
+			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
+			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptUserId("/login", "/register", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification")),
 		).
@@ -351,6 +363,14 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
+	var memCache cache.Cache
+	if cfg.Cache.Enabled {
+		log.Info("Initializing in-memory cache since external cache is disabled")
+		memCache = createMemCacheClient(log)
+	} else {
+		log.Info("External cache is enabled, skipping in-memory cache initialization")
+	}
+
 	emailService := setupEmailService(*cfg, log)
 
 	tokenService := createTokenManager(*cfg, log)
@@ -386,7 +406,7 @@ func main() {
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(authHandler, healthHandler, log)
+	routerInstance, err := createRouter(authHandler, memCache, *locationService, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

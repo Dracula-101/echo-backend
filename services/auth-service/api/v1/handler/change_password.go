@@ -4,7 +4,6 @@ import (
 	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/error"
 	repository "auth-service/internal/repo"
-	"shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -107,15 +106,22 @@ func (h *AuthHandler) ChangePassword(handler *req.RequestHandler) {
 		logger.String("request_id", requestID),
 		logger.String("user_id", userID),
 	)
-	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-		UserID:        userID,
-		EventType:     models.SecurityEventPasswordChange,
-		IPAddress:     handler.GetClientIP(),
-		UserAgent:     handler.GetUserAgent(),
-		EventCategory: string(models.SecurityEventPasswordChange),
-		Severity:      models.SecuritySeverityMedium,
-		Status:        "success",
-		Description:   "User changed their password successfully",
+	sessionId, ok := req.GetSessionIDFromContext(ctx)
+	if !ok {
+		h.log.Warn("Session ID not found in context for security event logging",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID),
+		)
+		sessionId = "N/A"
+	}
+	h.securityEventRepo.LogPasswordChangeEvent(ctx, repository.SecurityEventInput{
+		UserID:      userID,
+		SessionID:   sessionId,
+		Status:      "success",
+		Description: "User changed their password successfully",
+		UserAgent:   handler.GetUserAgent(),
+		DeviceID:    handler.GetDeviceInfo().ID,
 	})
 	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Password changed successfully", nil)
 }

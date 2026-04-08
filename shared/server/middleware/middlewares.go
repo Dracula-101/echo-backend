@@ -40,6 +40,21 @@ func RequestID(header string) Handler {
 	}
 }
 
+func InterceptRequestID(header string) Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestID := r.Header.Get(header)
+			if requestID != "" {
+				ctx := context.WithValue(r.Context(), sContext.RequestIDKey, requestID)
+				r.Header.Set(header, requestID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			} else {
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
+}
+
 func CorrelationID(header string) Handler {
 	if header == "" {
 		header = "X-Correlation-ID"
@@ -54,6 +69,21 @@ func CorrelationID(header string) Handler {
 			w.Header().Set(header, correlationID)
 			r.Header.Set(header, correlationID)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func InterceptCorrelationID(header string) Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			correlationID := r.Header.Get(header)
+			if correlationID != "" {
+				ctx := context.WithValue(r.Context(), sContext.CorrelationIDKey, correlationID)
+				r.Header.Set(header, correlationID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			} else {
+				next.ServeHTTP(w, r)
+			}
 		})
 	}
 }

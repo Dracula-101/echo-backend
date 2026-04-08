@@ -6,7 +6,6 @@ import (
 	authErrors "auth-service/internal/error"
 	repository "auth-service/internal/repo"
 	"net/http"
-	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -98,15 +97,13 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		logger.String("user_id", output.UserID),
 		logger.String("email", output.Email),
 	)
-	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-		UserID:        output.UserID,
-		EventType:     dbModels.SecurityEventRegistration,
-		Severity:      dbModels.SecuritySeverityLow,
-		Status:        "success",
-		Description:   "New user registration successful",
-		IPAddress:     clientIp,
-		UserAgent:     handler.GetUserAgent(),
-		EventCategory: "account_management",
+	h.securityEventRepo.LogRegistrationEvent(ctx, repository.SecurityEventInput{
+		UserID:      output.UserID,
+		SessionID:   "N/A",
+		Status:      "success",
+		Description: "User registered successfully",
+		UserAgent:   handler.GetUserAgent(),
+		DeviceID:    handler.GetDeviceInfo().ID,
 	})
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Registration successful",

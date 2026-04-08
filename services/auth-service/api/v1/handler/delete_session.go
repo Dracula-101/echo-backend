@@ -2,8 +2,6 @@ package handler
 
 import (
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
-	models "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -89,15 +87,5 @@ func (h *AuthHandler) DeleteSession(handler *req.RequestHandler) {
 		logger.String("request_id", requestID),
 		logger.String("session_id", sessionID),
 	)
-	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
-		UserID:        userID,
-		EventType:     models.SecurityEventSessionRevoked,
-		IPAddress:     handler.GetClientIP(),
-		UserAgent:     handler.GetUserAgent(),
-		EventCategory: string(models.SecurityEventSessionRevoked),
-		Severity:      models.SecuritySeverityMedium,
-		Status:        "success",
-		Description:   "User deleted their session successfully",
-	})
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Session deleted successfully", nil)
 }
