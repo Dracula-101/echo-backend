@@ -16,6 +16,7 @@ type AuthService struct {
 	sessionRepo           repository.SessionRepositoryInterface
 	passwordResetRepo     repository.PasswordResetTokenRepositoryInterface
 	emailVerificationRepo repository.EmailVerificationTokenRepositoryInterface
+	securityEventRepo     repository.SecurityEventRepositoryInterface
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -34,6 +35,7 @@ type AuthServiceBuilder struct {
 	sessionRepo           repository.SessionRepositoryInterface
 	passwordResetRepo     repository.PasswordResetTokenRepositoryInterface
 	emailVerificationRepo repository.EmailVerificationTokenRepositoryInterface
+	securityEventRepo     repository.SecurityEventRepositoryInterface
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -64,6 +66,11 @@ func (b *AuthServiceBuilder) WithPasswordResetRepo(repo repository.PasswordReset
 
 func (b *AuthServiceBuilder) WithEmailVerificationRepo(repo repository.EmailVerificationTokenRepositoryInterface) *AuthServiceBuilder {
 	b.emailVerificationRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithSecurityEventRepo(repo repository.SecurityEventRepositoryInterface) *AuthServiceBuilder {
+	b.securityEventRepo = repo
 	return b
 }
 
@@ -121,6 +128,7 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 		sessionRepo:           b.sessionRepo,
 		passwordResetRepo:     b.passwordResetRepo,
 		emailVerificationRepo: b.emailVerificationRepo,
+		securityEventRepo:     b.securityEventRepo,
 		emailService:          b.emailService,
 		tokenService:          b.tokenService,
 		hashingService:        b.hashingService,

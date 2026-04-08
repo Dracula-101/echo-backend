@@ -223,18 +223,23 @@ func (o *OAuthProviderType) Scan(value interface{}) error {
 type SecurityEventType string
 
 const (
-	SecurityEventLogin              SecurityEventType = "login"
-	SecurityEventLogout             SecurityEventType = "logout"
-	SecurityEventLoginFailed        SecurityEventType = "login_failed"
-	SecurityEventPasswordChange     SecurityEventType = "password_change"
-	SecurityEventPasswordReset      SecurityEventType = "password_reset"
-	SecurityEventTwoFactorEnabled   SecurityEventType = "two_factor_enabled"
-	SecurityEventTwoFactorDisabled  SecurityEventType = "two_factor_disabled"
-	SecurityEventAccountLocked      SecurityEventType = "account_locked"
-	SecurityEventAccountUnlocked    SecurityEventType = "account_unlocked"
-	SecurityEventSuspiciousActivity SecurityEventType = "suspicious_activity"
-	SecurityEventUnauthorizedAccess SecurityEventType = "unauthorized_access"
-	SecurityEventSessionRevoked     SecurityEventType = "session_revoked"
+	SecurityEventRegistration            SecurityEventType = "registration"
+	SecurityEventLogin                   SecurityEventType = "login"
+	SecurityEventLogout                  SecurityEventType = "logout"
+	SecurityEventLoginFailed             SecurityEventType = "login_failed"
+	SecurityEventPasswordChange          SecurityEventType = "password_change"
+	SecurityEventPasswordReset           SecurityEventType = "password_reset"
+	SecurityEventTwoFactorEnabled        SecurityEventType = "two_factor_enabled"
+	SecurityEventTwoFactorDisabled       SecurityEventType = "two_factor_disabled"
+	SecurityEventAccountLocked           SecurityEventType = "account_locked"
+	SecurityEventAccountUnlocked         SecurityEventType = "account_unlocked"
+	SecurityEventSuspiciousActivity      SecurityEventType = "suspicious_activity"
+	SecurityEventUnauthorizedAccess      SecurityEventType = "unauthorized_access"
+	SecurityEventSessionRevoked          SecurityEventType = "session_revoked"
+	SecurityEventEmailVerified           SecurityEventType = "email_verified"
+	SecurityEventVerificationEmailResent SecurityEventType = "verification_email_resent"
+	SecurityEventPasswordResetRequested  SecurityEventType = "password_reset_requested"
+	SecurityEventAccountDeleted          SecurityEventType = "account_deleted"
 )
 
 func (s SecurityEventType) IsValid() bool {
@@ -244,7 +249,9 @@ func (s SecurityEventType) IsValid() bool {
 		SecurityEventTwoFactorEnabled, SecurityEventTwoFactorDisabled,
 		SecurityEventAccountLocked, SecurityEventAccountUnlocked,
 		SecurityEventSuspiciousActivity, SecurityEventUnauthorizedAccess,
-		SecurityEventSessionRevoked:
+		SecurityEventSessionRevoked, SecurityEventEmailVerified,
+		SecurityEventVerificationEmailResent, SecurityEventPasswordResetRequested,
+		SecurityEventAccountDeleted:
 		return true
 	}
 	return false

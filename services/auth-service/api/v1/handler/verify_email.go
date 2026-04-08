@@ -7,6 +7,13 @@ import (
 	"shared/server/response"
 )
 
+// Verify email flow at a glance:
+//
+//	[1] Query param — extract verification token from URL.
+//	[2] Context extraction — get user ID from context.
+//	[3] AuthService.VerifyEmail — validate token, mark email verified, activate user.
+//	[4] Response helper — return 200 JSON body on success.
+//	[5] Failure handling — map error codes (409 already verified, 410 expired, 400 invalid/too many attempts).
 func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	requestID := handler.GetRequestID()
@@ -39,7 +46,7 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 		return
 	}
 
-	err := h.authService.VerifyEmail(ctx, token, userID)
+	err := h.authService.VerifyEmail(ctx, token, userID, handler.GetClientIP(), handler.GetUserAgent())
 	if err != nil {
 		h.log.Warn("Email verification failed",
 			logger.String("service", authErrors.ServiceName),

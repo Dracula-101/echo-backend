@@ -7,6 +7,12 @@ import (
 	"shared/server/response"
 )
 
+// Resend verification flow at a glance:
+//
+//	[1] Query param — extract email from URL.
+//	[2] AuthService.ResendVerification — validate user, rate-limit, generate new token, send email.
+//	[3] Response helper — return 200 on success.
+//	[4] Failure handling — map error codes (409 already verified, 404 not found, 429 rate limited).
 func (h *AuthHandler) ResendVerification(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	requestID := handler.GetRequestID()

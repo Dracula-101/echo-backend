@@ -7,6 +7,12 @@ import (
 	"shared/server/response"
 )
 
+// Get sessions flow at a glance:
+//
+//	[1] Context extraction — get user ID from context.
+//	[2] SessionService.GetAllSessions — fetch all sessions for the user.
+//	[3] Response helper — return 200 with session list.
+//	[4] Failure handling — log and return structured error payloads on failure.
 func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	requestID := handler.GetRequestID()

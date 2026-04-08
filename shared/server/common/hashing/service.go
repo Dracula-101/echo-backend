@@ -29,6 +29,13 @@ func (s *HashingService) DefaultAlgorithm() Algorithm {
 	return s.manager.cfg.Default
 }
 
+func (s *HashingService) SimpleHash(ctx context.Context, value string) (*string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.manager.SimpleHash(value)
+}
+
 func (s *HashingService) HashString(input string) string {
 	hashResult, err := s.manager.Hash(input)
 	if err != nil {

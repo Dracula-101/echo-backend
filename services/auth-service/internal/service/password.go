@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"time"
 
@@ -25,11 +24,9 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 			logger.String("service", authErrors.ServiceName),
 			logger.Error(err),
 		)
-		// Always return nil to prevent email enumeration
 		return nil
 	}
 	if user == nil {
-		// Don't reveal whether user exists
 		s.log.Debug("Forgot password for non-existent user",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
@@ -38,23 +35,28 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 	}
 
 	rawToken := s.tokenService.GenerateVerificationToken()
-	tokenHash := s.hashingService.HashString(rawToken)
+	tokenHash, hashErr := s.hashingService.SimpleHash(ctx, rawToken)
+	if hashErr != nil {
+		s.log.Error("Failed to hash password reset token",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Error(hashErr),
+		)
+		return nil
+	}
 
 	expiresAt := time.Now().Add(1 * time.Hour)
 
-	// Invalidate existing tokens
 	_ = s.passwordResetRepo.InvalidateUserTokens(ctx, user.ID)
-	dbErr := s.passwordResetRepo.CreateResetToken(ctx, user.ID, tokenHash, ipAddress, userAgent, expiresAt)
+	dbErr := s.passwordResetRepo.CreateResetToken(ctx, user.ID, *tokenHash, ipAddress, userAgent, expiresAt)
 	if dbErr != nil {
 		s.log.Error("Failed to create password reset token",
 			logger.String("service", authErrors.ServiceName),
 			logger.Error(dbErr),
 		)
-		// Still return nil to prevent information leakage
 		return nil
 	}
 
-	// Send email with reset instructions
 	if s.emailService != nil {
 		emailErr := s.emailService.SendPasswordResetEmail(email, user.ID, rawToken)
 		if emailErr != nil {
@@ -69,15 +71,6 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 					WithService(authErrors.ServiceName).
 					WithDetail("email", email),
 			}
-		} else {
-			s.log.Info("Password reset email sent",
-				logger.String("service", authErrors.ServiceName),
-				logger.String("email", email),
-				logger.String("user_id", user.ID),
-				logger.String("ip_address", ipAddress),
-				logger.String("user_agent", userAgent),
-				logger.String("expires_at", expiresAt.Format(time.RFC3339)),
-			)
 		}
 	}
 
@@ -88,15 +81,26 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 	return nil
 }
 
-func (s *AuthService) ResetPassword(ctx context.Context, token string, newPassword string) *authErrors.AuthError {
+func (s *AuthService) ResetPassword(ctx context.Context, token string, newPassword string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing password reset",
 		logger.String("service", authErrors.ServiceName),
 	)
 
-	hash := sha256.Sum256([]byte(token))
-	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+	tokenHash, hashErr := s.hashingService.SimpleHash(ctx, token)
+	if hashErr != nil {
+		s.log.Error("Failed to hash reset token",
+			logger.String("service", authErrors.ServiceName),
+			logger.Error(hashErr),
+		)
+		return &authErrors.AuthError{
+			Message: "Failed to validate reset token",
+			Code:    authErrors.CodeTokenGenerationFailed,
+			Error: pkgErrors.FromError(hashErr, authErrors.CodeTokenGenerationFailed, "failed to hash reset token").
+				WithService(authErrors.ServiceName),
+		}
+	}
 
-	resetToken, dbErr := s.passwordResetRepo.GetResetTokenByHash(ctx, tokenHash)
+	resetToken, dbErr := s.passwordResetRepo.GetResetTokenByHash(ctx, *tokenHash)
 	if dbErr != nil {
 		return &authErrors.AuthError{
 			Message: "Failed to validate reset token",
@@ -132,13 +136,12 @@ func (s *AuthService) ResetPassword(ctx context.Context, token string, newPasswo
 		}
 	}
 
-	// Hash the new password
-	result, hashErr := s.hashingService.HashPassword(ctx, newPassword)
-	if hashErr != nil {
+	result, pHashErr := s.hashingService.HashPassword(ctx, newPassword)
+	if pHashErr != nil {
 		return &authErrors.AuthError{
 			Message: "Failed to hash password",
 			Code:    authErrors.CodePasswordHashingFailed,
-			Error: pkgErrors.FromError(hashErr, authErrors.CodePasswordHashingFailed, "failed to hash password").
+			Error: pkgErrors.FromError(pHashErr, authErrors.CodePasswordHashingFailed, "failed to hash password").
 				WithService(authErrors.ServiceName),
 		}
 	}
@@ -155,10 +158,8 @@ func (s *AuthService) ResetPassword(ctx context.Context, token string, newPasswo
 		}
 	}
 
-	// Mark token as used
 	_ = s.passwordResetRepo.MarkTokenUsed(ctx, resetToken.ID)
 
-	// Revoke all sessions for security
 	if s.sessionRepo != nil {
 		_ = s.sessionRepo.RevokeAllUserSessions(ctx, resetToken.UserID, "password_reset")
 	}
@@ -170,7 +171,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token string, newPasswo
 	return nil
 }
 
-func (s *AuthService) ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string) *authErrors.AuthError {
+func (s *AuthService) ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing password change",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -196,7 +197,6 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, current
 		}
 	}
 
-	// Verify current password
 	success, _, verifyErr := s.hashingService.VerifyPassword(ctx, currentPassword, user.PasswordHash)
 	if verifyErr != nil {
 		return &authErrors.AuthError{
@@ -217,7 +217,6 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, current
 		}
 	}
 
-	// Check that new password is different
 	sameCheck, _, _ := s.hashingService.VerifyPassword(ctx, newPassword, user.PasswordHash)
 	if sameCheck {
 		return &authErrors.AuthError{
@@ -229,7 +228,6 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, current
 		}
 	}
 
-	// Hash the new password
 	result, hashErr := s.hashingService.HashPassword(ctx, newPassword)
 	if hashErr != nil {
 		return &authErrors.AuthError{
@@ -241,7 +239,10 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, current
 		}
 	}
 
-	salt := base64.StdEncoding.EncodeToString(result.Salt)
+	salt := ""
+	if result.Salt != nil {
+		salt = string(result.Salt)
+	}
 	updateErr := s.repo.UpdatePassword(ctx, userID, result.Encoded, salt, string(result.Algorithm))
 	if updateErr != nil {
 		return &authErrors.AuthError{

@@ -8,9 +8,11 @@ import (
 	"auth-service/internal/domain"
 	"auth-service/internal/error"
 	authErrors "auth-service/internal/error"
+	repository "auth-service/internal/repo"
 	repoModels "auth-service/internal/repo/model"
 
 	"shared/pkg/database/postgres"
+	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -392,7 +394,7 @@ func (s *AuthService) RecordFailedLoginAttempt(ctx context.Context, input domain
 	return nil
 }
 
-func (s *AuthService) Logout(ctx context.Context, sessionID string, userID string) *authErrors.AuthError {
+func (s *AuthService) Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing logout",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -413,18 +415,18 @@ func (s *AuthService) Logout(ctx context.Context, sessionID string, userID strin
 	}
 
 	if s.cache != nil {
-		// Invalidate cached session token
 		_ = s.cache.Delete(ctx, "session_token:"+sessionID)
 	}
 
 	s.log.Info("Logout successful",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
+		logger.String("user_id", userID),
 	)
 	return nil
 }
 
-func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password string) *authErrors.AuthError {
+func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing account deletion",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -491,9 +493,21 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password
 		}
 	}
 
-	// Revoke all sessions
 	if s.sessionRepo != nil {
 		_ = s.sessionRepo.RevokeAllUserSessions(ctx, userID, "account_deleted")
+	}
+
+	if s.securityEventRepo != nil {
+		_ = s.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+			UserID:        userID,
+			EventType:     models.SecurityEventAccountDeleted,
+			EventCategory: "account_management",
+			Severity:      models.SecuritySeverityCritical,
+			Status:        "success",
+			Description:   "User account deleted",
+			IPAddress:     ipAddress,
+			UserAgent:     userAgent,
+		})
 	}
 
 	s.log.Info("Account deleted successfully",

@@ -3,6 +3,8 @@ package handler
 import (
 	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/error"
+	repository "auth-service/internal/repo"
+	"shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -51,7 +53,7 @@ func (h *AuthHandler) ChangePassword(handler *req.RequestHandler) {
 	currentPassword := changePasswordRequest.CurrentPassword
 	newPassword := changePasswordRequest.NewPassword
 
-	authErr := h.authService.ChangePassword(ctx, userID, currentPassword, newPassword)
+	authErr := h.authService.ChangePassword(ctx, userID, currentPassword, newPassword, handler.GetClientIP(), handler.GetUserAgent())
 
 	if authErr != nil {
 		h.log.Warn("Change password failed",
@@ -100,5 +102,20 @@ func (h *AuthHandler) ChangePassword(handler *req.RequestHandler) {
 		return
 	}
 
+	h.log.Info("Password changed successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("request_id", requestID),
+		logger.String("user_id", userID),
+	)
+	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+		UserID:        userID,
+		EventType:     models.SecurityEventPasswordChange,
+		IPAddress:     handler.GetClientIP(),
+		UserAgent:     handler.GetUserAgent(),
+		EventCategory: string(models.SecurityEventPasswordChange),
+		Severity:      models.SecuritySeverityMedium,
+		Status:        "success",
+		Description:   "User changed their password successfully",
+	})
 	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Password changed successfully", nil)
 }

@@ -2,6 +2,7 @@ package hashing
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
@@ -172,6 +173,12 @@ func (c Config) validate() error {
 		return fmt.Errorf("%w: scrypt salt length must be at least 8", ErrInvalidConfig)
 	}
 	return nil
+}
+
+func (m *Manager) SimpleHash(value string) (*string, error) {
+	hash := sha256.Sum256([]byte(value))
+	encoded := base64.RawURLEncoding.EncodeToString(hash[:])
+	return &encoded, nil
 }
 
 func (m *Manager) Hash(password string) (*HashResult, error) {

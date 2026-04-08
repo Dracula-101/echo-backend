@@ -8,6 +8,14 @@ import (
 	"shared/server/response"
 )
 
+// Reset password flow at a glance:
+//
+//	[1] Request helper — parse & validate JSON (token, new_password).
+//	[2] AuthService.ResetPassword — validate token, hash new password, update user, revoke sessions.
+//	[3] Response helper — return 200 JSON body on success.
+//	[4] Failure handling — map error codes to HTTP status and return structured payloads.
+//
+// Note: This endpoint does NOT require authentication. The reset token itself proves identity.
 func (h *AuthHandler) ResetPassword(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	requestID := handler.GetRequestID()
@@ -29,39 +37,29 @@ func (h *AuthHandler) ResetPassword(handler *req.RequestHandler) {
 		return
 	}
 
-	userId, ok := req.GetUserIDFromContext(ctx)
-	if !ok {
-		h.log.Warn("User ID not found in context for reset password",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-		)
-		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "Unauthorized", nil)
-		return
-	}
-
-	user, authErr := h.authService.GetUserByID(ctx, userId)
-	if authErr != nil {
-		h.log.Warn("Failed to get user for password reset",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("user_id", userId),
-			logger.Error(authErr.Error),
-		)
-		response.InternalServerError(handler.Context(), handler.Request(), handler.Writer(), "Failed to process request", nil)
-		return
-	}
-
-	authErr = h.authService.ResetPassword(ctx, resetPasswordRequest.Token, resetPasswordRequest.NewPassword)
+	authErr := h.authService.ResetPassword(ctx, resetPasswordRequest.Token, resetPasswordRequest.NewPassword, handler.GetClientIP(), handler.GetUserAgent())
 	if authErr != nil {
 		h.log.Warn("Password reset failed",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
-			logger.String("user_id", userId),
-			logger.Error(authErr.Error),
+			logger.String("error_code", string(authErr.Code)),
 		)
-		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
+
+		switch authErr.Code {
+		case authErrors.CodePasswordResetTokenExpired:
+			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusGone, authErr.Message, nil)
+			return
+		case authErrors.CodePasswordResetTokenUsed:
+			response.ConflictError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
+			return
+		case authErrors.CodeInvalidToken:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
+			return
+		}
+
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to reset password", authErr.Error)
 		return
 	}
 
-	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Password reset successfully", map[string]string{"email": user.Email})
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Password reset successfully", nil)
 }

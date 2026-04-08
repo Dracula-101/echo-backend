@@ -2,20 +2,14 @@ package service
 
 import (
 	"auth-service/internal/error"
+	repository "auth-service/internal/repo"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"time"
 
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
-
-func hashToken(raw string) string {
-	h := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(h[:])
-}
 
 const (
 	maxVerificationAttempts  = 5
@@ -24,21 +18,26 @@ const (
 	maxResendTokensPerWindow = 3
 )
 
-// VerifyEmail handles the full email verification flow:
-//
-//  1. Hash the incoming raw token.
-//  2. Look up the latest unverified token for the user.
-//  3. Reject if no token, already verified, expired, or attempt-abused.
-//  4. Reject if hash doesn't match (increment attempts).
-//  5. Mark the token row verified_at = NOW().
-//  6. Mark the user email_verified = TRUE; flip pending → active.
-func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID string) *error.AuthError {
+
+func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID string, ipAddress string, userAgent string) *error.AuthError {
 	s.log.Info("Processing email verification",
 		logger.String("service", error.ServiceName),
 		logger.String("user_id", userID),
 	)
 
-	tokenHash := hashToken(rawToken)
+	tokenHash, hashErr := s.hashingService.SimpleHash(ctx, rawToken)
+	if hashErr != nil {
+		s.log.Error("Failed to hash verification token",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(hashErr),
+		)
+		return &error.AuthError{
+			Code:    error.CodeTokenGenerationFailed,
+			Message: "Failed to create verification token",
+			Error:   pkgErrors.FromError(hashErr, error.CodeTokenGenerationFailed, "failed to hash verification token"),
+		}
+	}
 
 	// ── 1. Fetch the latest token for this user ──────────────────────────
 	latestToken, dbErr := s.emailVerificationRepo.GetLatestTokenByUserID(ctx, userID)
@@ -94,8 +93,8 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	}
 
 	// ── 5. Hash mismatch → delegate to repo (increments attempts) ────────
-	if latestToken.TokenHash != tokenHash {
-		_ = s.emailVerificationRepo.MarkTokenVerified(ctx, tokenHash, userID)
+	if latestToken.TokenHash != *tokenHash {
+		_ = s.emailVerificationRepo.MarkTokenVerified(ctx, *tokenHash, userID)
 		return &error.AuthError{
 			Code:    error.CodeVerificationInvalid,
 			Message: "Invalid verification token",
@@ -104,7 +103,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	}
 
 	// ── 6. Mark the token as verified ────────────────────────────────────
-	markErr := s.emailVerificationRepo.MarkTokenVerified(ctx, tokenHash, userID)
+	markErr := s.emailVerificationRepo.MarkTokenVerified(ctx, *tokenHash, userID)
 	if markErr != nil {
 		return &error.AuthError{
 			Code:    error.CodeEmailVerificationFailed,
@@ -140,6 +139,20 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
+	// ── 9. Log security event ────────────────────────────────────────────
+	if s.securityEventRepo != nil {
+		_ = s.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+			UserID:        userID,
+			EventType:     models.SecurityEventEmailVerified,
+			EventCategory: "account_management",
+			Severity:      models.SecuritySeverityLow,
+			Status:        "success",
+			Description:   "Email address verified successfully",
+			IPAddress:     ipAddress,
+			UserAgent:     userAgent,
+		})
+	}
+
 	s.log.Info("Email verified successfully",
 		logger.String("service", error.ServiceName),
 		logger.String("user_id", userID),
@@ -147,15 +160,6 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	return nil
 }
 
-// ResendVerification handles the full resend verification email flow:
-//
-//  1. Look up user by email. Always return 200 to prevent enumeration.
-//  2. Bail silently if user not found, already verified, banned, or deleted.
-//  3. Rate-limit: count tokens created in the last hour. Suppress if above threshold.
-//  4. Invalidate old unverified tokens.
-//  5. Generate new raw token, hash it, persist.
-//  6. Send the email (only after DB insert succeeds).
-//  7. Return 200 with generic message.
 func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError) {
 	s.log.Info("Processing resend verification email",
 		logger.String("service", error.ServiceName),
@@ -239,12 +243,24 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 
 	// ── 5. Generate new token ────────────────────────────────────────────
 	rawToken := s.tokenService.GenerateVerificationToken()
-	tokenHash := hashToken(rawToken)
+	tokenHash, hashErr := s.hashingService.SimpleHash(ctx, rawToken)
+	if hashErr != nil {
+		s.log.Error("Failed to hash verification token",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Error(hashErr),
+		)
+		return nil, &error.AuthError{
+			Code:    error.CodeTokenGenerationFailed,
+			Message: "Failed to create verification token",
+			Error:   pkgErrors.FromError(hashErr, error.CodeTokenGenerationFailed, "failed to hash verification token"),
+		}
+	}
 
 	expiresAt := time.Now().Add(verificationTokenTTL)
 
 	createErr := s.emailVerificationRepo.CreateVerificationToken(
-		ctx, user.ID, email, rawToken, tokenHash, ipAddress, userAgent, expiresAt,
+		ctx, user.ID, email, rawToken, *tokenHash, ipAddress, userAgent, expiresAt,
 	)
 	if createErr != nil {
 		s.log.Error("Failed to create verification token",
@@ -272,6 +288,20 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 			Message: "Failed to send verification email. Please try again.",
 			Error:   pkgErrors.FromError(emailErr, error.CodeEmailSendFailed, "failed to send verification email"),
 		}
+	}
+
+	// ── 7. Log security event ────────────────────────────────────────────
+	if s.securityEventRepo != nil {
+		_ = s.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+			UserID:        user.ID,
+			EventType:     models.SecurityEventVerificationEmailResent,
+			EventCategory: "account_management",
+			Severity:      models.SecuritySeverityLow,
+			Status:        "success",
+			Description:   "Verification email resent",
+			IPAddress:     ipAddress,
+			UserAgent:     userAgent,
+		})
 	}
 
 	s.log.Info("Verification email resent successfully",

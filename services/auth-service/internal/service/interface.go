@@ -23,15 +23,15 @@ type AuthServiceInterface interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*domain.LoginResult, *error.AuthError)
 
 	// Session management
-	Logout(ctx context.Context, sessionID string, userID string) *error.AuthError
+	Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *error.AuthError
 
 	// Password management
 	ForgotPassword(ctx context.Context, email string, ipAddress string, userAgent string) *error.AuthError
-	ResetPassword(ctx context.Context, token string, newPassword string) *error.AuthError
-	ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string) *error.AuthError
+	ResetPassword(ctx context.Context, token string, newPassword string, ipAddress string, userAgent string) *error.AuthError
+	ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string, ipAddress string, userAgent string) *error.AuthError
 
 	// Email verification
-	VerifyEmail(ctx context.Context, token string, userId string) *error.AuthError
+	VerifyEmail(ctx context.Context, token string, userId string, ipAddress string, userAgent string) *error.AuthError
 	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError)
 
 	// MFA
@@ -40,7 +40,7 @@ type AuthServiceInterface interface {
 	VerifyMFA(ctx context.Context, userID string, code string) (bool, *error.AuthError)
 
 	// Account management
-	DeleteAccount(ctx context.Context, userID string, password string) *error.AuthError
+	DeleteAccount(ctx context.Context, userID string, password string, ipAddress string, userAgent string) *error.AuthError
 
 	// Service accessors
 	TokenService() token.JWTTokenService

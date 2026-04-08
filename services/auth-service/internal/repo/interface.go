@@ -11,4 +11,5 @@ var (
 	_ SessionRepositoryInterface                 = (*SessionRepo)(nil)
 	_ PasswordResetTokenRepositoryInterface      = (*PasswordResetTokenRepo)(nil)
 	_ EmailVerificationTokenRepositoryInterface  = (*EmailVerificationTokenRepo)(nil)
+	_ SecurityEventRepositoryInterface           = (*SecurityEventRepo)(nil)
 )

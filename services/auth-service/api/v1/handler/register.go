@@ -4,11 +4,13 @@ import (
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
+	repository "auth-service/internal/repo"
 	"net/http"
+	dbModels "shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
-	pkgErrors "shared/pkg/errors"
 )
 
 // Register flow at a glance:
@@ -96,6 +98,16 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		logger.String("user_id", output.UserID),
 		logger.String("email", output.Email),
 	)
+	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+		UserID:        output.UserID,
+		EventType:     dbModels.SecurityEventRegistration,
+		Severity:      dbModels.SecuritySeverityLow,
+		Status:        "success",
+		Description:   "New user registration successful",
+		IPAddress:     clientIp,
+		UserAgent:     handler.GetUserAgent(),
+		EventCategory: "account_management",
+	})
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Registration successful",
 		dto.NewRegisterResponse(

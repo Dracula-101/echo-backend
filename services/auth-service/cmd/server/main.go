@@ -197,7 +197,7 @@ func createRouter(h *handler.AuthHandler, healthHandler *health.Handler, log log
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
-			router.Middleware(coreMiddleware.InterceptUserId("/login", "/register", "/refresh-token", "/forgot-password")),
+			router.Middleware(coreMiddleware.InterceptUserId("/login", "/register", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification")),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
@@ -363,6 +363,7 @@ func main() {
 	sessionService := service.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
 	emailVerificationRepo := repository.NewEmailVerificationTokenRepo(dbClient, log)
 	resetTokenRepo := repository.NewPasswordResetTokenRepo(dbClient, log)
+	securityEventRepo := repository.NewSecurityEventRepo(dbClient, log)
 
 	authRepo := repository.NewAuthRepository(dbClient, log)
 	authService := service.NewAuthServiceBuilder().
@@ -371,7 +372,7 @@ func main() {
 		WithEmailVerificationRepo(emailVerificationRepo).
 		WithPasswordResetRepo(resetTokenRepo).
 		WithSessionRepo(sessionRepo).
-		WithLoginHistoryRepo(loginHistoryRepo).
+		WithSecurityEventRepo(securityEventRepo).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
 		WithEmailService(*emailService).
@@ -380,7 +381,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(authService, sessionService, locationService, log)
+	authHandler := handler.NewAuthHandler(authService, sessionService, locationService, securityEventRepo, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

@@ -7,6 +7,8 @@ import (
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
+	repository "auth-service/internal/repo"
+	dbModels "shared/pkg/database/postgres/models"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 	req "shared/server/request"
@@ -204,6 +206,17 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("user_id", userResult.User.ID),
 		logger.String("session_id", session.SessionId),
 	)
+	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+		UserID:        userResult.User.ID,
+		EventType:     dbModels.SecurityEventLogin,
+		IPAddress:     handler.GetClientIP(),
+		UserAgent:     handler.GetUserAgent(),
+		EventCategory: string(dbModels.SecurityEventLogin),
+		Severity:      dbModels.SecuritySeverityMedium,
+		Status:        "success",
+		Description:   "User logged in successfully",
+		SessionID:     &session.SessionId,
+	})
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Login successful",
 		dto.NewLoginResponse(
@@ -263,4 +276,20 @@ func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceIn
 	if err := h.authService.RecordFailedLoginAttempt(ctx, input); err != nil {
 		h.log.Error("Failed to record failed login attempt", logger.Error(err.Error))
 	}
+
+	h.log.Warn("Failed login attempt recorded",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("reason", failureReason),
+	)
+	h.securityEventRepo.LogEvent(ctx, repository.SecurityEventInput{
+		UserID:        userID,
+		EventType:     dbModels.SecurityEventLoginFailed,
+		IPAddress:     locationInfo.IP,
+		UserAgent:     userAgent,
+		EventCategory: "authentication",
+		Severity:      dbModels.SecuritySeverityMedium,
+		Status:        "failure",
+		Description:   fmt.Sprintf("Failed login attempt: %s", failureReason),
+	})
 }
