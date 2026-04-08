@@ -14,7 +14,7 @@ import (
 
 type SecurityEventInput struct {
 	UserID      string
-	SessionID   string
+	SessionID   *string
 	Status      string
 	Description string
 	UserAgent   string
@@ -71,7 +71,7 @@ func (r *SecurityEventRepo) logEvent(ctx context.Context, input enrichedEventInp
 		locationInfo = request.IpAddressInfo{
 			Country: "Unknown",
 			City:    "Unknown",
-			IP:      "Unknown",
+			IP:      "127.0.0.1",
 		}
 	}
 
@@ -79,7 +79,7 @@ func (r *SecurityEventRepo) logEvent(ctx context.Context, input enrichedEventInp
 
 	_, err := r.db.Insert(ctx, &models.SecurityEvent{
 		UserID:          &input.UserID,
-		SessionID:       &input.SessionID,
+		SessionID:       input.SessionID,
 		EventType:       input.eventType,
 		EventCategory:   &input.eventCategory,
 		Severity:        input.severity,

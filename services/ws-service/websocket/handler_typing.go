@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"shared/pkg/logger"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
 )
@@ -23,6 +24,14 @@ func (m *Manager) handleTypingStart(ctx context.Context, msg *router.Message) er
 	var payload protocol.TypingPayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		return err
+	}
+
+	if ok := protocol.ValidateTypingPayload(payload); !ok {
+		m.log.Warn("Invalid typing payload",
+			logger.String("user_id", userID.String()),
+			logger.String("conversation_id", payload.ConversationID.String()),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid typing payload")
 	}
 
 	m.typing.StartTyping(payload.ConversationID, userID)
@@ -50,6 +59,14 @@ func (m *Manager) handleTypingStop(ctx context.Context, msg *router.Message) err
 	var payload protocol.TypingPayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		return err
+	}
+
+	if ok := protocol.ValidateTypingPayload(payload); !ok {
+		m.log.Warn("Invalid typing payload",
+			logger.String("user_id", userID.String()),
+			logger.String("conversation_id", payload.ConversationID.String()),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid typing payload")
 	}
 
 	m.typing.StopTyping(payload.ConversationID, userID)

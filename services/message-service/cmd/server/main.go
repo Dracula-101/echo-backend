@@ -476,19 +476,24 @@ func main() {
 
 	// Initialize repositories
 	messageRepo := repo.NewMessageRepository(dbClient, cacheClient, log)
+	deliveryRepo := repo.NewDeliveryRepository(dbClient, cacheClient, log)
 	conversationRepo := repo.NewConversationRepository(dbClient, cacheClient, log)
 	userRepo := repo.NewUserRepository(dbClient)
+	reactionRepo := repo.NewReactionRepository(dbClient, cacheClient, log)
+	pollRepo := repo.NewPollRepository(dbClient, cacheClient, log)
 
 	// Initialize event publisher
 	eventPublisher := service.NewKafkaEventPublisher(kafkaProducer, log)
 
 	// Initialize services
-	messageService := service.NewMessageService(messageRepo, conversationRepo, userRepo, eventPublisher, cacheClient, log)
+	messageService := service.NewMessageService(messageRepo, deliveryRepo, conversationRepo, userRepo, eventPublisher, cacheClient, log)
 	conversationService := service.NewConversationService(conversationRepo, log)
-	deliveryService := service.NewDeliveryService(messageRepo, log)
+	deliveryService := service.NewDeliveryService(deliveryRepo, log)
+	reactionService := service.NewReactionService(reactionRepo, messageRepo, conversationRepo, eventPublisher, log)
+	pollService := service.NewPollService(pollRepo, messageRepo, conversationRepo, eventPublisher, log)
 
 	// Initialize handlers
-	messageHandler := messageHandler.NewMessageHandler(messageService, log)
+	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, log)
 	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
 	healthHandler := health.NewHandler(healthMgr)
 	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)

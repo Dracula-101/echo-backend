@@ -30,6 +30,14 @@ func (m *Manager) handlePresenceUpdate(ctx context.Context, msg *router.Message)
 		return err
 	}
 
+	if ok := protocol.ValidatePresenceUpdatePayload(payload); !ok {
+		m.log.Warn("Invalid presence update payload",
+			logger.String("user_id", userID.String()),
+			logger.String("status", payload.Status),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid presence update payload")
+	}
+
 	status := tracker.PresenceStatus(payload.Status)
 	if !status.IsValid() {
 		m.log.Warn("Invalid presence status received",

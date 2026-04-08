@@ -113,11 +113,16 @@ func (h *AuthHandler) ChangePassword(handler *req.RequestHandler) {
 			logger.String("request_id", requestID),
 			logger.String("user_id", userID),
 		)
-		sessionId = "N/A"
 	}
 	h.securityEventRepo.LogPasswordChangeEvent(ctx, repository.SecurityEventInput{
-		UserID:      userID,
-		SessionID:   sessionId,
+		UserID: userID,
+		SessionID: func() *string {
+			if ok {
+				return &sessionId
+			} else {
+				return nil
+			}
+		}(),
 		Status:      "success",
 		Description: "User changed their password successfully",
 		UserAgent:   handler.GetUserAgent(),

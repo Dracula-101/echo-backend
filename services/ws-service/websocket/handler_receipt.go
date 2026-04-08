@@ -27,6 +27,15 @@ func (m *Manager) handleMarkRead(_ context.Context, msg *router.Message) error {
 		return err
 	}
 
+	if ok := protocol.ValidateReadReceiptPayload(payload); !ok {
+		m.log.Warn("Invalid read receipt payload",
+			logger.String("user_id", userID.String()),
+			logger.String("conversation_id", payload.ConversationID.String()),
+			logger.Int("message_count", len(payload.MessageIDs)),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid read receipt payload")
+	}
+
 	now := time.Now()
 
 	// Publish delivery event to Kafka for persistence

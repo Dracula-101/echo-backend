@@ -29,9 +29,16 @@ type Conversation struct {
 	UpdatedAt        time.Time
 	DeletedAt        *time.Time
 
+	// Viewer-scoped fields (from conversation_participants)
+	ViewerRole   string
+	UnreadCount  int
+	MentionCount int
+	IsMuted      bool
+	IsPinned     bool
+	JoinedAt     time.Time
+
 	// Enriched fields (from joins)
 	Participants []ConversationParticipant
-	UnreadCount  int
 	LastMessage  *Message
 }
 

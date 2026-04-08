@@ -207,7 +207,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	)
 	h.securityEventRepo.LogLoginEvent(ctx, repository.SecurityEventInput{
 		UserID:      userResult.User.ID,
-		SessionID:   session.SessionId,
+		SessionID:   &session.SessionId,
 		Status:      "success",
 		Description: "User logged in successfully",
 		UserAgent:   userAgent,
@@ -280,7 +280,6 @@ func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceIn
 	)
 	h.securityEventRepo.LogLoginEvent(ctx, repository.SecurityEventInput{
 		UserID:      userID,
-		SessionID:   "N/A",
 		Status:      "failure",
 		Description: fmt.Sprintf("Failed login attempt: %s", failureReason),
 		UserAgent:   userAgent,

@@ -10,6 +10,10 @@ const (
 	MessageEventTypeDelivered MessageEventType = "message.delivered"
 	MessageEventTypeRead      MessageEventType = "message.read"
 	MessageEventTypeFailed    MessageEventType = "message.failed"
+	MessageEventReactionAdded MessageEventType = "message.reaction_added"
+	MessageEventReactionRemoved MessageEventType = "message.reaction_removed"
+	MessageEventPollCreated   MessageEventType = "message.poll_created"
+	MessageEventPollVoted     MessageEventType = "message.poll_voted"
 )
 
 // ConversationEventType represents the type of conversation event

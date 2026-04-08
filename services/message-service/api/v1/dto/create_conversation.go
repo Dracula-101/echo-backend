@@ -9,13 +9,19 @@ import (
 
 // CreateConversationRequest represents the request to create a new conversation
 type CreateConversationRequest struct {
-	ConversationType string   `json:"conversation_type" validate:"required,oneof=direct group channel broadcast"`
-	ParticipantIDs   []string `json:"participant_ids" validate:"required,min=1,dive,uuid4"`
-	Title            string   `json:"title,omitempty" validate:"omitempty,max=255"`
-	Description      string   `json:"description,omitempty" validate:"omitempty,max=1000"`
-	IsEncrypted      bool     `json:"is_encrypted"`
-	AvatarURL        *string  `json:"avatar_url,omitempty"`
-	IsPublic         bool     `json:"is_public"`
+	ConversationType     string   `json:"conversation_type" validate:"required,oneof=direct group channel broadcast"`
+	ParticipantIDs       []string `json:"participant_ids" validate:"required,min=1,dive,uuid4"`
+	Title                string   `json:"title,omitempty" validate:"omitempty,max=255"`
+	Description          string   `json:"description,omitempty" validate:"omitempty,max=1000"`
+	MaxMembers           *int     `json:"max_members,omitempty" validate:"omitempty,gt=0"`
+	JoinApprovalRequired bool     `json:"join_approval_required"`
+	WhoCanSendMessages   string   `json:"who_can_send_messages,omitempty" validate:"omitempty,oneof=all admins only"`
+	WhoCanAddMembers     string   `json:"who_can_add_members,omitempty" validate:"omitempty,oneof=all admins only"`
+	WhoCanEditInfo       string   `json:"who_can_edit_info,omitempty" validate:"omitempty,oneof=all admins only"`
+	WhoCanPinMessages    string   `json:"who_can_pin_messages,omitempty" validate:"omitempty,oneof=all admins only"`
+	IsEncrypted          bool     `json:"is_encrypted"`
+	AvatarURL            *string  `json:"avatar_url,omitempty"`
+	IsPublic             bool     `json:"is_public"`
 }
 
 func NewCreateConversationRequest() *CreateConversationRequest {

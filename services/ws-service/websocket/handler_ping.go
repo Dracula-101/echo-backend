@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"shared/pkg/logger"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
 )
@@ -20,6 +21,13 @@ func (m *Manager) handlePing(ctx context.Context, msg *router.Message) error {
 		if err := json.Unmarshal(msg.Payload, &pingPayload); err != nil {
 			return err
 		}
+	}
+
+	if ok := protocol.ValidatePingPayload(pingPayload); !ok {
+		m.log.Warn("Invalid ping payload",
+			logger.String("conn_id", conn.ID()),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid ping payload")
 	}
 
 	serverTimestamp := time.Now().UTC()

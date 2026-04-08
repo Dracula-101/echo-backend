@@ -38,9 +38,21 @@ func (h *ConversationHandler) GetUserConversations(handler *request.RequestHandl
 		participants := make([]dto.Participant, len(conv.Participants))
 		for j, p := range conv.Participants {
 			participants[j] = dto.Participant{
-				UserID:     p.UserID.String(),
-				UserName:   p.UserName,
-				UserAvatar: p.UserAvatar,
+				UserID:      p.UserID.String(),
+				UserName:    p.Username,
+				UserAvatar:  p.AvatarURL,
+				DisplayName: p.DisplayName,
+				FirstName:   p.FirstName,
+				LastName:    p.LastName,
+				AvatarURL:   p.AvatarURL,
+				LastSeen: func() string {
+					if p.LastSeenAt != nil {
+						return p.LastSeenAt.UTC().GoString()
+					}
+					return ""
+				}(),
+				OnlineStatus: p.OnlineStatus,
+				IsVerified:   p.IsVerified,
 			}
 		}
 		responseData[i] = dto.ConversationResponse{
@@ -52,13 +64,18 @@ func (h *ConversationHandler) GetUserConversations(handler *request.RequestHandl
 			UnreadCount:      conv.UnreadCount,
 			MemberCount:      conv.MemberCount,
 			MessageCount:     conv.MessageCount,
-			LastMessage: &dto.Message{
-				Content:      conv.LastMessage.Content,
-				MessageType:  string(conv.LastMessage.MessageType),
-				SenderUserID: conv.LastMessage.SenderUserID.String(),
-				SenderName:   conv.LastMessage.SenderName,
-				SenderAvatar: conv.LastMessage.SenderAvatar,
-			},
+			LastMessage: func() *dto.Message {
+				if conv.LastMessage != nil {
+					return &dto.Message{
+						Content:      conv.LastMessage.Content,
+						MessageType:  string(conv.LastMessage.MessageType),
+						SenderUserID: conv.LastMessage.SenderUserID.String(),
+						SenderName:   conv.LastMessage.SenderName,
+						SenderAvatar: conv.LastMessage.SenderAvatar,
+					}
+				}
+				return nil
+			}(),
 			Participants: participants,
 		}
 	}

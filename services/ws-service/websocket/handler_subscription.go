@@ -25,6 +25,14 @@ func (m *Manager) handleSubscribe(_ context.Context, msg *router.Message) error 
 		return err
 	}
 
+	if ok := protocol.ValidateSubscribePayload(payload); !ok {
+		m.log.Warn("Invalid subscribe payload",
+			logger.String("conn_id", conn.ID()),
+			logger.Int("topic_count", len(payload.Topics)),
+		)
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid subscribe payload")
+	}
+	
 	userID, ok := m.getUserID(conn)
 	if !ok {
 		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeUnauthorized, "User not authenticated")

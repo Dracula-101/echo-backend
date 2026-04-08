@@ -14,6 +14,7 @@ const (
 	ErrCodeInternalError      ErrorCode = "internal_error"
 	ErrCodeConnectionClosed   ErrorCode = "connection_closed"
 	ErrCodeMessageTooLarge    ErrorCode = "message_too_large"
+	ErrCodeInvalidRequest     ErrorCode = "invalid_request"
 )
 
 func isRetryableError(code ErrorCode) bool {

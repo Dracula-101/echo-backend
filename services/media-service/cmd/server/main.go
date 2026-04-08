@@ -19,10 +19,11 @@ import (
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
 	"shared/pkg/media"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/pkg/storage/r2"
 	env "shared/server/env"
+	"shared/server/headers"
 	coreMiddleware "shared/server/middleware"
-	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -217,9 +218,10 @@ func createRouter(h *handler.Handler, healthHandler *health.Handler, cfg *config
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
+			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
+			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptUserId()),
-			// BodyLimit removed - FileOnlyMultipart middleware handles size validation for file uploads
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),

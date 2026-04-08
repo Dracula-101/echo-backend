@@ -58,21 +58,17 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 				}
 				return ids
 			}(),
-			IsPublic:    req.IsPublic,
-			Title:       req.Title,
-			Description: req.Description,
-			AvatarURL:   req.AvatarURL,
-			IsEncrypted: req.IsEncrypted,
-			MemberCount: func() int {
-				switch domain.ConversationType(req.ConversationType) {
-				case domain.ConversationTypeGroup:
-					return len(req.ParticipantIDs) + 1
-				case domain.ConversationTypeChannel:
-					return 1
-				default:
-					return 2
-				}
-			}(),
+			IsPublic:             req.IsPublic,
+			Title:                req.Title,
+			Description:          req.Description,
+			AvatarURL:            req.AvatarURL,
+			IsEncrypted:          req.IsEncrypted,
+			MaxMembers:           req.MaxMembers,
+			JoinApprovalRequired: req.JoinApprovalRequired,
+			WhoCanSendMessages:   req.WhoCanSendMessages,
+			WhoCanAddMembers:     req.WhoCanAddMembers,
+			WhoCanEditInfo:       req.WhoCanEditInfo,
+			WhoCanPinMessages:    req.WhoCanPinMessages,
 		},
 	)
 	if svcErr != nil {

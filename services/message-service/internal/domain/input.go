@@ -48,15 +48,20 @@ type GetMessagesInput struct {
 
 // CreateConversationInput contains data for creating a conversation
 type CreateConversationInput struct {
-	CreatorUserID    uuid.UUID
-	ConversationType ConversationType
-	Title            string
-	Description      string
-	AvatarURL        *string
-	ParticipantIDs   []uuid.UUID
-	IsEncrypted      bool
-	IsPublic         bool
-	MemberCount      int
+	CreatorUserID        uuid.UUID
+	ConversationType     ConversationType
+	Title                string
+	Description          string
+	AvatarURL            *string
+	ParticipantIDs       []uuid.UUID
+	IsEncrypted          bool
+	IsPublic             bool
+	MaxMembers           *int
+	JoinApprovalRequired bool
+	WhoCanSendMessages   string
+	WhoCanAddMembers     string
+	WhoCanEditInfo       string
+	WhoCanPinMessages    string
 }
 
 // GetConversationsInput contains parameters for fetching conversations
@@ -93,6 +98,23 @@ type SetTypingInput struct {
 type GetTypingUsersInput struct {
 	ConversationID uuid.UUID
 	ExcludeUserID  uuid.UUID // Don't include this user (the requester)
+}
+
+// CreatePollInput contains data for creating a poll
+type CreatePollInput struct {
+	ConversationID uuid.UUID
+	CreatorUserID  uuid.UUID
+	Question       string
+	Options        []string
+	AllowMultiple  bool
+	ExpiresAt      *time.Time
+}
+
+// VotePollInput contains data for voting on a poll
+type VotePollInput struct {
+	PollID   uuid.UUID
+	OptionID uuid.UUID
+	UserID   uuid.UUID
 }
 
 // MarkAsDeliveredInput contains data for marking message as delivered

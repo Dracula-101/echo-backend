@@ -92,9 +92,21 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 	}
 	for _, p := range conversation.Participants {
 		resp.Participants = append(resp.Participants, dto.Participant{
-			UserID:     p.UserID.String(),
-			UserName:   p.UserName,
-			UserAvatar: p.UserAvatar,
+			UserID:      p.UserID.String(),
+			UserName:    p.Username,
+			UserAvatar:  p.AvatarURL,
+			DisplayName: p.DisplayName,
+			FirstName:   p.FirstName,
+			LastName:    p.LastName,
+			AvatarURL:   p.AvatarURL,
+			LastSeen: func() string {
+				if p.LastSeenAt != nil {
+					return p.LastSeenAt.UTC().GoString()
+				}
+				return ""
+			}(),
+			OnlineStatus: p.OnlineStatus,
+			IsVerified:   p.IsVerified,
 		})
 	}
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Conversation retrieved successfully", resp)

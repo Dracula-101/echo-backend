@@ -99,7 +99,6 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 	)
 	h.securityEventRepo.LogRegistrationEvent(ctx, repository.SecurityEventInput{
 		UserID:      output.UserID,
-		SessionID:   "N/A",
 		Status:      "success",
 		Description: "User registered successfully",
 		UserAgent:   handler.GetUserAgent(),

@@ -50,15 +50,15 @@ const (
 )
 
 type deliveryService struct {
-	messageRepo repo.MessageRepository
-	logger      logger.Logger
+	deliveryRepo repo.DeliveryRepository
+	logger       logger.Logger
 }
 
 // NewDeliveryService creates a new delivery service instance
-func NewDeliveryService(messageRepo repo.MessageRepository, log logger.Logger) DeliveryServiceInterface {
+func NewDeliveryService(deliveryRepo repo.DeliveryRepository, log logger.Logger) DeliveryServiceInterface {
 	return &deliveryService{
-		messageRepo: messageRepo,
-		logger:      log,
+		deliveryRepo: deliveryRepo,
+		logger:       log,
 	}
 }
 
@@ -73,7 +73,7 @@ func (s *deliveryService) CreateDeliveryStatuses(ctx context.Context, messageID 
 		recipientStrings[i] = id.String()
 	}
 
-	if err := s.messageRepo.CreateDeliveryStatuses(ctx, messageID.String(), recipientStrings); err != nil {
+	if err := s.deliveryRepo.CreateDeliveryStatuses(ctx, messageID.String(), recipientStrings); err != nil {
 		s.logger.Error("Failed to create delivery statuses",
 			logger.String("message_id", messageID.String()),
 			logger.Int("recipient_count", len(recipientIDs)),
@@ -95,7 +95,7 @@ func (s *deliveryService) MarkAsDelivered(ctx context.Context, messageID uuid.UU
 	now := time.Now()
 
 	// Update delivery status record
-	if err := s.messageRepo.UpdateDeliveryStatus(ctx, messageID.String(), userID.String(), "delivered", &now); err != nil {
+	if err := s.deliveryRepo.UpdateDeliveryStatus(ctx, messageID.String(), userID.String(), "delivered", &now); err != nil {
 		s.logger.Error("Failed to update delivery status",
 			logger.String("message_id", messageID.String()),
 			logger.String("user_id", userID.String()),
@@ -105,7 +105,7 @@ func (s *deliveryService) MarkAsDelivered(ctx context.Context, messageID uuid.UU
 	}
 
 	// Increment delivery count on the message
-	if err := s.messageRepo.IncrementMessageDeliveryCount(ctx, messageID.String()); err != nil {
+	if err := s.deliveryRepo.IncrementMessageDeliveryCount(ctx, messageID.String()); err != nil {
 		s.logger.Error("Failed to increment delivery count",
 			logger.String("message_id", messageID.String()),
 			logger.Error(err),
@@ -134,7 +134,7 @@ func (s *deliveryService) MarkAsDeliveredBatch(ctx context.Context, messageIDs [
 	}
 
 	// Update delivery status records
-	if err := s.messageRepo.UpdateDeliveryStatusBatch(ctx, messageIDStrings, userID.String(), "delivered", &now); err != nil {
+	if err := s.deliveryRepo.UpdateDeliveryStatusBatch(ctx, messageIDStrings, userID.String(), "delivered", &now); err != nil {
 		s.logger.Error("Failed to update delivery status batch",
 			logger.Int("message_count", len(messageIDs)),
 			logger.String("user_id", userID.String()),
@@ -145,7 +145,7 @@ func (s *deliveryService) MarkAsDeliveredBatch(ctx context.Context, messageIDs [
 
 	// Increment delivery count for each message
 	for _, msgID := range messageIDs {
-		if err := s.messageRepo.IncrementMessageDeliveryCount(ctx, msgID.String()); err != nil {
+		if err := s.deliveryRepo.IncrementMessageDeliveryCount(ctx, msgID.String()); err != nil {
 			s.logger.Error("Failed to increment delivery count",
 				logger.String("message_id", msgID.String()),
 				logger.Error(err),
@@ -167,7 +167,7 @@ func (s *deliveryService) MarkAsRead(ctx context.Context, messageID uuid.UUID, u
 	now := time.Now()
 
 	// Update delivery status record
-	if err := s.messageRepo.UpdateDeliveryStatus(ctx, messageID.String(), userID.String(), "read", &now); err != nil {
+	if err := s.deliveryRepo.UpdateDeliveryStatus(ctx, messageID.String(), userID.String(), "read", &now); err != nil {
 		s.logger.Error("Failed to update read status",
 			logger.String("message_id", messageID.String()),
 			logger.String("user_id", userID.String()),
@@ -177,7 +177,7 @@ func (s *deliveryService) MarkAsRead(ctx context.Context, messageID uuid.UUID, u
 	}
 
 	// Increment read count on the message
-	if err := s.messageRepo.IncrementMessageReadCount(ctx, messageID.String()); err != nil {
+	if err := s.deliveryRepo.IncrementMessageReadCount(ctx, messageID.String()); err != nil {
 		s.logger.Error("Failed to increment read count",
 			logger.String("message_id", messageID.String()),
 			logger.Error(err),
@@ -206,7 +206,7 @@ func (s *deliveryService) MarkAsReadBatch(ctx context.Context, messageIDs []uuid
 	}
 
 	// Update delivery status records
-	if err := s.messageRepo.UpdateDeliveryStatusBatch(ctx, messageIDStrings, userID.String(), "read", &now); err != nil {
+	if err := s.deliveryRepo.UpdateDeliveryStatusBatch(ctx, messageIDStrings, userID.String(), "read", &now); err != nil {
 		s.logger.Error("Failed to update read status batch",
 			logger.Int("message_count", len(messageIDs)),
 			logger.String("user_id", userID.String()),
@@ -217,7 +217,7 @@ func (s *deliveryService) MarkAsReadBatch(ctx context.Context, messageIDs []uuid
 
 	// Increment read count for each message
 	for _, msgID := range messageIDs {
-		if err := s.messageRepo.IncrementMessageReadCount(ctx, msgID.String()); err != nil {
+		if err := s.deliveryRepo.IncrementMessageReadCount(ctx, msgID.String()); err != nil {
 			s.logger.Error("Failed to increment read count",
 				logger.String("message_id", msgID.String()),
 				logger.Error(err),
