@@ -107,12 +107,22 @@ func (r *SessionRepo) GetAllSessionsByUserId(ctx context.Context, userID string)
 	)
 	var sessions []*models.AuthSession
 	query := "SELECT * FROM auth.sessions WHERE user_id = $1 ORDER BY created_at DESC"
-	rows, err := r.db.Query(ctx, query, &sessions, userID)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get sessions by user ID").
+	rows, err := r.db.Query(ctx, query, userID)
+
+	for rows.Next() {
+		var session models.AuthSession
+		err := rows.ScanModel(&session)
+		if err != nil {
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan session row").
+				WithDetail("user_id", userID)
+		}
+		sessions = append(sessions, &session)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "error iterating session rows").
 			WithDetail("user_id", userID)
 	}
-	defer rows.Close()
 
 	r.log.Debug("Sessions fetched successfully",
 		logger.String("user_id", userID),

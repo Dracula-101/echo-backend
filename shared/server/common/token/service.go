@@ -1,6 +1,10 @@
 package token
 
-import "context"
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+)
 
 type JWTTokenService struct {
 	manager *Manager
@@ -47,4 +51,13 @@ func (s *JWTTokenService) Validate(ctx context.Context, tokenString string, expe
 		return nil, err
 	}
 	return s.manager.Validate(ctx, tokenString, expected)
+}
+
+func (s *JWTTokenService) GenerateVerificationToken() string {
+	tokenBytes := make([]byte, 32)
+	_, err := rand.Read(tokenBytes)
+	if err != nil {
+		panic("Failed to generate random token: " + err.Error())
+	}
+	return base64.RawURLEncoding.EncodeToString(tokenBytes)
 }

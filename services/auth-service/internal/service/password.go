@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"time"
@@ -38,19 +37,8 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 		return nil
 	}
 
-	// Generate random token
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return &authErrors.AuthError{
-			Message: "Failed to generate reset token",
-			Code:    authErrors.CodeTokenGenerationFailed,
-			Error: pkgErrors.FromError(err, authErrors.CodeTokenGenerationFailed, "failed to generate random token").
-				WithService(authErrors.ServiceName),
-		}
-	}
-	rawToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
-	hash := sha256.Sum256([]byte(rawToken))
-	tokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
+	rawToken := s.tokenService.GenerateVerificationToken()
+	tokenHash := s.hashingService.HashString(rawToken)
 
 	expiresAt := time.Now().Add(1 * time.Hour)
 

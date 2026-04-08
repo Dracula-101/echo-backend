@@ -52,18 +52,22 @@ const (
 	CodeSamePassword              = "AUTH_SAME_PASSWORD"
 
 	// Email Verification Errors
-	CodeEmailAlreadyVerified      = "AUTH_EMAIL_ALREADY_VERIFIED"
-	CodeVerificationTokenExpired  = "AUTH_VERIFICATION_TOKEN_EXPIRED"
-	CodeVerificationCooldown      = "AUTH_VERIFICATION_COOLDOWN"
+	CodeEmailAlreadyVerified     = "AUTH_EMAIL_ALREADY_VERIFIED"
+	CodeVerificationTokenExpired = "AUTH_VERIFICATION_TOKEN_EXPIRED"
+	CodeVerificationCooldown     = "AUTH_VERIFICATION_COOLDOWN"
 
 	// MFA Errors
-	CodeMFAAlreadyEnabled  = "AUTH_MFA_ALREADY_ENABLED"
-	CodeMFANotEnabled      = "AUTH_MFA_NOT_ENABLED"
+	CodeMFAAlreadyEnabled = "AUTH_MFA_ALREADY_ENABLED"
+	CodeMFANotEnabled     = "AUTH_MFA_NOT_ENABLED"
 
 	// Account Errors
 	CodeAccountAlreadyDeleted    = "AUTH_ACCOUNT_ALREADY_DELETED"
 	CodeSessionOwnershipMismatch = "AUTH_SESSION_OWNERSHIP_MISMATCH"
 
 	// Email Sending Errors
-	CodeEmailSendFailed = "AUTH_EMAIL_SEND_FAILED"
+	CodeEmailSendFailed               = "AUTH_EMAIL_SEND_FAILED"
+	CodeVerificationNotFound          = "AUTH_VERIFICATION_NOT_FOUND"
+	CodeVerificationInvalid           = "AUTH_VERIFICATION_INVALID"
+	CodeVerificationEmailRecentlySent = "AUTH_VERIFICATION_EMAIL_RECENTLY_SENT"
+	CodeTooManyVerificationAttempts   = "AUTH_TOO_MANY_VERIFICATION_ATTEMPTS"
 )

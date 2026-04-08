@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/error"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -20,17 +19,7 @@ func (h *AuthHandler) DeleteSession(handler *req.RequestHandler) {
 		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	deleteSessionRequest := dto.NewDeleteSessionRequest()
-	if !handler.ParseValidateAndSend(deleteSessionRequest) {
-		h.log.Warn("Delete session request validation failed",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-		)
-		return
-	}
-
-	// Delete session
-	sessionID := deleteSessionRequest.SessionID
+	sessionID := handler.PathParam("id")
 	sessionErr := h.sessionService.DeleteSessionByID(ctx, sessionID)
 	if sessionErr != nil {
 		h.log.Warn("Delete session failed",

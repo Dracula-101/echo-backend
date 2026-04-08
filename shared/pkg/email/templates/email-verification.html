@@ -4,21 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Verify your Echo email</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
   <style>
     @media only screen and (max-width: 560px) {
       .card { border-radius: 0 !important; }
       .hero { padding: 44px 28px 36px !important; }
-      .body { padding: 32px 28px !important; }
+      .body-cell { padding: 32px 28px !important; }
       .foot { padding: 20px 28px !important; }
-      h1    { font-size: 26px !important; }
+      h1 { font-size: 26px !important; }
     }
     @media (prefers-color-scheme: dark) {
-      .page  { background: #0e0e0e !important; }
-      .card  { background: #181818 !important; }
+      .page { background: #0e0e0e !important; }
+      .card { background: #181818 !important; }
       .bodyp { color: #888 !important; }
       .footd { background: #131313 !important; border-top-color: #222 !important; }
       .footp { color: #3a3a3a !important; }
-      .code-td { background: #1e1e1e !important; border-color: #2a2a2a !important; }
     }
   </style>
 </head>
@@ -29,7 +37,7 @@
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEECE8;" class="page">
     <tr>
       <td align="center" style="padding:52px 16px;">
-        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#fff;border-radius:20px;overflow:hidden;" class="card">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;" class="card">
 
           <!-- Hero -->
           <tr>
@@ -37,27 +45,20 @@
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 36px;">
                 <tr>
                   <td style="vertical-align:middle;padding-right:9px;">
-                    <svg width="22" height="35" viewBox="0 0 67 106" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="55.5448" y="0"       width="10.4918" height="105.227" rx="5.2459" fill="#FF6B6B" fill-opacity="0.45"/>
-                      <rect x="37.0298" y="19.7493" width="10.4918" height="65.728"  rx="5.2459" fill="#FF6B6B" fill-opacity="0.7"/>
-                      <rect x="18.515"  y="6.78882" width="10.4918" height="91.9575" rx="5.2459" fill="#FF6B6B"/>
-                      <rect x="0"       y="33.0183" width="10.4918" height="39.4985" rx="5.2459" fill="#FF6B6B" fill-opacity="0.35"/>
-                    </svg>
+                    <span style="font-size:24px;line-height:1;">&#9835;</span>
                   </td>
                   <td style="vertical-align:middle;">
-                    <span style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:18px;font-weight:700;color:#fff;">Echo</span>
+                    <span style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;">Echo</span>
                   </td>
                 </tr>
               </table>
 
-              <!-- Check icon -->
-              <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,107,107,0.12);margin:0 auto 24px;">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:15px auto 0;">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                </svg>
+              <!-- Mail icon -->
+              <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,107,107,0.12);text-align:center;line-height:56px;margin:0 auto 24px;">
+                <span style="font-size:26px;color:#FF6B6B;">&#9993;</span>
               </div>
 
-              <h1 style="margin:0 0 12px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:800;color:#fff;letter-spacing:-0.5px;line-height:1.2;">Verify your email</h1>
+              <h1 style="margin:0 0 12px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;line-height:1.2;">Verify your email</h1>
               <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:rgba(255,255,255,0.38);line-height:1.6;">One quick step to activate your account.</p>
             </td>
           </tr>
@@ -76,32 +77,42 @@
 
           <!-- Body -->
           <tr>
-            <td style="padding:40px 44px 12px;" class="body">
-              <p style="margin:0 0 28px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#555;line-height:1.8;" class="bodyp">
+            <td style="padding:40px 44px 12px;" class="body-cell">
+              <p style="margin:0 0 28px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#555555;line-height:1.8;" class="bodyp">
                 Hi {{name}}, tap the button below to verify your email address and unlock your Echo account.
               </p>
 
-              <!-- CTA -->
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+              <!-- Bulletproof CTA button -->
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 32px;">
                 <tr>
-                  <td style="background:#FF6B6B;border-radius:10px;">
-                    <a href="{{verify_url}}" style="display:inline-block;padding:14px 36px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#fff;text-decoration:none;letter-spacing:-0.1px;">Verify email address →</a>
+                  <td align="center">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center" style="border-radius:10px;background:#FF6B6B;">
+                          <!--[if mso]>
+                          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{verify_url}}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="21%" strokecolor="#FF6B6B" fillcolor="#FF6B6B">
+                            <w:anchorlock/>
+                            <center style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;">Verify email address</center>
+                          </v:roundrect>
+                          <![endif]-->
+                          <!--[if !mso]><!-->
+                          <a href="{{verify_url}}" target="_blank" style="display:inline-block;padding:14px 36px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:-0.1px;border-radius:10px;background:#FF6B6B;mso-hide:all;">Verify email address &#8594;</a>
+                          <!--<![endif]-->
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
               </table>
 
-              <!-- Or use code -->
-              <p style="margin:0 0 12px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:#aaa;text-align:center;">Or enter this code manually in the app</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:12px;">
-                <tr>
-                  <td align="center" style="background:#f7f7f7;border:1px solid #ebebeb;border-radius:10px;padding:18px;" class="code-td">
-                    <span style="font-family:'Courier New',Courier,monospace;font-size:28px;font-weight:700;color:#111;letter-spacing:10px;">{{code}}</span>
-                  </td>
-                </tr>
-              </table>
+              <!-- Fallback plain link -->
+              <p style="margin:0 0 24px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#bbb;line-height:1.7;text-align:center;word-break:break-all;">
+                Button not working? Copy this link into your browser:<br>
+                <a href="{{verify_url}}" style="color:#FF6B6B;text-decoration:underline;">{{verify_url}}</a>
+              </p>
 
-              <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#bbb;line-height:1.7;text-align:center;">
-                Expires in <strong style="color:#999;">24 hours</strong> &nbsp;·&nbsp; Didn't sign up? Ignore this email.
+              <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#bbbbbb;line-height:1.7;text-align:center;">
+                Expires in <strong style="color:#999999;">24 hours</strong> &nbsp;&middot;&nbsp; Didn't sign up? Ignore this email.
               </p>
             </td>
           </tr>
@@ -112,17 +123,8 @@
           <!-- Footer -->
           <tr>
             <td style="background:#f9f9f9;border-top:1px solid #f0f0f0;padding:20px 44px;text-align:center;" class="footd foot">
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 10px;">
-                <tr><td align="center">
-                  <svg width="13" height="20" viewBox="0 0 67 106" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="55.5448" y="0"       width="10.4918" height="105.227" rx="5.2459" fill="#FF6B6B" fill-opacity="0.45"/>
-                    <rect x="37.0298" y="19.7493" width="10.4918" height="65.728"  rx="5.2459" fill="#FF6B6B" fill-opacity="0.7"/>
-                    <rect x="18.515"  y="6.78882" width="10.4918" height="91.9575" rx="5.2459" fill="#FF6B6B"/>
-                    <rect x="0"       y="33.0183" width="10.4918" height="39.4985" rx="5.2459" fill="#FF6B6B" fill-opacity="0.35"/>
-                  </svg>
-                </td></tr>
-              </table>
-              <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#bbb;line-height:1.7;" class="footp">© 2025 Echo &nbsp;·&nbsp; You received this because you created an account.</p>
+              <p style="margin:0 0 4px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#FF6B6B;">Echo</p>
+              <p style="margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#bbbbbb;line-height:1.7;" class="footp">&copy; 2025 Echo &nbsp;&middot;&nbsp; You received this because you created an account.</p>
             </td>
           </tr>
 

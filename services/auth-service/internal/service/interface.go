@@ -31,8 +31,8 @@ type AuthServiceInterface interface {
 	ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string) *error.AuthError
 
 	// Email verification
-	VerifyEmail(ctx context.Context, token string) *error.AuthError
-	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) *error.AuthError
+	VerifyEmail(ctx context.Context, token string, userId string) *error.AuthError
+	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError)
 
 	// MFA
 	EnableMFA(ctx context.Context, userID string, email string) (*domain.MFAEnableOutput, *error.AuthError)

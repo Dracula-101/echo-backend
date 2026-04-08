@@ -38,6 +38,7 @@ type AuthRepositoryInterface interface {
 
 	// Email verification
 	MarkEmailVerified(ctx context.Context, userID string) pkgErrors.AppError
+	ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError
 
 	// Two-factor authentication
 	Update2FASecret(ctx context.Context, userID string, secret string) pkgErrors.AppError
@@ -585,6 +586,31 @@ func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string) p
 
 	rowsAffected, _ := result.RowsAffected()
 	r.log.Info("Email marked as verified",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
+func (r *AuthRepository) ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Activating pending user account",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.users
+		SET account_status = $1,
+		    updated_at = NOW()
+		WHERE id = $2 AND account_status = $3`
+	result, err := r.db.Exec(ctx, query, models.AccountStatusActive, userID, models.AccountStatusPending)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to activate pending user").
+			WithDetail("user_id", userID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("Pending user activated",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 		logger.Int64("rows_affected", rowsAffected),
