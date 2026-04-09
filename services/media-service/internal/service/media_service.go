@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"media-service/internal/config"
+	"media-service/internal/domain"
 	mediaErrors "media-service/internal/errors"
 	"media-service/internal/model"
 	"media-service/internal/repo"
@@ -22,6 +23,7 @@ import (
 	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/media"
+	"shared/pkg/messaging"
 	"shared/pkg/utils"
 
 	"shared/pkg/cache"
@@ -33,6 +35,7 @@ import (
 type MediaService struct {
 	repo            *repo.FileRepository
 	cache           cache.Cache
+	producer        messaging.Producer
 	cfg             *config.Config
 	log             logger.Logger
 	storageProvider StorageProvider
@@ -40,6 +43,7 @@ type MediaService struct {
 
 type MediaServiceBuilder struct {
 	fileRepo        *repo.FileRepository
+	producer        messaging.Producer
 	cache           cache.Cache
 	cfg             *config.Config
 	log             logger.Logger
@@ -82,6 +86,11 @@ func (b *MediaServiceBuilder) WithStorageProvider(p StorageProvider) *MediaServi
 	return b
 }
 
+func (b *MediaServiceBuilder) WithProducer(p messaging.Producer) *MediaServiceBuilder {
+	b.producer = p
+	return b
+}
+
 func (b *MediaServiceBuilder) Build() *MediaService {
 	if b.fileRepo == nil {
 		panic("FileRepository is required")
@@ -91,6 +100,9 @@ func (b *MediaServiceBuilder) Build() *MediaService {
 	}
 	if b.log == nil {
 		panic("Logger is required")
+	}
+	if b.producer == nil {
+		panic("Producer is required")
 	}
 	if b.storageProvider == nil {
 		panic("StorageProvider is required")
@@ -104,6 +116,7 @@ func (b *MediaServiceBuilder) Build() *MediaService {
 		cfg:             b.cfg,
 		log:             b.log,
 		storageProvider: b.storageProvider,
+		producer:        b.producer,
 	}
 }
 
@@ -241,7 +254,7 @@ func (s *MediaService) UploadFile(ctx context.Context, input models.UploadFileIn
 	}, nil
 }
 
-func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, processor *media.Processor) pkgErrors.AppError {
+func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, processor *media.Processor, eventType domain.EventType) pkgErrors.AppError {
 	s.log.Info("Processing image file", logger.String("file_id", fileID))
 
 	if err := s.repo.UpdateFileProcessingStatus(ctx, fileID, "processing", ""); err != nil {
@@ -327,6 +340,34 @@ func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, proc
 	if completeErr := s.repo.UpdateFileProcessingStatus(ctx, fileID, "completed", ""); completeErr != nil {
 		s.log.Error("Failed to update processing status to completed", logger.Error(completeErr))
 		return completeErr
+	}
+
+	if eventType == domain.ProfilePhotoUploadedEvent {
+		event := domain.ProfilePhotoProcessedEvent{
+			EventType: eventType,
+			FileID:    fileID,
+			UserID:    file.UploaderUserID,
+			Timestamp: time.Now().UTC(),
+			Thumbnail: domain.ThumbnailURLs{
+				Small:  thumbnailSmall,
+				Medium: thumbnailMedium,
+				Large:  thumbnailLarge,
+			},
+		}
+
+		eventBytes := utils.MarshalJSONSafe(event)
+		if err := s.producer.Send(ctx, s.cfg.Kafka.Topic, &messaging.Message{
+			Key:   utils.StringToBytes(fileID),
+			Value: eventBytes,
+		}); err != nil {
+			s.log.Error("Failed to send profile photo processed event",
+				logger.String("file_id", fileID),
+				logger.Error(err),
+			)
+			return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to send profile photo processed event").
+				WithDetail("file_id", fileID).
+				WithService("media-service")
+		}
 	}
 
 	s.log.Info("Image processing completed successfully", logger.String("file_id", fileID))

@@ -127,7 +127,7 @@ fi
 echo "[INFO] Creating database triggers..."
 if [ -d "$DATABASE_DIR/triggers" ]; then
     TRIGGER_COUNT=0
-    for trigger in "$DATABASE_DIR/triggers"/*.sql; do
+    for trigger in "$DATABASE_DIR/triggers"/**/*.sql; do
         if [ -f "$trigger" ]; then
             echo "   ✓ Loading $(basename $trigger)"
             PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -f "$trigger" 2>&1 | grep -v "NOTICE" || true

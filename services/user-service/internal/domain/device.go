@@ -14,7 +14,7 @@ type UserDevice struct {
 	DeviceManufacturer string
 	OSName             string
 	OSVersion          string
-	AppVersion         string
+	AppVersion         *string
 	IsActive           bool
 	FCMToken           *string
 	APNSToken          *string
@@ -31,7 +31,7 @@ func NewUserDevice(model db.Device) *UserDevice {
 		DeviceManufacturer: *utils.SafePtrString(model.DeviceManufacturer),
 		OSName:             *utils.SafePtrString(model.OSName),
 		OSVersion:          *utils.SafePtrString(model.OSVersion),
-		AppVersion:         *utils.SafePtrString(model.AppVersion),
+		AppVersion:         utils.SafePtrString(model.AppVersion),
 		IsActive:           model.IsActive,
 		FCMToken:           model.FCMToken,
 		APNSToken:          model.APNSToken,

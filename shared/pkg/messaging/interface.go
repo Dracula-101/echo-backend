@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"time"
 
 	pkgErrors "shared/pkg/errors"
 )
@@ -46,7 +47,7 @@ type Config struct {
 	ClientID          string
 	GroupID           string
 	MaxRetries        int
-	RetryBackoff      int
-	SessionTimeout    int
-	HeartbeatInterval int
+	RetryBackoff      time.Duration
+	SessionTimeout    time.Duration
+	HeartbeatInterval time.Duration
 }

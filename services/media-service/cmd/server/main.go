@@ -19,6 +19,8 @@ import (
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
 	"shared/pkg/media"
+	"shared/pkg/messaging"
+	"shared/pkg/messaging/kafka"
 	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/pkg/storage/r2"
 	env "shared/server/env"
@@ -115,6 +117,28 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	}
 	log.Info("Redis client created successfully")
 	return cacheClient, nil
+}
+
+func createKakfaProducer(kafkaConfig config.KafkaConfig, log logger.Logger) (messaging.Producer, error) {
+	log.Debug("Creating Kafka producer - configuration",
+		logger.String("brokers", fmt.Sprintf("%v", kafkaConfig.Brokers)),
+		logger.String("topic", kafkaConfig.Topic),
+	)
+	producer, err := kafka.NewProducer(messaging.Config{
+		Brokers:           kafkaConfig.Brokers,
+		ClientID:          kafkaConfig.ClientID,
+		GroupID:           kafkaConfig.GroupID,
+		MaxRetries:        kafkaConfig.MaxRetries,
+		RetryBackoff:      kafkaConfig.RetryBackoff,
+		SessionTimeout:    kafkaConfig.SessionTimeout,
+		HeartbeatInterval: kafkaConfig.HeartbeatInterval,
+	})
+	if err != nil {
+		log.Error("Failed to create Kafka producer", logger.Error(err))
+		return nil, err
+	}
+	log.Info("Kafka producer created successfully")
+	return producer, nil
 }
 
 func createStorageProvider(cfg *config.Config, log logger.Logger) (service.StorageProvider, error) {
@@ -241,10 +265,19 @@ func createRouter(h *handler.Handler, healthHandler *health.Handler, cfg *config
 	return routerInstance, nil
 }
 
-func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, kafkaProducer messaging.Producer, log logger.Logger, cfg *config.Config) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
+	)
+
+	shutdownMgr.RegisterWithPriority(
+		"kafka-producer",
+		shutdown.Hook(func(ctx context.Context) error {
+			log.Info("Closing Kafka producer")
+			return kafkaProducer.Close()
+		}),
+		shutdown.PriorityHigh,
 	)
 
 	shutdownMgr.RegisterWithPriority(
@@ -326,6 +359,11 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
+	producer, err := createKakfaProducer(cfg.Kafka, log)
+	if err != nil {
+		log.Fatal("Failed to create Kafka producer", logger.Error(err))
+	}
+
 	// Create storage provider
 	storageProvider, err := createStorageProvider(cfg, log)
 	if err != nil {
@@ -342,6 +380,7 @@ func main() {
 		WithConfig(cfg).
 		WithLogger(log).
 		WithStorageProvider(storageProvider).
+		WithProducer(producer).
 		Build()
 
 	mediaProcessor := media.NewProcessor()
@@ -375,7 +414,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, producer, log, cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {

@@ -251,7 +251,8 @@ func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 	} else {
 		for _, device := range devices {
 			updateInput := &domain.UpdateUserDevice{
-				IsActive: utils.PtrBool(device.DeviceID == input.DeviceID),
+				IsActive:   utils.PtrBool(device.DeviceID == input.DeviceID),
+				AppVersion: input.AppVersion,
 			}
 			s.repo.UpdateUserDevice(ctx, updateInput, input.UserID, device.DeviceID)
 		}
@@ -259,4 +260,3 @@ func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 
 	return nil
 }
-

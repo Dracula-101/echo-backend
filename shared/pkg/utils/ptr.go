@@ -1,6 +1,10 @@
 package utils
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 func DerefString(s *string) string {
 	if s == nil {
@@ -43,7 +47,7 @@ func PtrString(s string) *string {
 
 func SafePtrString(s *string) *string {
 	if s == nil {
-		return nil
+		return PtrString("")
 	}
 	str := *s
 	return &str
@@ -145,4 +149,11 @@ func SafePtr[T any](v *T) *T {
 	}
 	val := *v
 	return &val
+}
+
+func DerefTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }

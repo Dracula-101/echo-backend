@@ -2,6 +2,7 @@ package dto
 
 import (
 	"shared/server/request"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -74,16 +75,16 @@ type Message struct {
 }
 
 type Participant struct {
-	UserID       string `json:"user_id"`
-	UserName     string `json:"user_name,omitempty"`
-	DisplayName  string `json:"display_name,omitempty"`
-	UserAvatar   string `json:"user_avatar,omitempty"`
-	FirstName    string `json:"first_name,omitempty"`
-	LastName     string `json:"last_name,omitempty"`
-	AvatarURL    string `json:"avatar_url,omitempty"`
-	LastSeen     string `json:"last_seen,omitempty"`
-	OnlineStatus string `json:"online_status,omitempty"`
-	IsVerified   bool   `json:"is_verified,omitempty"`
+	UserID       string    `json:"user_id"`
+	UserName     string    `json:"user_name,omitempty"`
+	DisplayName  string    `json:"display_name,omitempty"`
+	UserAvatar   string    `json:"user_avatar,omitempty"`
+	FirstName    string    `json:"first_name,omitempty"`
+	LastName     string    `json:"last_name,omitempty"`
+	AvatarURL    string    `json:"avatar_url,omitempty"`
+	LastSeen     *time.Time `json:"last_seen,omitempty"`
+	OnlineStatus string    `json:"online_status,omitempty"`
+	IsVerified   bool      `json:"is_verified,omitempty"`
 }
 
 type GetConversationsResponse struct {

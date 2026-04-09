@@ -448,7 +448,7 @@ func (r *UserRepository) AddUserDevice(ctx context.Context, input *domain.UserDe
 		DeviceManufacturer: utils.PtrString(input.DeviceManufacturer),
 		OSName:             utils.PtrString(input.OSName),
 		OSVersion:          utils.PtrString(input.OSVersion),
-		AppVersion:         utils.PtrString(input.AppVersion),
+		AppVersion:         input.AppVersion,
 		IsCurrentDevice:    isCurrentDevice,
 		IsActive:           input.FCMToken != nil || input.APNSToken != nil,
 		LastActiveAt:       time.Now(),

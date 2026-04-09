@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"media-service/internal/domain"
 	"media-service/internal/service/models"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -51,6 +52,6 @@ func (h *Handler) UploadProfilePhoto(handler *req.RequestHandler) {
 	defer func() {
 		h.log.Info("Starting async image processing for profile photo",
 			logger.String("file_id", output.FileID))
-		go h.mediaService.ProcessImageFile(context.Background(), output.FileID, h.mediaProcessor)
+		go h.mediaService.ProcessImageFile(context.Background(), output.FileID, h.mediaProcessor, domain.ProfilePhotoUploadedEvent)
 	}()
 }

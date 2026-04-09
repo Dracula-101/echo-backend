@@ -9,6 +9,7 @@ type Config struct {
 	Database      DatabaseConfig      `yaml:"database" mapstructure:"database"`
 	Cache         CacheConfig         `yaml:"cache" mapstructure:"cache"`
 	Storage       StorageConfig       `yaml:"storage" mapstructure:"storage"`
+	Kafka         KafkaConfig         `yaml:"kafka" mapstructure:"kafka"`
 	Security      SecurityConfig      `yaml:"security" mapstructure:"security"`
 	Logging       LoggingConfig       `yaml:"logging" mapstructure:"logging"`
 	Observability ObservabilityConfig `yaml:"observability" mapstructure:"observability"`
@@ -94,6 +95,18 @@ type StorageConfig struct {
 	UploadTimeout   time.Duration `yaml:"upload_timeout" mapstructure:"upload_timeout"`
 }
 
+// KafkaConfig contains Kafka configuration
+type KafkaConfig struct {
+	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
+	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	GroupID           string        `yaml:"group_id" mapstructure:"group_id"`
+	MaxRetries        int           `yaml:"max_retries" mapstructure:"max_retries"`
+	RetryBackoff      time.Duration `yaml:"retry_backoff" mapstructure:"retry_backoff"`
+	SessionTimeout    time.Duration `yaml:"session_timeout" mapstructure:"session_timeout"`
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval" mapstructure:"heartbeat_interval"`
+}
+
 // SecurityConfig contains security configuration
 type SecurityConfig struct {
 	AllowedOrigins   string                `yaml:"allowed_origins" mapstructure:"allowed_origins"`
@@ -103,7 +116,7 @@ type SecurityConfig struct {
 	MaxAge           int                   `yaml:"max_age" mapstructure:"max_age"`
 	SecurityHeaders  SecurityHeadersConfig `yaml:"security_headers" mapstructure:"security_headers"`
 	MaxBodySize      int64                 `yaml:"max_body_size" mapstructure:"max_body_size"`
-	RateLimit        RateLimitConfig       `yaml:"rate_limit" mapstructure:"rate_limit"`
+	RateLimit        RateLimitConfig       `yaml:"rate_chat-messageslimit" mapstructure:"rate_limit"`
 }
 
 // SecurityHeadersConfig contains security headers configuration

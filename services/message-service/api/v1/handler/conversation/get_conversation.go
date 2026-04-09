@@ -5,6 +5,7 @@ import (
 	"shared/pkg/utils"
 	"shared/server/request"
 	"shared/server/response"
+	"time"
 
 	"echo-backend/services/message-service/api/v1/dto"
 	convError "echo-backend/services/message-service/internal/error"
@@ -99,11 +100,11 @@ func (h *ConversationHandler) GetConversationByID(handler *request.RequestHandle
 			FirstName:   p.FirstName,
 			LastName:    p.LastName,
 			AvatarURL:   p.AvatarURL,
-			LastSeen: func() string {
+			LastSeen: func() *time.Time {
 				if p.LastSeenAt != nil {
-					return p.LastSeenAt.UTC().GoString()
+					return p.LastSeenAt
 				}
-				return ""
+				return nil
 			}(),
 			OnlineStatus: p.OnlineStatus,
 			IsVerified:   p.IsVerified,

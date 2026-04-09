@@ -1,5 +1,7 @@
 package messaging
 
+import "time"
+
 type Option func(*Config)
 
 func WithBrokers(brokers []string) Option {
@@ -26,19 +28,19 @@ func WithMaxRetries(maxRetries int) Option {
 	}
 }
 
-func WithRetryBackoff(retryBackoff int) Option {
+func WithRetryBackoff(retryBackoff time.Duration) Option {
 	return func(c *Config) {
 		c.RetryBackoff = retryBackoff
 	}
 }
 
-func WithSessionTimeout(sessionTimeout int) Option {
+func WithSessionTimeout(sessionTimeout time.Duration) Option {
 	return func(c *Config) {
 		c.SessionTimeout = sessionTimeout
 	}
 }
 
-func WithHeartbeatInterval(heartbeatInterval int) Option {
+func WithHeartbeatInterval(heartbeatInterval time.Duration) Option {
 	return func(c *Config) {
 		c.HeartbeatInterval = heartbeatInterval
 	}

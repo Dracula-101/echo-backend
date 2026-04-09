@@ -63,18 +63,62 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- -------------------------------------------------
--- users.create_default_device()
+-- users.create_device_from_session()
 -- -------------------------------------------------
--- Creates a placeholder device record in users.devices
--- when a new row is inserted into auth.users. The real
--- device info is registered via users.register_device()
--- on first login.
+-- Creates or updates a device record in users.devices when a
+-- new session is created in auth.sessions. This allows us to
+-- associate sessions with a device even if the user logs in from a new
+-- device that doesn't exist in users.devices yet. The device_id is taken
+-- from the session's device_id if provided, otherwise it falls back to the session ID.
 -- -------------------------------------------------
-CREATE OR REPLACE FUNCTION users.create_default_device()
+CREATE OR REPLACE FUNCTION users.create_device_from_session()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO users.devices (user_id, device_id, device_name, is_active, last_active_at)
-    VALUES (NEW.id, 'default_device', 'Default Device', TRUE, NOW());
+    INSERT INTO users.devices (
+        user_id,
+        device_id,
+        device_name,
+        device_type,
+        device_model,
+        device_manufacturer,
+        os_name,
+        os_version,
+        fcm_token,
+        apns_token,
+        push_enabled,
+        is_active,
+        is_current_device,
+        last_active_at
+    ) VALUES (
+        NEW.user_id,
+        COALESCE(NEW.device_id, NEW.id::TEXT),
+        NEW.device_name,
+        NEW.device_type,
+        NEW.device_model,
+        NEW.device_manufacturer,
+        NEW.device_os,
+        NEW.device_os_version,
+        NEW.fcm_token,
+        NEW.apns_token,
+        NEW.push_enabled,
+        TRUE,
+        TRUE,
+        NOW()
+    )
+    ON CONFLICT (user_id, device_id) DO UPDATE SET
+        device_name         = EXCLUDED.device_name,
+        device_type         = EXCLUDED.device_type,
+        device_model        = EXCLUDED.device_model,
+        device_manufacturer = EXCLUDED.device_manufacturer,
+        os_name             = EXCLUDED.os_name,
+        os_version          = EXCLUDED.os_version,
+        fcm_token           = EXCLUDED.fcm_token,
+        apns_token          = EXCLUDED.apns_token,
+        push_enabled        = EXCLUDED.push_enabled,
+        is_active           = TRUE,
+        is_current_device   = TRUE,
+        last_active_at      = NOW();
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

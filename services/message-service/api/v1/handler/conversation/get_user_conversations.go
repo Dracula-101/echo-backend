@@ -6,6 +6,7 @@ import (
 	"shared/pkg/utils"
 	"shared/server/request"
 	"shared/server/response"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -45,11 +46,11 @@ func (h *ConversationHandler) GetUserConversations(handler *request.RequestHandl
 				FirstName:   p.FirstName,
 				LastName:    p.LastName,
 				AvatarURL:   p.AvatarURL,
-				LastSeen: func() string {
+				LastSeen: func() *time.Time {
 					if p.LastSeenAt != nil {
-						return p.LastSeenAt.UTC().GoString()
+						return p.LastSeenAt
 					}
-					return ""
+					return nil
 				}(),
 				OnlineStatus: p.OnlineStatus,
 				IsVerified:   p.IsVerified,

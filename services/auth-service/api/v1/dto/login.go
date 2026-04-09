@@ -48,6 +48,11 @@ func (lr *LoginRequest) ValidateErrors(ve validator.ValidationErrors) ([]request
 					Code: request.INVALID_FORMAT,
 				})
 			}
+		case "FCMToken", "APNSToken":
+			errs = append(errs, request.ValidationErrorDetail{
+				Msg:  "Invalid token format",
+				Code: request.INVALID_FORMAT,
+			})
 		}
 	}
 	return errs, nil

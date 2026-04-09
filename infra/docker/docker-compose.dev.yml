@@ -420,7 +420,7 @@ services:
     image: echo/media-service:dev
     expose: [ "8085" ]
     environment:
-      <<: *env-full
+      <<: [ *env-full, *env-kafka ]
       SERVER_PORT: 8085
       CONFIG_PATH: /app/services/media-service/configs/config.yaml
       REDIS_DB: 3
@@ -430,6 +430,10 @@ services:
       ALLOWED_MIME_TYPES: image/jpeg,image/png,image/gif,video/mp4,audio/mpeg
       FEATURE_DEDUPLICATION_ENABLED: "true"
       FEATURE_COMPRESSION_ENABLED: "true"
+      KAFKA_ENABLED: "true"
+      KAFKA_TOPIC: media-events
+      KAFKA_CLIENT_ID: media-service
+      KAFKA_GROUP_ID: media-service-group
     volumes:
       - ${PWD}/services/media-service:/app/services/media-service
       - ${PWD}/shared:/app/shared:ro
@@ -437,7 +441,7 @@ services:
       - media-service-cache:/app/tmp
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-    depends_on: *depends-db
+    depends_on: *depends-full
     healthcheck:
       <<: *healthcheck
       test: [ "CMD", "curl", "-f", "http://localhost:8085/health" ]

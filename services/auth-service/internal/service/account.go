@@ -317,56 +317,6 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 	}, nil
 }
 
-func (s *AuthService) UpdateUserActiveDevice(ctx context.Context, userID string, input domain.UserDevice) (*domain.UserDevice, *error.AuthError) {
-	activeDevice, err := s.repo.GetUserActiveDevice(ctx, userID)
-	if err != nil {
-		return nil, &error.AuthError{
-			Message: "Failed to get user active device",
-			Code:    authErrors.CodeDatabaseError,
-			Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get user active device").
-				WithService(authErrors.ServiceName).
-				WithDetail("user_id", userID),
-		}
-	}
-
-	if activeDevice != nil && activeDevice.DeviceID != input.DeviceID {
-		s.log.Info("User logged in from a new device",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.String("old_device_id", activeDevice.DeviceID),
-			logger.String("new_device_id", input.DeviceID),
-		)
-	} else {
-		s.log.Debug("User logged in from existing device",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.String("device_id", input.DeviceID),
-		)
-		device, err := s.repo.UpdateUserDevice(ctx, userID, input.DeviceID, domain.UpdateUserDevice{
-			IsActive:        utils.PtrBool(true),
-			IsCurrentDevice: utils.PtrBool(true),
-			LastActiveAt:    utils.Ptr(time.Now()),
-		})
-		if err != nil {
-			return nil, &error.AuthError{
-				Message: "Failed to update user device",
-				Code:    authErrors.CodeDatabaseError,
-				Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update user device").
-					WithService(authErrors.ServiceName).
-					WithDetail("user_id", userID).
-					WithDetail("device_id", input.DeviceID),
-			}
-		}
-		s.log.Debug("User device updated successfully",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.String("device_id", input.DeviceID),
-		)
-		return device, nil
-	}
-	return &input, nil
-}
-
 func (s *AuthService) RecordFailedLoginAttempt(ctx context.Context, input domain.FailedLoginAttemptInput) *error.AuthError {
 
 	record := repoModels.CreateLoginHistoryInput{

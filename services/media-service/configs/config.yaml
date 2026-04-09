@@ -43,6 +43,17 @@ cache:
     max_retries: ${REDIS_MAX_RETRIES:3}
     pool_timeout: ${REDIS_POOL_TIMEOUT:4s}
 
+kafka:
+  brokers:
+    - ${KAFKA_BROKERS:localhost:9092}
+  topic: ${KAFKA_TOPIC:media-events}
+  client_id: ${KAFKA_CLIENT_ID:media-service}
+  group_id: ${KAFKA_GROUP_ID:media-delivery-group}
+  max_retries: ${KAFKA_MAX_RETRIES:5}
+  retry_backoff: ${KAFKA_RETRY_BACKOFF:500ms}
+  session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
+  heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}    
+
 storage:
   provider: ${STORAGE_PROVIDER:r2}
   bucket: ${STORAGE_BUCKET:echo-media}

@@ -3,42 +3,37 @@ package domain
 import (
 	db "shared/pkg/database/postgres/models"
 	"shared/pkg/utils"
+	"shared/server/request"
 	"time"
 )
 
 type UserDevice struct {
-	ID                 string
-	UserID             string
-	DeviceID           string
-	DeviceName         string
-	DeviceType         string
-	DeviceModel        string
-	DeviceManufacturer string
-	OSName             string
-	OSVersion          string
-	AppVersion         string
-	IsActive           bool
-	FCMToken           *string
-	APNSToken          *string
-	PushEnabled        bool
+	ID          string
+	UserID      string
+	DeviceInfo  request.DeviceInfo
+	IsActive    bool
+	FCMToken    *string
+	APNSToken   *string
+	PushEnabled bool
 }
 
 func NewUserDevice(model db.Device) *UserDevice {
 	return &UserDevice{
-		ID:                 model.ID,
-		UserID:             model.UserID,
-		DeviceID:           model.DeviceID,
-		DeviceName:         *utils.SafePtrString(model.DeviceName),
-		DeviceType:         *utils.SafePtrString(model.DeviceType),
-		DeviceModel:        *utils.SafePtrString(model.DeviceModel),
-		DeviceManufacturer: *utils.SafePtrString(model.DeviceManufacturer),
-		OSName:             *utils.SafePtrString(model.OSName),
-		OSVersion:          *utils.SafePtrString(model.OSVersion),
-		AppVersion:         *utils.SafePtrString(model.AppVersion),
-		IsActive:           model.IsActive,
-		FCMToken:           model.FCMToken,
-		APNSToken:          model.APNSToken,
-		PushEnabled:        model.PushEnabled,
+		ID:     model.ID,
+		UserID: model.UserID,
+		DeviceInfo: request.DeviceInfo{
+			Name:         utils.DerefString(model.DeviceName),
+			Type:         utils.DerefString(model.DeviceType),
+			OS:           utils.DerefString(model.OSName),
+			OsVersion:    utils.DerefString(model.OSVersion),
+			AppVersion:   utils.DerefString(model.AppVersion),
+			Model:        utils.DerefString(model.DeviceModel),
+			Manufacturer: utils.DerefString(model.DeviceManufacturer),
+		},
+		IsActive:    model.IsActive,
+		FCMToken:    model.FCMToken,
+		APNSToken:   model.APNSToken,
+		PushEnabled: model.PushEnabled,
 	}
 }
 

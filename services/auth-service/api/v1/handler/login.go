@@ -108,20 +108,6 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	device, _ := h.authService.UpdateUserActiveDevice(ctx, user.ID, domain.UserDevice{
-		UserID:      user.ID,
-		DeviceID:    deviceInfo.ID,
-		DeviceName:  deviceInfo.Name,
-		DeviceType:  deviceInfo.Type,
-		DeviceModel: deviceInfo.Model,
-		OSName:      deviceInfo.OS,
-		OSVersion:   deviceInfo.OsVersion,
-		AppVersion:  deviceInfo.AppVersion,
-		IsActive:    true,
-		FCMToken:    utils.SafePtrString(loginRequest.FCMToken),
-		APNSToken:   utils.SafePtrString(loginRequest.APNSToken),
-		PushEnabled: loginRequest.FCMToken != nil || loginRequest.APNSToken != nil,
-	})
 	session := &domain.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID, deviceInfo.ID)
 	if sessErr != nil {
@@ -160,12 +146,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			Metadata: map[string]any{
 				"request_id":     requestID,
 				"correlation_id": correlationID,
-				"device-id": func() string {
-					if device != nil {
-						return device.ID
-					}
-					return ""
-				}(),
+				"device-id":      deviceInfo.ID,
 			},
 		})
 		if err != nil {

@@ -17,8 +17,6 @@ type CreateProfileRequest struct {
 	LanguageCode string `json:"language_code" validate:"omitempty,len=2"`
 	Timezone     string `json:"timezone" validate:"omitempty"`
 	CountryCode  string `json:"country_code" validate:"omitempty,len=2"`
-	FCMToken     string `json:"fcm_token,omitempty" validate:"omitempty"`
-	APNSToken    string `json:"apns_token,omitempty" validate:"omitempty"`
 	PushEnabled  *bool  `json:"push_enabled,omitempty" validate:"omitempty"`
 }
 

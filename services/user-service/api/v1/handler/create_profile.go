@@ -85,9 +85,7 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		DeviceManufacturer: deviceInfo.Manufacturer,
 		OSName:             deviceInfo.OS,
 		OSVersion:          deviceInfo.OsVersion,
-		AppVersion:         deviceInfo.AppVersion,
-		FCMToken:           utils.PtrString(createProfileRequest.FCMToken),
-		APNSToken:          utils.PtrString(createProfileRequest.APNSToken),
+		AppVersion:         utils.PtrString(deviceInfo.AppVersion),
 		PushEnabled:        utils.DerefBool(createProfileRequest.PushEnabled),
 		IsActive:           true,
 	})

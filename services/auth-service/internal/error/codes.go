@@ -24,6 +24,7 @@ const (
 	CodeInvalidTwoFactorCode    = "AUTH_INVALID_2FA_CODE"
 	CodeEmailVerificationFailed = "AUTH_EMAIL_VERIFY_FAILED"
 	CodePhoneVerificationFailed = "AUTH_PHONE_VERIFY_FAILED"
+	CodeProfileIncomplete       = "AUTH_PROFILE_INCOMPLETE"
 
 	// Database Errors
 	CodeDatabaseError = "AUTH_DATABASE_ERROR"

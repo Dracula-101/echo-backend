@@ -103,6 +103,21 @@ func (r *FileRepository) UpdateFileProcessingStatus(ctx context.Context, fileID,
 			WithDetail("status", status)
 	}
 
+	// update the media.processing_queue if status is completed or failed
+	if status == "completed" || status == "failed" {
+		query = `
+			UPDATE media.processing_queue
+			SET status = $2::text, completed_at = NOW()
+			WHERE file_id = $1 AND status = 'queued'
+		`
+		_, err = r.db.Exec(ctx, query, fileID, status)
+		if err != nil {
+			return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update processing queue").
+				WithDetail("file_id", fileID).
+				WithDetail("status", status)
+		}
+	}
+
 	return nil
 }
 
@@ -126,6 +141,18 @@ func (r *FileRepository) UpdateImageMetadata(ctx context.Context, fileID string,
 	_, err := r.db.Exec(ctx, query, fileID, width, height, aspectRatio, hasThumbnail, thumbnailSmallURL, thumbnailMediumURL, thumbnailLargeURL)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update image metadata").
+			WithDetail("file_id", fileID)
+	}
+
+	// update the media.processing_queue
+	query = `
+		UPDATE media.processing_queue
+		SET status = 'completed', completed_at = NOW()
+		WHERE file_id = $1 AND status = 'processing'
+	`
+	_, err = r.db.Exec(ctx, query, fileID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update processing queue").
 			WithDetail("file_id", fileID)
 	}
 

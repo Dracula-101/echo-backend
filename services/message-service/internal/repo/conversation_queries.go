@@ -7,12 +7,12 @@ import (
 	"shared/pkg/database/postgres"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 )
 
-// GetUserConversations retrieves all active conversations for a user, with participant data and viewer-scoped metadata.
 func (r *conversationRepository) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, pkgErrors.AppError) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
@@ -30,36 +30,38 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 			c.last_activity_at,
 			c.created_at,
 			c.updated_at,
-			COUNT(cp_all.user_id) FILTER (
-				WHERE cp_all.left_at IS NULL AND cp_all.removed_at IS NULL
-			) AS member_count,
 			cp_viewer.role,
 			cp_viewer.unread_count,
 			cp_viewer.mention_count,
 			cp_viewer.is_muted,
 			cp_viewer.is_pinned,
-			cp_viewer.joined_at
+			cp_viewer.joined_at,
+			COALESCE(lm.content,      ''),
+			COALESCE(lm.message_type, ''),
+			COALESCE(lm.status,       ''),
+			COALESCE(lm.is_edited,    FALSE),
+			COALESCE(lm.is_deleted,   FALSE),
+			lm.id,
+			lm.sender_user_id,
+			lm.parent_message_id,
+			lm.created_at,
+			lm.updated_at,
+			lm.deleted_at,
+			lm.edited_at
 		FROM messages.conversations c
 		JOIN messages.conversation_participants cp_viewer
 			ON  cp_viewer.conversation_id = c.id
 			AND cp_viewer.user_id         = $1
 			AND cp_viewer.left_at         IS NULL
 			AND cp_viewer.removed_at      IS NULL
-		JOIN messages.conversation_participants cp_all
-			ON cp_all.conversation_id = c.id
+		LEFT JOIN messages.messages lm
+			ON lm.id = c.last_message_id
 		WHERE c.is_active  = TRUE
 		  AND c.deleted_at IS NULL
-		GROUP BY
-			c.id, c.conversation_type, c.title, c.description, c.avatar_url,
-			c.creator_user_id, c.is_encrypted, c.is_public, c.message_count,
-			c.last_message_id, c.last_message_at, c.last_activity_at,
-			c.created_at, c.updated_at,
-			cp_viewer.role, cp_viewer.unread_count, cp_viewer.mention_count,
-			cp_viewer.is_muted, cp_viewer.is_pinned, cp_viewer.joined_at
 		ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC
 	`, userID)
 	if err != nil {
-		r.logger.Error("Failed to get user conversations",
+		r.logger.Error("Failed to query user conversations",
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
@@ -74,8 +76,22 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 	)
 
 	for rows.Next() {
-		var c domain.Conversation
-		if scanErr := rows.Scan(
+		var (
+			c           domain.Conversation
+			lmID        *uuid.UUID
+			lmSenderID  *uuid.UUID
+			lmParentID  *uuid.UUID
+			lmContent   string
+			lmType      string
+			lmStatus    string
+			lmIsEdited  bool
+			lmIsDeleted bool
+			lmCreatedAt *time.Time
+			lmUpdatedAt *time.Time
+			lmDeletedAt *time.Time
+			lmEditedAt  *time.Time
+		)
+		if err := rows.Scan(
 			&c.ID,
 			&c.ConversationType,
 			&c.Title,
@@ -90,20 +106,50 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 			&c.LastActivityAt,
 			&c.CreatedAt,
 			&c.UpdatedAt,
-			&c.MemberCount,
 			&c.ViewerRole,
 			&c.UnreadCount,
 			&c.MentionCount,
 			&c.IsMuted,
 			&c.IsPinned,
 			&c.JoinedAt,
-		); scanErr != nil {
+			&lmContent,
+			&lmType,
+			&lmStatus,
+			&lmIsEdited,
+			&lmIsDeleted,
+			&lmID,
+			&lmSenderID,
+			&lmParentID,
+			&lmCreatedAt,
+			&lmUpdatedAt,
+			&lmDeletedAt,
+			&lmEditedAt,
+		); err != nil {
 			r.logger.Error("Failed to scan conversation",
 				logger.String("user_id", userID.String()),
-				logger.Error(scanErr),
+				logger.Error(err),
 			)
-			return nil, pkgErrors.FromError(scanErr, pkgErrors.CodeDatabaseError, "Failed to scan conversation")
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to scan conversation")
 		}
+
+		if lmID != nil {
+			c.LastMessage = &domain.Message{
+				ID:              *lmID,
+				ConversationID:  c.ID,
+				SenderUserID:    utils.DerefUUID(lmSenderID),
+				ParentMessageID: lmParentID,
+				Content:         lmContent,
+				MessageType:     domain.MessageType(lmType),
+				Status:          domain.MessageStatus(lmStatus),
+				IsEdited:        lmIsEdited,
+				IsDeleted:       lmIsDeleted,
+				CreatedAt:       utils.DerefTime(lmCreatedAt),
+				UpdatedAt:       utils.DerefTime(lmUpdatedAt),
+				DeletedAt:       lmDeletedAt,
+				EditedAt:        lmEditedAt,
+			}
+		}
+
 		convIndex[c.ID] = len(conversations)
 		convIDs = append(convIDs, c.ID.String())
 		conversations = append(conversations, c)
@@ -112,7 +158,7 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Row iteration error")
 	}
 
-	if len(convIDs) == 0 {
+	if len(conversations) == 0 {
 		return conversations, nil
 	}
 
@@ -133,23 +179,23 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 			cp.can_add_members,
 			cp.can_edit_info,
 			cp.can_delete_messages,
-			COALESCE(p.username,              ''),
-			COALESCE(p.display_name,          ''),
-			COALESCE(p.first_name,            ''),
-			COALESCE(p.last_name,             ''),
-			COALESCE(p.avatar_url,            ''),
-			COALESCE(p.avatar_thumbnail_url,  ''),
-			COALESCE(p.online_status,         'offline'),
+			COALESCE(p.username,             ''),
+			COALESCE(p.display_name,         ''),
+			COALESCE(p.first_name,           ''),
+			COALESCE(p.last_name,            ''),
+			COALESCE(p.avatar_url,           ''),
+			COALESCE(p.avatar_thumbnail_url, ''),
+			COALESCE(p.online_status,        'offline'),
 			p.last_seen_at,
-			COALESCE(p.is_verified,           FALSE)
+			COALESCE(p.is_verified, FALSE)
 		FROM messages.conversation_participants cp
 		LEFT JOIN users.profiles p ON p.user_id = cp.user_id
 		WHERE cp.conversation_id = ANY($1::uuid[])
-		AND cp.left_at         IS NULL
-		AND cp.removed_at      IS NULL
-	`, pq.Array(convIDs))
+		  AND cp.left_at         IS NULL
+		  AND cp.removed_at      IS NULL
+	`, convIDs)
 	if err != nil {
-		r.logger.Error("Failed to get participants",
+		r.logger.Error("Failed to query participants",
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
@@ -159,7 +205,7 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 
 	for pRows.Next() {
 		var p domain.ConversationParticipant
-		if scanErr := pRows.Scan(
+		if err := pRows.Scan(
 			&p.ID,
 			&p.ConversationID,
 			&p.UserID,
@@ -184,15 +230,16 @@ func (r *conversationRepository) GetUserConversations(ctx context.Context, userI
 			&p.OnlineStatus,
 			&p.LastSeenAt,
 			&p.IsVerified,
-		); scanErr != nil {
+		); err != nil {
 			r.logger.Error("Failed to scan participant",
 				logger.String("user_id", userID.String()),
-				logger.Error(scanErr),
+				logger.Error(err),
 			)
-			return nil, pkgErrors.FromError(scanErr, pkgErrors.CodeDatabaseError, "Failed to scan participant")
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to scan participant")
 		}
 		idx := convIndex[p.ConversationID]
 		conversations[idx].Participants = append(conversations[idx].Participants, p)
+		conversations[idx].MemberCount++
 	}
 	if err := pRows.Err(); err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Participant row iteration error")

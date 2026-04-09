@@ -79,8 +79,8 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		PhoneNumber:      reqBody.PhoneNumber,
 		PhoneCountryCode: reqBody.PhoneCountryCode,
 		IPAddress:        clientIp,
-		UserAgent:        handler.GetUserAgent(),
 		AcceptTerms:      reqBody.AcceptTerms,
+		UserAgent:        handler.GetUserAgent(),
 	})
 	if authErr != nil {
 		if authErr.Code == authErrors.CodePasswordTooWeak || authErr.Code == authErrors.CodeInvalidEmail {

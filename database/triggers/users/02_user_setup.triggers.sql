@@ -6,12 +6,12 @@
 --            the users schema when a new user is created
 --            in auth.users. Every new user gets:
 --              - A starter profile (users.profiles)
---              - A placeholder device (users.devices)
+--              - A device record (users.devices) to associate sessions with a device even before they log in from it
 --              - Default settings (users.settings)
 --
 -- Depends:   functions/users.trigger_functions.sql
 --              -> users.create_default_profile()
---              -> users.create_default_device()
+--              -> users.create_device_from_session()
 --              -> users.create_default_settings()
 --
 -- Tables:    auth.users    (source — fires on INSERT)
@@ -32,13 +32,13 @@ CREATE TRIGGER trigger_auth_users_create_profile
     FOR EACH ROW
     EXECUTE FUNCTION users.create_default_profile();
 
--- Create a placeholder device record for every new user.
--- The real device info is registered via users.register_device()
--- on first login from a device.
-CREATE TRIGGER trigger_auth_users_create_device
-    AFTER INSERT ON auth.users
+-- Create a device record with the user_id for every new user. This
+-- allows us to associate sessions with a device even if the user logs in
+-- from a new device that doesn't exist in users.devices yet.
+CREATE TRIGGER trigger_session_create_device
+    AFTER INSERT ON auth.sessions
     FOR EACH ROW
-    EXECUTE FUNCTION users.create_default_device();
+    EXECUTE FUNCTION users.create_device_from_session();
 
 -- Create a default settings row with all columns at their
 -- DEFAULT values for every new user.
