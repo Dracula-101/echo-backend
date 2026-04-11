@@ -306,16 +306,18 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile domain.Profi
 
 // UpdateProfile updates a user profile
 type UpdateProfileParams struct {
-	UserID       string
-	Username     *string
-	DisplayName  *string
-	FirstName    *string
-	LastName     *string
-	Bio          *string
-	AvatarURL    *string
-	LanguageCode *string
-	Timezone     *string
-	CountryCode  *string
+	UserID             string
+	Username           *string
+	DisplayName        *string
+	FirstName          *string
+	LastName           *string
+	Bio                *string
+	AvatarURL          *string
+	AvatarThumbnailURL *string
+	CoverImageURL      *string
+	LanguageCode       *string
+	Timezone           *string
+	CountryCode        *string
 }
 
 func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfileParams) (*domain.Profile, error) {
@@ -357,6 +359,16 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 	if params.AvatarURL != nil {
 		setClauses = append(setClauses, fmt.Sprintf("avatar_url = $%d", argPos))
 		args = append(args, *params.AvatarURL)
+		argPos++
+	}
+	if params.AvatarThumbnailURL != nil {
+		setClauses = append(setClauses, fmt.Sprintf("avatar_thumbnail_url = $%d", argPos))
+		args = append(args, *params.AvatarThumbnailURL)
+		argPos++
+	}
+	if params.CoverImageURL != nil {
+		setClauses = append(setClauses, fmt.Sprintf("cover_image_url = $%d", argPos))
+		args = append(args, *params.CoverImageURL)
 		argPos++
 	}
 	if params.LanguageCode != nil {

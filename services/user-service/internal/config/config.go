@@ -8,6 +8,7 @@ type Config struct {
 	Server        ServerConfig        `yaml:"server" mapstructure:"server"`
 	Database      DatabaseConfig      `yaml:"database" mapstructure:"database"`
 	Cache         CacheConfig         `yaml:"cache" mapstructure:"cache"`
+	Kafka         KafkaConfig         `yaml:"kafka" mapstructure:"kafka"`
 	Security      SecurityConfig      `yaml:"security" mapstructure:"security"`
 	Logging       LoggingConfig       `yaml:"logging" mapstructure:"logging"`
 	Observability ObservabilityConfig `yaml:"observability" mapstructure:"observability"`
@@ -76,6 +77,18 @@ type RedisConfig struct {
 	RedisMinIdleConns int           `yaml:"min_idle_conns" mapstructure:"min_idle_conns"`
 	RedisMaxRetries   int           `yaml:"max_retries" mapstructure:"max_retries"`
 	RedisPoolTimeout  time.Duration `yaml:"pool_timeout" mapstructure:"pool_timeout"`
+}
+
+// KafkaConfig contains Kafka configuration
+type KafkaConfig struct {
+	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
+	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	GroupID           string        `yaml:"group_id" mapstructure:"group_id"`
+	MaxRetries        int           `yaml:"max_retries" mapstructure:"max_retries"`
+	RetryBackoff      time.Duration `yaml:"retry_backoff" mapstructure:"retry_backoff"`
+	SessionTimeout    time.Duration `yaml:"session_timeout" mapstructure:"session_timeout"`
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval" mapstructure:"heartbeat_interval"`
 }
 
 // SecurityConfig contains security configuration

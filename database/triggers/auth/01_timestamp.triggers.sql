@@ -9,7 +9,6 @@
 --              -> auth.update_updated_at_column()
 --
 -- Tables:    auth.users
---            auth.sessions
 --            auth.oauth_providers
 --            auth.api_keys
 --
@@ -19,12 +18,6 @@
 -- Keep updated_at current on auth.users whenever any column is modified
 CREATE TRIGGER trigger_auth_users_updated_at
     BEFORE UPDATE ON auth.users
-    FOR EACH ROW
-    EXECUTE FUNCTION auth.update_updated_at_column();
-
--- Keep updated_at current on auth.sessions (e.g. on refresh or activity)
-CREATE TRIGGER trigger_auth_sessions_updated_at
-    BEFORE UPDATE ON auth.sessions
     FOR EACH ROW
     EXECUTE FUNCTION auth.update_updated_at_column();
 

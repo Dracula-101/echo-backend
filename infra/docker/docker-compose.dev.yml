@@ -308,11 +308,14 @@ services:
     image: echo/user-service:dev
     expose: [ "8082" ]
     environment:
-      <<: *env-full
+      <<: [ *env-full, *env-kafka ]
       SERVER_PORT: 8082
       CONFIG_PATH: /app/services/user-service/configs/config.yaml
       REDIS_DB: 2
       LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+      KAFKA_TOPIC: media-events
+      KAFKA_CLIENT_ID: media-service
+      KAFKA_GROUP_ID: media-service-group
     volumes:
       - ${PWD}/services/user-service:/app/services/user-service
       - ${PWD}/shared:/app/shared:ro

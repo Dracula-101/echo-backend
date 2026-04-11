@@ -162,12 +162,17 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			logger.String("user_id", userResult.User.ID),
 			logger.String("session_id", activeSession.ID),
 		)
-		sessionData, _ := h.sessionService.UpdateSession(ctx, userResult.User.ID, activeSession.ID, domain.UpdateSession{
+		sessionData, dbErr := h.sessionService.UpdateSession(ctx, userResult.User.ID, activeSession.ID, domain.UpdateSession{
 			FCMToken:    utils.SafePtrString(loginRequest.FCMToken),
 			APNSToken:   utils.SafePtrString(loginRequest.APNSToken),
 			RevokedAt:   nil,
 			PushEnabled: utils.PtrBool(utils.DerefString(loginRequest.FCMToken) != "" || utils.DerefString(loginRequest.APNSToken) != ""),
 		})
+		if dbErr != nil {
+			h.log.Error("Failed to update session tokens", logger.Error(dbErr))
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to update session tokens", dbErr)
+			return
+		}
 		h.log.Info("Session tokens updated successfully",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),

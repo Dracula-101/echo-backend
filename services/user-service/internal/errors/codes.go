@@ -35,4 +35,8 @@ const (
 	ErrCodeUnauthorized    = "UNAUTHORIZED"
 	ErrCodeForbidden       = "FORBIDDEN"
 	ErrCodeValidationError = "VALIDATION_ERROR"
+
+	// Consumer errors
+	ErrCodeConsumerStartFailed = "CONSUMER_START_FAILED"
+	ErrCodeConsumerCloseFailed = "CONSUMER_CLOSE_FAILED"
 )

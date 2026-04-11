@@ -16,6 +16,7 @@ type UserServiceInterface interface {
 	CreateProfile(ctx context.Context, profile *domain.CreateProfileInput) (*domain.User, error)
 	AddUserDevice(ctx context.Context, input *domain.UserDevice) error
 	GenerateUsername(ctx context.Context, displayName string) (string, error)
+	AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) error
 }
 
 // Compile-time interface compliance check

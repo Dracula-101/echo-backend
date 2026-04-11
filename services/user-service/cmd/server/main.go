@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"user-service/api/v1/handler"
 	"user-service/internal/config"
+	"user-service/internal/consumer"
 	"user-service/internal/health"
 	"user-service/internal/health/checkers"
 	repository "user-service/internal/repo"
@@ -16,6 +17,8 @@ import (
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
+	"shared/pkg/messaging"
+	"shared/pkg/messaging/kafka"
 
 	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/common/token"
@@ -116,6 +119,39 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
+func createConsumer(cfg *config.Config, userRepo repository.UserRepository, log logger.Logger) (*consumer.MediaEventsConsumer, error) {
+	log.Debug("Creating messaging consumer - configuration",
+		logger.Any("brokers", cfg.Kafka.Brokers),
+		logger.String("topic", cfg.Kafka.Topic),
+		logger.String("groupID", cfg.Kafka.GroupID),
+	)
+	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+		Brokers:           cfg.Kafka.Brokers,
+		GroupID:           cfg.Kafka.GroupID,
+		ClientID:          cfg.Kafka.ClientID,
+		MaxRetries:        cfg.Kafka.MaxRetries,
+		RetryBackoff:      cfg.Kafka.RetryBackoff,
+		SessionTimeout:    cfg.Kafka.SessionTimeout,
+		HeartbeatInterval: cfg.Kafka.HeartbeatInterval,
+	})
+	if err != nil {
+		log.Error("Failed to create messaging consumer", logger.Error(err))
+		return nil, err
+	}
+	mediaConsumer := consumer.NewMediaEventConsumer(kafkaConsumer, cfg.Kafka, userRepo, log)
+	log.Info("Messaging consumer created successfully")
+
+	// start the consumer
+	go func() {
+		if err := mediaConsumer.Start(context.Background()); err != nil {
+			log.Error("Failed to start media event consumer", logger.Error(err))
+		} else {
+			log.Info("Media event consumer started successfully")
+		}
+	}()
+	return &mediaConsumer, nil
+}
+
 func createTokenService(cfg *config.Config, log logger.Logger) *token.JWTTokenService {
 	keyset, err := token.NewStaticKeySet([]byte(cfg.JWT.SecretKey))
 	if err != nil {
@@ -150,7 +186,6 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 		healthMgr.RegisterChecker(checkers.NewCacheChecker(cacheClient))
 		healthMgr.RegisterChecker(checkers.NewCachePerformanceChecker(cacheClient))
 	}
-
 	return healthMgr
 }
 
@@ -267,10 +302,46 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, dbClient database.Database, cacheClient cache.Cache, consumer consumer.MediaEventsConsumer, log logger.Logger, cfg *config.Config) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
+	)
+
+	shutdownMgr.RegisterWithPriority(
+		"close-database",
+		shutdown.Hook(func(ctx context.Context) error {
+			if dbClient != nil {
+				log.Info("Closing database connection")
+				return dbClient.Close()
+			}
+			return nil
+		}),
+		shutdown.PriorityHigh,
+	)
+
+	shutdownMgr.RegisterWithPriority(
+		"close-cache",
+		shutdown.Hook(func(ctx context.Context) error {
+			if cacheClient != nil && cfg.Cache.Enabled {
+				log.Info("Closing cache connection")
+				return cacheClient.Close()
+			}
+			return nil
+		}),
+		shutdown.PriorityHigh,
+	)
+
+	shutdownMgr.RegisterWithPriority(
+		"close-messaging-consumer",
+		shutdown.Hook(func(ctx context.Context) error {
+			if consumer != nil {
+				log.Info("Closing messaging consumer")
+				return consumer.Close()
+			}
+			return nil
+		}),
+		shutdown.PriorityHigh,
 	)
 
 	shutdownMgr.RegisterWithPriority(
@@ -365,8 +436,16 @@ func main() {
 		log.Fatal("Failed to build services", logger.Error(buildErr))
 	}
 
-	searchService := service.NewSearchService(userRepo, log)
+	var consumer *consumer.MediaEventsConsumer
+	consumer, err = createConsumer(cfg, *userRepo, log)
+	if err != nil {
+		log.Fatal("Failed to create messaging consumer", logger.Error(err))
+	}
+	if consumer == nil {
+		log.Fatal("Messaging consumer is nil after creation")
+	}
 
+	searchService := service.NewSearchService(userRepo, log)
 	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
@@ -392,7 +471,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, dbClient, cacheClient, *consumer, log, cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {

@@ -197,7 +197,7 @@ func (r *SessionRepo) UpdateSession(ctx context.Context, session *domain.UpdateA
 	metaData := make(map[string]interface{})
 	json.Unmarshal(*updatedSession.Metadata, &metaData)
 
-	r.log.Debug("Session updated successfully",
+	r.log.Info("Session updated successfully",
 		logger.String("session_id", session.ID),
 	)
 	return &domain.Session{

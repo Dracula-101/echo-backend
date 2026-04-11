@@ -229,9 +229,9 @@ func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessi
 		logger.String("session_id", sessionID),
 	)
 	// Save updated session
-	session, err := s.repo.UpdateSession(ctx, &update)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, authErrors.CodeSessionUpdateFailed, "failed to update session in database").
+	session, dbErr := s.repo.UpdateSession(ctx, &update)
+	if dbErr != nil {
+		return nil, pkgErrors.FromError(dbErr, authErrors.CodeSessionUpdateFailed, "failed to update session in database").
 			WithService(authErrors.ServiceName).
 			WithDetail("session_id", sessionID)
 	}

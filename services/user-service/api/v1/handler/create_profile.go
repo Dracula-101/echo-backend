@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 	"shared/pkg/logger"
-	"shared/pkg/utils"
 	req "shared/server/request"
 	"shared/server/response"
 	"user-service/api/v1/dto"
@@ -73,32 +72,6 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 		h.log.Error("failed to create profile", logger.String("user_id", userId), logger.Error(err))
 		response.InternalServerError(ctx, r, w, "Failed to create profile", err)
 		return
-	}
-
-	deviceInfo := handler.GetDeviceInfo()
-	deviceErr := h.service.AddUserDevice(ctx, &domain.UserDevice{
-		UserID:             userId,
-		DeviceID:           deviceInfo.ID,
-		DeviceName:         deviceInfo.Name,
-		DeviceType:         deviceInfo.Type,
-		DeviceModel:        deviceInfo.Model,
-		DeviceManufacturer: deviceInfo.Manufacturer,
-		OSName:             deviceInfo.OS,
-		OSVersion:          deviceInfo.OsVersion,
-		AppVersion:         utils.PtrString(deviceInfo.AppVersion),
-		PushEnabled:        utils.DerefBool(createProfileRequest.PushEnabled),
-		IsActive:           true,
-	})
-	h.log.Debug("adding user device info",
-		logger.String("user_id", userId),
-		logger.String("device_id", deviceInfo.ID),
-	)
-	if deviceErr != nil {
-		h.log.Error("failed to add user device info",
-			logger.String("user_id", userId),
-			logger.String("device_id", deviceInfo.ID),
-			logger.Error(deviceErr),
-		)
 	}
 
 	response.JSONWithMessage(ctx, r, w, http.StatusCreated, "Profile created successfully", dto.CreateProfileResponse{

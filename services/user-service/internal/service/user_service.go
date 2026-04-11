@@ -260,3 +260,29 @@ func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 
 	return nil
 }
+
+func (s *UserService) AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) error {
+	s.log.Info("Adding profile thumbnail",
+		logger.String("user_id", userID),
+		logger.String("thumbnail_url", thumbnailURL),
+	)
+
+	_, err := s.repo.UpdateProfile(ctx, repository.UpdateProfileParams{
+		UserID:    userID,
+		AvatarURL: &thumbnailURL,
+	})
+	if err != nil {
+		s.log.Error("Failed to add profile thumbnail",
+			logger.String("user_id", userID),
+			logger.String("thumbnail_url", thumbnailURL),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	s.log.Info("Profile thumbnail added successfully",
+		logger.String("user_id", userID),
+		logger.String("thumbnail_url", thumbnailURL),
+	)
+	return nil
+}
