@@ -29,6 +29,19 @@ type MessageServiceInterface interface {
 	GetMessagesAfter(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*domain.Message, bool, *msgError.MessageError)
 	GetMessageByID(ctx context.Context, messageID string) (*domain.Message, *msgError.MessageError)
 
+	// Message mutations
+	EditMessage(ctx context.Context, messageID string, userID string, newContent string) (*domain.Message, *msgError.MessageError)
+	DeleteMessage(ctx context.Context, messageID string, userID string, deleteForEveryone bool) *msgError.MessageError
+	ForwardMessage(ctx context.Context, messageID string, userID string, targetConversationID string, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MessageError)
+	PinMessage(ctx context.Context, messageID string, userID string) *msgError.MessageError
+	UnpinMessage(ctx context.Context, messageID string, userID string) *msgError.MessageError
+	GetPinnedMessages(ctx context.Context, conversationID string) ([]*domain.Message, *msgError.MessageError)
+	MarkAsRead(ctx context.Context, messageID string, userID string) *msgError.MessageError
+	GetDeliveryStatus(ctx context.Context, messageID string, userID string) (*domain.DeliveryStatusSummary, *msgError.MessageError)
+	SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MessageError)
+	SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MessageError)
+	GetThread(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MessageError)
+
 	// Event processing
 	ProcessChatMessage(ctx context.Context, event *domain.ChatMessageEvent) pkgErrors.AppError
 	ProcessChatMessages(ctx context.Context, events []*domain.ChatMessageEvent) pkgErrors.AppError

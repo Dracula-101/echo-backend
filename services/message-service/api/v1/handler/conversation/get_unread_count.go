@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// UnmuteConversation unmutes notifications for a conversation
-func (h *ConversationHandler) UnmuteConversation(handler *request.RequestHandler) {
+// GetUnreadCount retrieves the unread message count for a conversation
+func (h *ConversationHandler) GetUnreadCount(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
 	userID, ok := request.GetUserIDFromContext(ctx)
@@ -29,17 +29,22 @@ func (h *ConversationHandler) UnmuteConversation(handler *request.RequestHandler
 		return
 	}
 
-	h.log.Debug("Unmuting conversation",
+	h.log.Debug("Getting unread count",
 		logger.String("user_id", userID),
 		logger.String("conversation_id", conversationID),
 	)
 
-	svcErr := h.conversationService.UnmuteConversation(ctx, convUUID, uuid.MustParse(userID))
+	count, svcErr := h.conversationService.GetUnreadCount(ctx, convUUID, uuid.MustParse(userID))
 	if svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Conversation unmuted successfully", nil)
+		response.StatusOK, "Unread count retrieved",
+		map[string]interface{}{
+			"conversation_id": conversationID,
+			"unread_count":    count,
+		},
+	)
 }

@@ -22,9 +22,9 @@ import (
 	adapter "shared/pkg/logger/adapter"
 	"shared/pkg/messaging"
 	"shared/pkg/messaging/kafka"
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	env "shared/server/env"
 	"shared/server/middleware"
-	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -233,6 +233,7 @@ func setupAPIRoutes(
 		r.Post("/", request.Adapt(messageHandler.SendMessage))
 		r.Get("/", request.Adapt(messageHandler.GetMessages))
 		r.Post("/search", request.Adapt(messageHandler.SearchMessages))
+		r.Get("/sync", request.Adapt(messageHandler.SyncMessages))
 		r.Get("/{id}", request.Adapt(messageHandler.GetMessageByID))
 		r.Put("/{id}", request.Adapt(messageHandler.EditMessage))
 		r.Delete("/{id}", request.Adapt(messageHandler.DeleteMessage))
@@ -244,6 +245,11 @@ func setupAPIRoutes(
 		r.Post("/{id}/forward", request.Adapt(messageHandler.ForwardMessage))
 		r.Post("/{id}/pin", request.Adapt(messageHandler.PinMessage))
 		r.Delete("/{id}/pin", request.Adapt(messageHandler.UnpinMessage))
+		r.Get("/{id}/thread", request.Adapt(messageHandler.GetThread))
+		r.Post("/{id}/bookmark", request.Adapt(messageHandler.BookmarkMessage))
+		r.Delete("/{id}/bookmark", request.Adapt(messageHandler.RemoveBookmark))
+		r.Get("/bookmarks", request.Adapt(messageHandler.GetBookmarks))
+		r.Post("/{id}/report", request.Adapt(messageHandler.ReportMessage))
 	})
 
 	// Poll endpoints
@@ -266,6 +272,22 @@ func setupAPIRoutes(
 		r.Get("/conversations/{id}/pinned", request.Adapt(conversationHandler.GetPinnedMessages))
 		r.Post("/conversations/{id}/mute", request.Adapt(conversationHandler.MuteConversation))
 		r.Delete("/conversations/{id}/mute", request.Adapt(conversationHandler.UnmuteConversation))
+		r.Get("/conversations/{id}/unread", request.Adapt(conversationHandler.GetUnreadCount))
+		r.Post("/conversations/{id}/typing", request.Adapt(conversationHandler.SetTypingIndicator))
+		r.Get("/conversations/{id}/typing", request.Adapt(conversationHandler.GetTypingUsers))
+		r.Put("/conversations/{id}/draft", request.Adapt(conversationHandler.SaveDraft))
+		r.Get("/conversations/{id}/draft", request.Adapt(conversationHandler.GetDraft))
+		r.Delete("/conversations/{id}/draft", request.Adapt(conversationHandler.DeleteDraft))
+		r.Get("/conversations/{id}/settings", request.Adapt(conversationHandler.GetSettings))
+		r.Put("/conversations/{id}/settings", request.Adapt(conversationHandler.UpdateSettings))
+		r.Post("/conversations/{id}/invites", request.Adapt(conversationHandler.CreateInvite))
+		r.Get("/conversations/{id}/invites", request.Adapt(conversationHandler.GetConversationInvites))
+		r.Delete("/conversations/{id}/invites/{invite_id}", request.Adapt(conversationHandler.RevokeInvite))
+	})
+
+	// Invite accept endpoint (separate from conversation routes)
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Post("/invites/{code}/accept", request.Adapt(conversationHandler.AcceptInvite))
 	})
 	log.Debug("API routes registered successfully")
 	return builder
@@ -481,20 +503,32 @@ func main() {
 	userRepo := repo.NewUserRepository(dbClient)
 	reactionRepo := repo.NewReactionRepository(dbClient, cacheClient, log)
 	pollRepo := repo.NewPollRepository(dbClient, cacheClient, log)
+	typingRepo := repo.NewTypingRepository(dbClient, log)
+	draftRepo := repo.NewDraftRepository(dbClient, log)
+	bookmarkRepo := repo.NewBookmarkRepository(dbClient, log)
+	settingsRepo := repo.NewConversationSettingsRepository(dbClient, log)
+	inviteRepo := repo.NewInviteRepository(dbClient, log)
+	reportRepo := repo.NewReportRepository(dbClient, log)
 
 	// Initialize event publisher
 	eventPublisher := service.NewKafkaEventPublisher(kafkaProducer, log)
 
 	// Initialize services
 	messageService := service.NewMessageService(messageRepo, deliveryRepo, conversationRepo, userRepo, eventPublisher, cacheClient, log)
-	conversationService := service.NewConversationService(conversationRepo, log)
+	conversationService := service.NewConversationService(conversationRepo, eventPublisher, log)
 	deliveryService := service.NewDeliveryService(deliveryRepo, log)
 	reactionService := service.NewReactionService(reactionRepo, messageRepo, conversationRepo, eventPublisher, log)
 	pollService := service.NewPollService(pollRepo, messageRepo, conversationRepo, eventPublisher, log)
+	typingService := service.NewTypingService(typingRepo, eventPublisher, log)
+	draftService := service.NewDraftService(draftRepo, log)
+	bookmarkService := service.NewBookmarkService(bookmarkRepo, log)
+	settingsService := service.NewConversationSettingsService(settingsRepo, log)
+	inviteService := service.NewInviteService(inviteRepo, conversationRepo, log)
+	reportService := service.NewReportService(reportRepo, log)
 
 	// Initialize handlers
-	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, log)
-	conversationHandler := conversationHandler.NewConversationHandler(conversationService, log)
+	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, bookmarkService, reportService, log)
+	conversationHandler := conversationHandler.NewConversationHandler(conversationService, messageService, typingService, draftService, settingsService, inviteService, log)
 	healthHandler := health.NewHandler(healthMgr)
 	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)
 	deliveryEventConsumer := consumer.NewDeliveryEventConsumer(deliveryService, log)

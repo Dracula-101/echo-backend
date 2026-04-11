@@ -370,7 +370,11 @@ func (m *Manager) HandleMessage(ctx context.Context, conn *connection.Connection
 	var msg protocol.ClientMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		m.errorCounter.Add(1)
-		m.log.Error("Failed to parse message", logger.Error(err))
+		m.log.Error("Failed to parse message",
+			logger.String("conn_id", conn.ID()),
+			logger.String("raw_data", string(data)),
+			logger.Error(err),
+		)
 		if m.metrics != nil {
 			m.metrics.OnError(string(protocol.ErrCodeInvalidJSON))
 		}

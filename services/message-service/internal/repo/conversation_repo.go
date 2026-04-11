@@ -22,6 +22,15 @@ type ConversationRepository interface {
 	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, pkgErrors.AppError)
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, pkgErrors.AppError)
 	ValidateConversationParticipant(conversationID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
+	UpdateConversation(ctx context.Context, conversationID uuid.UUID, input domain.UpdateConversationInput) pkgErrors.AppError
+	SoftDeleteConversation(ctx context.Context, conversationID uuid.UUID) pkgErrors.AppError
+	AddParticipants(ctx context.Context, conversationID uuid.UUID, participantIDs []uuid.UUID, invitedByUserID uuid.UUID) pkgErrors.AppError
+	RemoveParticipant(ctx context.Context, conversationID uuid.UUID, participantID uuid.UUID, removedByUserID uuid.UUID) pkgErrors.AppError
+	UpdateParticipantRole(ctx context.Context, conversationID uuid.UUID, participantID uuid.UUID, role string) pkgErrors.AppError
+	MuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, muteUntil *time.Time) pkgErrors.AppError
+	UnmuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) pkgErrors.AppError
+	GetUnreadCount(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (int, pkgErrors.AppError)
+	GetConversationType(ctx context.Context, conversationID uuid.UUID) (string, pkgErrors.AppError)
 }
 
 type conversationRepository struct {

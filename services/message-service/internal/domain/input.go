@@ -128,3 +128,38 @@ type GetDeliveryStatusInput struct {
 	MessageID uuid.UUID
 	UserID    *uuid.UUID // If nil, get all statuses for message
 }
+
+// UpdateConversationInput contains data for updating a conversation
+type UpdateConversationInput struct {
+	Title       *string
+	Description *string
+	AvatarURL   *string
+	IsPublic    *bool
+}
+
+// HasChanges checks if any field is set
+func (i *UpdateConversationInput) HasChanges() bool {
+	return i.Title != nil || i.Description != nil || i.AvatarURL != nil || i.IsPublic != nil
+}
+
+// ForwardMessageInput contains data for forwarding a message
+type ForwardMessageInput struct {
+	MessageID            uuid.UUID
+	UserID               uuid.UUID
+	TargetConversationID uuid.UUID
+}
+
+// MuteConversationInput contains data for muting a conversation
+type MuteConversationInput struct {
+	ConversationID uuid.UUID
+	UserID         uuid.UUID
+	MuteUntil      *time.Time
+}
+
+// UpdateParticipantRoleInput contains data for updating a participant's role
+type UpdateParticipantRoleInput struct {
+	ConversationID uuid.UUID
+	CallerUserID   uuid.UUID
+	TargetUserID   uuid.UUID
+	NewRole        string
+}

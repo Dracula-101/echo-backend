@@ -12,8 +12,11 @@ const (
 	MessageEventTypeFailed    MessageEventType = "message.failed"
 	MessageEventReactionAdded MessageEventType = "message.reaction_added"
 	MessageEventReactionRemoved MessageEventType = "message.reaction_removed"
-	MessageEventPollCreated   MessageEventType = "message.poll_created"
-	MessageEventPollVoted     MessageEventType = "message.poll_voted"
+	MessageEventPollCreated     MessageEventType = "message.poll_created"
+	MessageEventPollVoted       MessageEventType = "message.poll_voted"
+	MessageEventTypePinned      MessageEventType = "message.pinned"
+	MessageEventTypeUnpinned    MessageEventType = "message.unpinned"
+	MessageEventTypeForwarded   MessageEventType = "message.forwarded"
 )
 
 // ConversationEventType represents the type of conversation event

@@ -15,16 +15,26 @@ type ConversationService interface {
 	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MessageError)
 	GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MessageError)
 	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MessageError)
+	UpdateConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input domain.UpdateConversationInput) (*domain.Conversation, *msgError.MessageError)
+	DeleteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError
+	AddParticipants(ctx context.Context, input domain.AddParticipantsInput) *msgError.MessageError
+	RemoveParticipant(ctx context.Context, input domain.RemoveParticipantInput) *msgError.MessageError
+	UpdateParticipantRole(ctx context.Context, input domain.UpdateParticipantRoleInput) *msgError.MessageError
+	MuteConversation(ctx context.Context, input domain.MuteConversationInput) *msgError.MessageError
+	UnmuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError
+	GetUnreadCount(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (int, *msgError.MessageError)
 }
 
 type conversationService struct {
 	conversationRepo repo.ConversationRepository
+	eventPublisher   EventPublisher
 	logger           logger.Logger
 }
 
-func NewConversationService(conversationRepo repo.ConversationRepository, log logger.Logger) ConversationService {
+func NewConversationService(conversationRepo repo.ConversationRepository, eventPublisher EventPublisher, log logger.Logger) ConversationService {
 	return &conversationService{
 		conversationRepo: conversationRepo,
+		eventPublisher:   eventPublisher,
 		logger:           log,
 	}
 }
