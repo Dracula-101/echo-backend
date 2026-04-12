@@ -47,7 +47,7 @@ func (h *MessageHandler) VotePoll(handler *request.RequestHandler) {
 			return
 		}
 		optID := uuid.MustParse(options[idx].ID)
-		
+
 		input := domain.VotePollInput{
 			PollID:   pollID,
 			OptionID: optID,

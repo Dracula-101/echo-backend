@@ -11,6 +11,7 @@ import (
 	repoModels "auth-service/internal/repo/model"
 
 	"shared/pkg/database/postgres"
+	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -48,6 +49,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		ExpiresIn: 24 * time.Hour,
 		Metadata: map[string]interface{}{
 			"purpose": "email_verification",
+			"email":   input.Email,
 		},
 		Audience: []string{"auth_service_email_verification"},
 	})
@@ -75,6 +77,8 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		PhoneCountryCode:  input.PhoneCountryCode,
 		IPAddress:         input.IPAddress,
 		UserAgent:         input.UserAgent,
+		Country:           input.Country,
+		AppVersion:        input.AppVersion,
 	})
 
 	if err != nil {
@@ -87,61 +91,19 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		}
 	}
 
-	// generate tokens
-	accessToken, tokenErr := s.tokenService.IssueAccessToken(ctx, userID, token.IssueOptions{
-		ExpiresIn: s.cfg.JWT.AccessTokenTTL,
-		Metadata: map[string]interface{}{
-			"purpose": "access_token",
-			"user_id": userID,
-			"email":   input.Email,
-		},
-		Audience: []string{s.cfg.JWT.Audience},
-	})
-	if tokenErr != nil {
-		return nil, &error.AuthError{
-			Message: "Failed to generate token",
-			Code:    authErrors.CodeTokenGenerationFailed,
-			Error: pkgErrors.FromError(tokenErr, authErrors.CodeTokenGenerationFailed, "failed to generate access token").
-				WithService(authErrors.ServiceName).
-				WithDetail("user_id", userID).
-				WithDetail("email", input.Email).
-				WithDetail("purpose", "access_token"),
-		}
-	}
-
-	refreshToken, refreshErr := s.tokenService.IssueRefreshToken(ctx, userID, token.IssueOptions{
-		ExpiresIn: s.cfg.JWT.RefreshTokenTTL,
-		Metadata: map[string]interface{}{
-			"purpose": "refresh_token",
-		},
-		Audience: []string{s.cfg.JWT.Audience},
-	})
-	if refreshErr != nil {
-		return nil, &error.AuthError{
-			Message: "Failed to generate token",
-			Code:    authErrors.CodeTokenGenerationFailed,
-			Error: pkgErrors.FromError(refreshErr, authErrors.CodeTokenGenerationFailed, "failed to generate refresh token").
-				WithService(authErrors.ServiceName).
-				WithDetail("user_id", userID).
-				WithDetail("email", input.Email).
-				WithDetail("purpose", "refresh_token"),
-		}
-	}
-
 	s.log.Info("User registered successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 		logger.String("email", input.Email),
 	)
-
 	return &domain.RegisterUserOutput{
-		UserID:                userID,
-		Email:                 input.Email,
-		EmailVerificationSent: true,
-		VerificationToken:     tokenResult.Token,
-		AccessToken:           accessToken.Token,
-		RefreshToken:          refreshToken.Token,
-		ExpiresIn:             accessToken.Claims.IssuedAt.Add(s.cfg.JWT.AccessTokenTTL),
+		UserID:                  userID,
+		Email:                   input.Email,
+		EmailVerified:           false,
+		PhoneVerified:           false,
+		AccountStatus:           models.AccountStatusPending.String(),
+		NextStep:                "verify_email",
+		VerificationEmailSentTo: &input.Email,
 	}, nil
 }
 
@@ -200,23 +162,6 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 					WithDetail("email", email).
 					WithDetail("locked_until", user.AccountLockedUntil),
 			}
-		} else {
-			unlockErr := s.repo.UnlockUserAccount(ctx, user.ID)
-			if unlockErr != nil {
-				return nil, &error.AuthError{
-					Message: "Failed to unlock user account",
-					Code:    authErrors.CodeDatabaseError,
-					Error: pkgErrors.FromError(unlockErr, pkgErrors.CodeDatabaseError, "failed to unlock user account").
-						WithService(authErrors.ServiceName).
-						WithDetail("email", email).
-						WithDetail("user_id", user.ID),
-				}
-			}
-			s.log.Info("User account unlocked after lock period expired",
-				logger.String("service", authErrors.ServiceName),
-				logger.String("email", email),
-				logger.String("user_id", user.ID),
-			)
 		}
 	}
 

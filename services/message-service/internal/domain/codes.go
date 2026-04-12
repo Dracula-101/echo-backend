@@ -4,13 +4,13 @@ package domain
 type MessageEventType string
 
 const (
-	MessageEventTypeSent      MessageEventType = "message.sent"
-	MessageEventTypeEdited    MessageEventType = "message.edited"
-	MessageEventTypeDeleted   MessageEventType = "message.deleted"
-	MessageEventTypeDelivered MessageEventType = "message.delivered"
-	MessageEventTypeRead      MessageEventType = "message.read"
-	MessageEventTypeFailed    MessageEventType = "message.failed"
-	MessageEventReactionAdded MessageEventType = "message.reaction_added"
+	MessageEventTypeSent        MessageEventType = "message.sent"
+	MessageEventTypeEdited      MessageEventType = "message.edited"
+	MessageEventTypeDeleted     MessageEventType = "message.deleted"
+	MessageEventTypeDelivered   MessageEventType = "message.delivered"
+	MessageEventTypeRead        MessageEventType = "message.read"
+	MessageEventTypeFailed      MessageEventType = "message.failed"
+	MessageEventReactionAdded   MessageEventType = "message.reaction_added"
 	MessageEventReactionRemoved MessageEventType = "message.reaction_removed"
 	MessageEventPollCreated     MessageEventType = "message.poll_created"
 	MessageEventPollVoted       MessageEventType = "message.poll_voted"

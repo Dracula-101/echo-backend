@@ -13,14 +13,14 @@ import (
 
 // DeliveryStatusResponse represents the delivery status summary response
 type DeliveryStatusResponse struct {
-	MessageID       string                    `json:"message_id"`
-	TotalRecipients int                       `json:"total_recipients"`
-	DeliveredCount  int                       `json:"delivered_count"`
-	ReadCount       int                       `json:"read_count"`
-	PendingCount    int                       `json:"pending_count"`
-	FailedCount     int                       `json:"failed_count"`
-	ReadBy          []ReadByResponse          `json:"read_by,omitempty"`
-	DeliveredBy     []DeliveredByResponse     `json:"delivered_by,omitempty"`
+	MessageID       string                `json:"message_id"`
+	TotalRecipients int                   `json:"total_recipients"`
+	DeliveredCount  int                   `json:"delivered_count"`
+	ReadCount       int                   `json:"read_count"`
+	PendingCount    int                   `json:"pending_count"`
+	FailedCount     int                   `json:"failed_count"`
+	ReadBy          []ReadByResponse      `json:"read_by,omitempty"`
+	DeliveredBy     []DeliveredByResponse `json:"delivered_by,omitempty"`
 }
 
 type ReadByResponse struct {

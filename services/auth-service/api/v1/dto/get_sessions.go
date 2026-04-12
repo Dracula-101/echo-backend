@@ -39,16 +39,16 @@ func (r *GetSessionsRequest) ValidateErrors(ve validator.ValidationErrors) ([]re
 
 // SessionItem represents a single session in the sessions list response.
 type SessionItem struct {
-	ID          string    `json:"id"`
-	DeviceName  string    `json:"device_name,omitempty"`
-	DeviceType  string    `json:"device_type,omitempty"`
-	Browser     string    `json:"browser,omitempty"`
-	OS          string    `json:"os,omitempty"`
-	IPAddress   string    `json:"ip_address,omitempty"`
-	Location    string    `json:"location,omitempty"`
-	IsCurrent   bool      `json:"is_current"`
+	ID           string    `json:"id"`
+	DeviceName   string    `json:"device_name,omitempty"`
+	DeviceType   string    `json:"device_type,omitempty"`
+	Browser      string    `json:"browser,omitempty"`
+	OS           string    `json:"os,omitempty"`
+	IPAddress    string    `json:"ip_address,omitempty"`
+	Location     string    `json:"location,omitempty"`
+	IsCurrent    bool      `json:"is_current"`
 	LastActiveAt time.Time `json:"last_active_at"`
-	CreatedAt   time.Time `json:"created_at"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // GetSessionsResponse communicates the list of active sessions.

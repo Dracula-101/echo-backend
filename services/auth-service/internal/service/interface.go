@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"auth-service/internal/error"
+	"shared/pkg/email"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
 )
@@ -12,7 +13,7 @@ import (
 // AuthServiceInterface defines the contract for authentication service operations
 type AuthServiceInterface interface {
 	// Email validation
-	IsEmailTaken(ctx context.Context, email string) (bool, *error.AuthError)
+	IsEmailTaken(ctx context.Context, email string) (*domain.User, *error.AuthError)
 	// User operations
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, *error.AuthError)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError)
@@ -31,6 +32,7 @@ type AuthServiceInterface interface {
 
 	// Email verification
 	VerifyEmail(ctx context.Context, token string, userId string, ipAddress string, userAgent string) *error.AuthError
+	SendEmailVerification(ctx context.Context, userID string, email string, ipAddress string, userAgent string) *error.AuthError
 	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError)
 
 	// MFA
@@ -44,6 +46,7 @@ type AuthServiceInterface interface {
 	// Service accessors
 	TokenService() token.JWTTokenService
 	HashingService() hashing.HashingService
+	EmailService() email.EmailService
 }
 
 // Compile-time interface compliance checks

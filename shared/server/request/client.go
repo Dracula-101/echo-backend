@@ -51,6 +51,22 @@ type IpAddressInfo struct {
 	IP          string  `json:"ip"`
 }
 
+func NewIpAddressInfo() IpAddressInfo {
+	return IpAddressInfo{
+		Latitude:    0,
+		Longitude:   0,
+		City:        "Unknown",
+		State:       "Unknown",
+		StateCode:   "Unknown",
+		PostalCode:  "Unknown",
+		Country:     "Unknown",
+		CountryCode: "Unknown",
+		Timezone:    "Unknown",
+		ISP:         "Unknown",
+		IP:          "Unknown",
+	}
+}
+
 // GetClientIP extracts the client IP address from the request
 func (h *RequestHandler) GetClientIP() string {
 	if xff := h.request.Header.Get(headers.XForwardedFor); xff != "" {

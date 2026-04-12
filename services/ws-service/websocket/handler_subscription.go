@@ -32,7 +32,7 @@ func (m *Manager) handleSubscribe(_ context.Context, msg *router.Message) error 
 		)
 		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "Invalid subscribe payload")
 	}
-	
+
 	userID, ok := m.getUserID(conn)
 	if !ok {
 		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeUnauthorized, "User not authenticated")

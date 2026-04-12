@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"analytics-service/api/v1/handler"
+	"fmt"
 
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"

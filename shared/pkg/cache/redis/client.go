@@ -244,6 +244,16 @@ func (c *client) Decrement(ctx context.Context, key string, delta int64) (int64,
 	return c.rdb.DecrBy(ctx, key, delta).Result()
 }
 
+func (c *client) AcquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	c.logger.Debug("Acquiring lock in Redis", logger.String("key", key), logger.Duration("ttl", ttl))
+	return c.rdb.SetNX(ctx, key, "1", ttl).Result()
+}
+
+func (c *client) ReleaseLock(ctx context.Context, key string) error {
+	c.logger.Debug("Releasing lock in Redis", logger.String("key", key))
+	return c.rdb.Del(ctx, key).Err()
+}
+
 func (c *client) Ping(ctx context.Context) pkgErrors.AppError {
 	c.logger.Debug("Pinging Redis server")
 	if err := c.rdb.Ping(ctx).Err(); err != nil {

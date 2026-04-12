@@ -24,8 +24,8 @@ func isValidTopic(topic Topic) bool {
 func containsTopic(topics []Topic, targets ...Topic) bool {
 	for _, topic := range topics {
 		if slices.Contains(targets, topic) {
-				return true
-			}
+			return true
+		}
 	}
 	return false
 }

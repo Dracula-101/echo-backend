@@ -32,6 +32,9 @@ type Cache interface {
 	Increment(ctx context.Context, key string, delta int64) (int64, error)
 	Decrement(ctx context.Context, key string, delta int64) (int64, error)
 
+	AcquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error)
+	ReleaseLock(ctx context.Context, key string) error
+
 	Ping(ctx context.Context) pkgErrors.AppError
 	Info(ctx context.Context) (map[string]string, error)
 

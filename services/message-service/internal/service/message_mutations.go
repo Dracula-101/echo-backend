@@ -7,9 +7,9 @@ import (
 
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
-	pkgErrors "shared/pkg/errors"
 	"shared/server/common/hashing"
 	"shared/server/request"
 
@@ -240,15 +240,15 @@ func (s *messageService) ForwardMessage(ctx context.Context, messageID string, u
 	})
 
 	msg := &domain.Message{
-		ID:              messageEvent.ID,
-		ConversationID:  parsedTargetID,
-		SenderUserID:    parsedUserID,
-		MessageType:     originalMsg.MessageType,
-		Content:         content,
-		Status:          domain.MessageStatusSent,
-		CreatedAt:       messageEvent.CreatedAt,
-		UpdatedAt:       messageEvent.UpdatedAt,
-		Metadata:        originalMsg.Metadata,
+		ID:             messageEvent.ID,
+		ConversationID: parsedTargetID,
+		SenderUserID:   parsedUserID,
+		MessageType:    originalMsg.MessageType,
+		Content:        content,
+		Status:         domain.MessageStatusSent,
+		CreatedAt:      messageEvent.CreatedAt,
+		UpdatedAt:      messageEvent.UpdatedAt,
+		Metadata:       originalMsg.Metadata,
 	}
 	return msg, nil
 }

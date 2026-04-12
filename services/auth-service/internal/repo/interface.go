@@ -4,6 +4,7 @@ import (
 	"auth-service/internal/domain"
 	"auth-service/internal/repo/model"
 	"context"
+	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 )
 
@@ -14,7 +15,7 @@ import (
 // AuthRepositoryInterface defines the contract for authentication repository operations
 type AuthRepositoryInterface interface {
 	// User management
-	ExistsByEmail(ctx context.Context, email string) (bool, pkgErrors.AppError)
+	ExistsByEmail(ctx context.Context, email string) (*models.AccountStatus, pkgErrors.AppError)
 	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)

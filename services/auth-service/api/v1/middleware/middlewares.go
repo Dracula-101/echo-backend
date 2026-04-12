@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"auth-service/internal/service/location"
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -9,13 +10,21 @@ import (
 	"shared/server/middleware"
 	"shared/server/request"
 	"strings"
+	"time"
 )
 
-func LocationFromIP(locationService location.LocationService, memoryCache cache.Cache) middleware.Handler {
+var (
+	LocationTimeout = time.Millisecond * 150
+)
+
+func LocationFromIP(
+	locationService location.LocationService,
+	memoryCache cache.Cache,
+) middleware.Handler {
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-
 			ip := realIP(r)
 
 			if isPrivateIP(ip) {
@@ -26,19 +35,23 @@ func LocationFromIP(locationService location.LocationService, memoryCache cache.
 			cacheKey := "location:" + ip
 
 			if cached, err := memoryCache.Get(ctx, cacheKey); err == nil {
-				var location request.IpAddressInfo
-				if json.Unmarshal(cached, &location) == nil {
-					next.ServeHTTP(w, r.WithContext(request.WithIPAddressInfo(ctx, location)))
+				var loc request.IpAddressInfo
+				if json.Unmarshal(cached, &loc) == nil {
+					next.ServeHTTP(w, r.WithContext(request.WithIPAddressInfo(ctx, loc)))
 					return
 				}
 			}
 
-			if location, err := locationService.Lookup(ip); err == nil && location != nil {
-				if b, err := json.Marshal(location); err == nil {
-					memoryCache.Set(ctx, cacheKey, b, cache.DefaultExpiration)
+			go func(ip, cacheKey string) {
+				loc, err := locationService.Lookup(ip)
+				if err != nil || loc == nil {
+					return
 				}
-				ctx = request.WithIPAddressInfo(ctx, *location)
-			}
+
+				if b, err := json.Marshal(loc); err == nil {
+					_ = memoryCache.Set(context.Background(), cacheKey, b, cache.DefaultExpiration)
+				}
+			}(ip, cacheKey)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -67,7 +80,7 @@ func isPrivateIP(ip string) bool {
 	if parsed.IsLoopback() || parsed.IsLinkLocalUnicast() || parsed.IsLinkLocalMulticast() {
 		return true
 	}
-	privateRanges := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"}
+	privateRanges := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10", "::1/128"}
 	for _, cidr := range privateRanges {
 		_, network, _ := net.ParseCIDR(cidr)
 		if network.Contains(parsed) {

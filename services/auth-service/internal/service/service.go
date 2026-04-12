@@ -16,7 +16,7 @@ import (
 )
 
 type AuthService struct {
-	repo                  repository.AuthRepositoryInterface
+	repo                  repository.AuthRepository
 	loginHistoryRepo      login_history.LoginHistoryRepository
 	sessionRepo           session.SessionRepository
 	passwordResetRepo     password_reset.PasswordResetTokenRepository
@@ -35,7 +35,7 @@ func NewAuthServiceBuilder() *AuthServiceBuilder {
 }
 
 type AuthServiceBuilder struct {
-	repo                  repository.AuthRepositoryInterface
+	repo                  repository.AuthRepository
 	loginHistoryRepo      login_history.LoginHistoryRepository
 	sessionRepo           session.SessionRepository
 	passwordResetRepo     password_reset.PasswordResetTokenRepository
@@ -49,7 +49,7 @@ type AuthServiceBuilder struct {
 	log                   logger.Logger
 }
 
-func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepositoryInterface) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepository) *AuthServiceBuilder {
 	b.repo = repo
 	return b
 }
@@ -110,9 +110,6 @@ func (b *AuthServiceBuilder) WithLogger(log logger.Logger) *AuthServiceBuilder {
 }
 
 func (b *AuthServiceBuilder) Build() *AuthService {
-	if b.repo == nil {
-		panic("AuthRepository is required")
-	}
 	if b.cfg == nil {
 		panic("Config is required")
 	}
@@ -146,4 +143,8 @@ func (s *AuthService) TokenService() token.JWTTokenService {
 
 func (s *AuthService) HashingService() hashing.HashingService {
 	return s.hashingService
+}
+
+func (s *AuthService) EmailService() email.EmailService {
+	return s.emailService
 }

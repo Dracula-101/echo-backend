@@ -261,6 +261,35 @@ func (c *memoryCache) Decrement(ctx context.Context, key string, delta int64) (i
 	return 0, cache.ErrNotSupported
 }
 
+func (c *memoryCache) AcquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, exists := c.items[key]; exists {
+		return false, nil
+	}
+
+	var expiration int64
+	if ttl > 0 {
+		expiration = time.Now().Add(ttl).UnixNano()
+	}
+
+	c.items[key] = &item{
+		value:      []byte("1"),
+		expiration: expiration,
+	}
+
+	return true, nil
+}
+
+func (c *memoryCache) ReleaseLock(ctx context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	delete(c.items, key)
+	return nil
+}
+
 func (c *memoryCache) Ping(ctx context.Context) pkgErrors.AppError {
 	return nil
 }

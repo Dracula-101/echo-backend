@@ -43,16 +43,16 @@ func (r *ListNotificationsRequest) ValidateErrors(ve validator.ValidationErrors)
 
 // NotificationResponse represents a single notification in responses.
 type NotificationResponse struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Type      string    `json:"type"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Data      any       `json:"data,omitempty"`
-	Read      bool      `json:"read"`
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
+	Type      string     `json:"type"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	Data      any        `json:"data,omitempty"`
+	Read      bool       `json:"read"`
 	ReadAt    *time.Time `json:"read_at,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // ListNotificationsResponse represents the paginated list of notifications.

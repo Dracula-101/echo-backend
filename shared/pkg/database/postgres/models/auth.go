@@ -29,6 +29,7 @@ type AuthUser struct {
 	RequiresPasswordChange bool             `db:"requires_password_change" json:"requires_password_change"`
 	PasswordHistory        json.RawMessage  `db:"password_history" json:"password_history,omitempty"`
 	SecurityQuestions      *json.RawMessage `db:"security_questions" json:"security_questions,omitempty"`
+	MetaData               *json.RawMessage `db:"metadata" json:"metadata,omitempty"`
 	CreatedAt              time.Time        `db:"created_at" json:"created_at"`
 	UpdatedAt              time.Time        `db:"updated_at" json:"updated_at"`
 	DeletedAt              *time.Time       `db:"deleted_at" json:"deleted_at,omitempty"`
@@ -173,7 +174,6 @@ type EmailVerificationToken struct {
 	ID         string     `db:"id" json:"id" pk:"true"`
 	UserID     string     `db:"user_id" json:"user_id"`
 	Email      string     `db:"email" json:"email"`
-	Token      string     `db:"token" json:"-"`
 	TokenHash  string     `db:"token_hash" json:"-"`
 	ExpiresAt  time.Time  `db:"expires_at" json:"expires_at"`
 	VerifiedAt *time.Time `db:"verified_at" json:"verified_at,omitempty"`

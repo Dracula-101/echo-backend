@@ -4,12 +4,14 @@ import (
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
-	"auth-service/internal/repo/security_event"
-	"net/http"
+	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
+	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
+	"strings"
 )
 
 // Register flow at a glance:
@@ -44,15 +46,47 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		return
 	}
 
-	clientIp := handler.GetClientIP()
+	h.log.Debug("Checking if email is valid",
+		logger.String("request_id", requestID),
+		logger.String("email", reqBody.Email),
+	)
+	emailInfo, emailErr := utils.ValidateEmail(reqBody.Email)
+	if emailErr != nil {
+		h.log.Warn("Invalid email format in registration request",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("email", reqBody.Email),
+			logger.Error(emailErr),
+		)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid email format", pkgErrors.New(authErrors.CodeInvalidEmail, emailErr.Error()))
+		return
+	}
+	_ = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(emailInfo.LocalPart), ".", "")) + "@" + strings.ToLower(strings.TrimSpace(emailInfo.Domain))
+	// TODO: Check with blocklist service to see if email domain is disposable/blacklisted and reject if so.
 
+	// validate the phone number if provided
+	// var phoneInfo *utils.PhoneInfo
+	// if reqBody.PhoneNumber != nil && reqBody.PhoneCountryCode != nil {
+	// 	phoneInfo, phoneErr := utils.ValidatePhoneNumber(*reqBody.PhoneNumber, *reqBody.PhoneCountryCode)
+	// 	if phoneErr != nil {
+	// 		h.log.Warn("Invalid phone number format in registration request",
+	// 			logger.String("service", authErrors.ServiceName),
+	// 			logger.String("request_id", requestID),
+	// 			logger.String("phone_number", *reqBody.PhoneNumber),
+	// 			logger.Error(phoneErr),
+	// 		)
+	// 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid phone number format", pkgErrors.New(authErrors.CodeInvalidPhoneNumber, err.Error()))
+	// 		return
+	// 	}
+	// }
+
+	clientIp := handler.GetClientIP()
 	h.log.Debug("Checking if email is already registered",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("request_id", requestID),
 		logger.String("email", reqBody.Email),
 	)
-
-	emailTaken, authErr := h.authService.IsEmailTaken(ctx, reqBody.Email)
+	userInfo, authErr := h.authService.IsEmailTaken(ctx, reqBody.Email)
 	if authErr != nil {
 		h.log.Error("Failed to check if email is taken",
 			logger.String("service", authErrors.ServiceName),
@@ -63,16 +97,55 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to check email availability", authErr.Error)
 		return
 	}
-	if emailTaken {
-		h.log.Warn("Registration attempt with existing email",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("email", reqBody.Email),
-		)
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
-		return
+	if userInfo != nil {
+		switch userInfo.AccountStatus {
+		case models.AccountStatusLocked:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is temporarily locked. Please try again later.", pkgErrors.New(authErrors.CodeEmailLocked, "email is temporarily locked"))
+			return
+		case models.AccountStatusDeleted:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email was previously registered but has been deleted. Please contact support if you believe this is an error.", pkgErrors.New(authErrors.CodeEmailDeleted, "email was previously registered but has been deleted"))
+			return
+		case models.AccountStatusPending:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is pending verification. Please check your inbox for the verification email.", pkgErrors.New(authErrors.CodeEmailPendingVerification, "email is pending verification"))
+			return
+		case models.AccountStatusActive:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
+			return
+		case models.AccountStatusDeactivated:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered but the account is deactivated. Please contact support.", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
+			return
+		case models.AccountStatusSuspended:
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered but the account is suspended. Please contact support.", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
+			return
+		}
 	}
 
+	cacheErr := h.authCache.AcquireRegisterEmailLock(ctx, reqBody.Email)
+	if cacheErr != nil {
+		switch cacheErr.Code {
+		case authErrors.CodeEmailAlreadyExists:
+			h.log.Warn("Concurrent registration attempt for the same email",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("email", reqBody.Email),
+			)
+			response.ConflictError(ctx, handler.Request(), handler.Writer(), "Email is already being registered. Please try again later.", pkgErrors.New(authErrors.CodeEmailAlreadyExists, "email is already being registered"))
+		case authErrors.CodeCacheError:
+			h.log.Error("Failed to acquire email lock",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("email", reqBody.Email),
+				logger.Error(cacheErr.Error),
+			)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to acquire email lock", cacheErr.Error)
+		}
+	}
+
+	deviceInfo := handler.GetDeviceInfo()
+	locationInfo, ok := request.GetIPAddressInfoFromContext(ctx)
+	if !ok {
+		locationInfo = request.NewIpAddressInfo()
+	}
 	output, authErr := h.authService.RegisterUser(ctx, domain.RegisterUserInput{
 		Email:            reqBody.Email,
 		Password:         reqBody.Password,
@@ -81,6 +154,8 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		IPAddress:        clientIp,
 		AcceptTerms:      reqBody.AcceptTerms,
 		UserAgent:        handler.GetUserAgent(),
+		Country:          locationInfo.Country,
+		AppVersion:       deviceInfo.AppVersion,
 	})
 	if authErr != nil {
 		if authErr.Code == authErrors.CodePasswordTooWeak || authErr.Code == authErrors.CodeInvalidEmail {
@@ -97,22 +172,52 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		logger.String("user_id", output.UserID),
 		logger.String("email", output.Email),
 	)
-	h.securityEventRepo.LogRegistrationEvent(ctx, security_event.SecurityEventInput{
-		UserID:      output.UserID,
-		Status:      "success",
-		Description: "User registered successfully",
-		UserAgent:   handler.GetUserAgent(),
-		DeviceID:    handler.GetDeviceInfo().ID,
-	})
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), http.StatusCreated, "Registration successful",
-		dto.NewRegisterResponse(
-			output.UserID,
-			output.Email,
-			output.EmailVerificationSent,
-			output.AccessToken,
-			output.RefreshToken,
-			output.ExpiresIn,
-		),
-	)
+	// sending email verification
+	if output.NextStep == "verify_email" && output.VerificationEmailSentTo != nil {
+		h.log.Info("Verification email sent",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("email", *output.VerificationEmailSentTo),
+		)
+		emailSendErr := h.authService.SendEmailVerification(ctx, output.UserID, output.Email, locationInfo.IP, handler.GetUserAgent())
+		if emailSendErr != nil {
+			h.log.Error("Failed to send email verification",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("email", *output.VerificationEmailSentTo),
+				logger.Error(emailSendErr.Error),
+			)
+		}
+	} else if output.NextStep == "verify_phone" {
+		h.log.Info("Phone verification required",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("email", reqBody.Email),
+		)
+		// TODO: Trigger phone verification flow (e.g. send SMS with code)
+	}
+
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Registration successful", dto.NewRegisterResponse(
+		output.UserID,
+		output.Email,
+		output.EmailVerified,
+		output.PhoneVerified,
+		output.AccountStatus,
+		output.NextStep,
+		utils.MaskEmail(*output.VerificationEmailSentTo),
+		"Registration successful. Please verify your email to complete the registration process.",
+	))
+
+	defer func() {
+		cacheErr := h.authCache.ReleaseRegisterEmailLock(ctx, reqBody.Email)
+		if cacheErr != nil {
+			h.log.Error("Failed to release email lock",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("email", reqBody.Email),
+				logger.Error(cacheErr.Error),
+			)
+		}
+	}()
 }

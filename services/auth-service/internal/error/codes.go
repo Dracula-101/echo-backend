@@ -28,6 +28,7 @@ const (
 
 	// Database Errors
 	CodeDatabaseError = "AUTH_DATABASE_ERROR"
+	CodeCacheError    = "AUTH_CACHE_ERROR"
 
 	// Registration Errors
 	CodeInvalidEmail       = "AUTH_INVALID_EMAIL"
@@ -56,6 +57,9 @@ const (
 	CodeEmailAlreadyVerified     = "AUTH_EMAIL_ALREADY_VERIFIED"
 	CodeVerificationTokenExpired = "AUTH_VERIFICATION_TOKEN_EXPIRED"
 	CodeVerificationCooldown     = "AUTH_VERIFICATION_COOLDOWN"
+	CodeEmailLocked              = "AUTH_EMAIL_LOCKED"
+	CodeEmailDeleted             = "AUTH_EMAIL_DELETED"
+	CodeEmailPendingVerification = "AUTH_EMAIL_PENDING_VERIFICATION"
 
 	// MFA Errors
 	CodeMFAAlreadyEnabled = "AUTH_MFA_ALREADY_ENABLED"
@@ -71,4 +75,7 @@ const (
 	CodeVerificationInvalid           = "AUTH_VERIFICATION_INVALID"
 	CodeVerificationEmailRecentlySent = "AUTH_VERIFICATION_EMAIL_RECENTLY_SENT"
 	CodeTooManyVerificationAttempts   = "AUTH_TOO_MANY_VERIFICATION_ATTEMPTS"
+
+	// IP Blocking Errors
+	CodeIPLocked = "AUTH_IP_LOCKED"
 )

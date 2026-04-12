@@ -13,6 +13,7 @@ import (
 	"auth-service/internal/repo/security_event"
 	"auth-service/internal/repo/session"
 	"auth-service/internal/service"
+	authCache "auth-service/internal/service/cache"
 	"auth-service/internal/service/location"
 	sessionSvc "auth-service/internal/service/session"
 	"context"
@@ -377,11 +378,11 @@ func main() {
 		}()
 	}
 
-	emailService := setupEmailService(*cfg, log)
+	authCache := authCache.NewAuthCache(cacheClient, log)
 
+	emailService := setupEmailService(*cfg, log)
 	tokenService := createTokenManager(*cfg, log)
 	hashingService := createHashingService(*cfg, log)
-
 	locationService := location.NewLocationService(cfg.LocationService.Endpoint, log)
 
 	loginHistoryRepo := login_history.NewLoginHistoryRepo(dbClient, log)
@@ -393,7 +394,7 @@ func main() {
 
 	authRepo := repository.NewAuthRepository(dbClient, log)
 	authService := service.NewAuthServiceBuilder().
-		WithRepo(authRepo).
+		WithRepo(*authRepo).
 		WithLoginHistoryRepo(*loginHistoryRepo).
 		WithEmailVerificationRepo(*emailVerificationRepo).
 		WithPasswordResetRepo(*resetTokenRepo).
@@ -407,7 +408,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(authService, *sessionService, *locationService, *securityEventRepo, log)
+	authHandler := handler.NewAuthHandler(*authService, *sessionService, *locationService, *securityEventRepo, authCache, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

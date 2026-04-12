@@ -13,16 +13,16 @@ import (
 
 // ConversationSettings represents a row in messages.conversation_settings.
 type ConversationSettings struct {
-	ID                           uuid.UUID  `json:"id"`
-	ConversationID               uuid.UUID  `json:"conversation_id"`
-	DisappearingMessagesEnabled  bool       `json:"disappearing_messages_enabled"`
-	DisappearingMessagesDuration *int       `json:"disappearing_messages_duration"`
-	ReadReceiptsEnabled          bool       `json:"read_receipts_enabled"`
-	TypingIndicatorsEnabled      bool       `json:"typing_indicators_enabled"`
-	LinkPreviewsEnabled          bool       `json:"link_previews_enabled"`
-	AutoDownloadMedia            bool       `json:"auto_download_media"`
-	CreatedAt                    time.Time  `json:"created_at"`
-	UpdatedAt                    time.Time  `json:"updated_at"`
+	ID                           uuid.UUID `json:"id"`
+	ConversationID               uuid.UUID `json:"conversation_id"`
+	DisappearingMessagesEnabled  bool      `json:"disappearing_messages_enabled"`
+	DisappearingMessagesDuration *int      `json:"disappearing_messages_duration"`
+	ReadReceiptsEnabled          bool      `json:"read_receipts_enabled"`
+	TypingIndicatorsEnabled      bool      `json:"typing_indicators_enabled"`
+	LinkPreviewsEnabled          bool      `json:"link_previews_enabled"`
+	AutoDownloadMedia            bool      `json:"auto_download_media"`
+	CreatedAt                    time.Time `json:"created_at"`
+	UpdatedAt                    time.Time `json:"updated_at"`
 }
 
 // ConversationSettingsInput holds optional fields for updating conversation settings.

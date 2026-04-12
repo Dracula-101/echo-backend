@@ -11,13 +11,13 @@ type LoginResult struct {
 }
 
 type RegisterUserOutput struct {
-	UserID                string
-	Email                 string
-	EmailVerificationSent bool
-	VerificationToken     string
-	AccessToken           string
-	RefreshToken          string
-	ExpiresIn             time.Time
+	UserID                  string
+	Email                   string
+	EmailVerified           bool
+	PhoneVerified           bool
+	AccountStatus           string
+	NextStep                string
+	VerificationEmailSentTo *string
 }
 
 // PasswordHashResult contains the result of password hashing

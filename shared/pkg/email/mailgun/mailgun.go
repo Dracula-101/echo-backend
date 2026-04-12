@@ -123,14 +123,14 @@ func (s *MailgunService) SendPasswordResetEmail(to, name, token string) error {
 	return s.send(to, "Reset Your Password", body, map[string]string{"name": name, "reset_url": resetLink}, "password-reset")
 }
 
-func (s *MailgunService) SendEmailVerificationEmail(to, name, token string) error {
+func (s *MailgunService) SendEmailVerificationEmail(to, token string) error {
 	tpl, err := readTemplate("email-verification.html")
 	if err != nil {
 		return err
 	}
 
 	verificationLink := fmt.Sprintf("https://%s/verify-email?token=%s", s.domain, token)
-
+	name := strings.Split(to, "@")[0] // simple name extraction from email
 	body := replace(tpl, map[string]string{
 		"name":       name,
 		"verify_url": verificationLink,

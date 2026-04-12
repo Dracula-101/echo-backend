@@ -85,13 +85,13 @@ func (r *pollRepository) CreatePoll(ctx context.Context, poll *dbModel.Poll, opt
 func (r *pollRepository) GetPollByMessageID(ctx context.Context, messageID uuid.UUID) (*dbModel.Poll, []*dbModel.PollOption, pkgErrors.AppError) {
 	pollQuery := `SELECT * FROM messages.polls WHERE message_id = $1`
 	var poll dbModel.Poll
-	
+
 	err := r.db.QueryRow(ctx, pollQuery, messageID).Scan(
 		&poll.ID, &poll.MessageID, &poll.Question, &poll.AllowMultiple,
 		&poll.IsAnonymous, &poll.IsQuiz, &poll.CorrectOptionID, &poll.Explanation,
 		&poll.ClosesAt, &poll.IsClosed, &poll.ClosedAt, &poll.TotalVotes, &poll.CreatedAt,
 	)
-	
+
 	if err != nil {
 		if postgres.IsNotFoundError(err) {
 			return nil, nil, pkgErrors.FromError(err, pkgErrors.CodeNotFound, "Poll not found")

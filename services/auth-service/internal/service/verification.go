@@ -245,7 +245,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 	expiresAt := time.Now().Add(verificationTokenTTL)
 
 	createErr := s.emailVerificationRepo.CreateVerificationToken(
-		ctx, user.ID, email, rawToken, *tokenHash, ipAddress, userAgent, expiresAt,
+		ctx, user.ID, email, *tokenHash, ipAddress, userAgent, expiresAt,
 	)
 	if createErr != nil {
 		s.log.Error("Failed to create verification token",
@@ -261,7 +261,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 	}
 
 	// ── 6. Send the email (only after DB insert succeeds) ────────────────
-	emailErr := s.emailService.SendEmailVerificationEmail(email, user.ID, rawToken)
+	emailErr := s.emailService.SendEmailVerificationEmail(email, rawToken)
 	if emailErr != nil {
 		s.log.Error("Failed to send verification email",
 			logger.String("service", error.ServiceName),

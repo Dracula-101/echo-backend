@@ -11,11 +11,11 @@ import (
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
 
+	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/common/token"
 	env "shared/server/env"
 	"shared/server/headers"
 	coreMiddleware "shared/server/middleware"
-	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"

@@ -17,6 +17,9 @@ const (
 	AccountStatusDeleted     AccountStatus = "deleted"
 )
 
+func (s AccountStatus) String() string {
+	return string(s)
+}
 func (s AccountStatus) IsValid() bool {
 	switch s {
 	case AccountStatusActive, AccountStatusPending, AccountStatusSuspended,
@@ -244,7 +247,7 @@ const (
 
 func (s SecurityEventType) IsValid() bool {
 	switch s {
-	case SecurityEventLogin, SecurityEventLogout, SecurityEventLoginFailed,
+	case SecurityEventRegistration, SecurityEventLogin, SecurityEventLogout, SecurityEventLoginFailed,
 		SecurityEventPasswordChange, SecurityEventPasswordReset,
 		SecurityEventTwoFactorEnabled, SecurityEventTwoFactorDisabled,
 		SecurityEventAccountLocked, SecurityEventAccountUnlocked,

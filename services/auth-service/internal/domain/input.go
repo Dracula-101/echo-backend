@@ -11,6 +11,8 @@ type RegisterUserInput struct {
 	PhoneNumber      *string
 	PhoneCountryCode *string
 	IPAddress        string
+	Country          string
+	AppVersion       string
 	UserAgent        string
 	AcceptTerms      bool
 }

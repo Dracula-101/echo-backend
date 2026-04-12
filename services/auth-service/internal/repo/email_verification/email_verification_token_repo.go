@@ -13,7 +13,7 @@ import (
 )
 
 type EmailVerificationTokenRepositoryInterface interface {
-	CreateVerificationToken(ctx context.Context, userID string, email string, rawToken string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError
+	CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError
 	GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError)
 	MarkTokenVerified(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError
 	GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError)
@@ -21,7 +21,7 @@ type EmailVerificationTokenRepositoryInterface interface {
 	InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError
 }
 
-func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.Context, userID string, email string, rawToken string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
+func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
 	r.log.Info("Creating email verification token",
 		logger.String("user_id", userID),
 		logger.String("email", email),
@@ -30,7 +30,6 @@ func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.C
 	_, err := r.db.Insert(ctx, &models.EmailVerificationToken{
 		UserID:    userID,
 		Email:     email,
-		Token:     rawToken,
 		TokenHash: tokenHash,
 		ExpiresAt: expiresAt,
 		IPAddress: &ipAddress,

@@ -49,27 +49,35 @@ func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository 
 // ============================================================================
 // Email Operations
 // ============================================================================
-func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (bool, pkgErrors.AppError) {
+func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*models.AccountStatus, pkgErrors.AppError) {
 	r.log.Debug("Checking if email exists",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
-
-	query := `SELECT EXISTS(SELECT 1 FROM auth.users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL)`
-	var exists bool
-	err := r.db.QueryRow(ctx, query, email).Scan(&exists)
+	//Query auth.users using idx_auth_users_email: SELECT id, account_status FROM auth.users WHERE LOWER(email) = LOWER($1)
+	query := `SELECT account_status FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`
+	row := r.db.QueryRow(ctx, query, email)
+	var accountStatus models.AccountStatus
+	err := row.Scan(&accountStatus)
 	if err != nil {
-		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check email existence").
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("Email does not exist",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("email", email),
+			)
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check email existence").
 			WithDetail("email", email)
 	}
 
-	r.log.Debug("Email existence check completed",
+	r.log.Debug("Email exists with account status",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
-		logger.Bool("exists", exists),
+		logger.Any("account_status", accountStatus),
 	)
 
-	return exists, nil
+	return &accountStatus, nil
 }
 
 // ============================================================================
@@ -106,6 +114,12 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		logger.String("email", params.Email),
 	)
 
+	metaData := map[string]interface{}{
+		"registration_type":        "email",
+		"ip_country":               utils.SafeString(&params.Country),
+		"registration_app_version": utils.SafeString(&params.AppVersion),
+	}
+	metaDataJson := utils.MarshalRawMessageSafe(metaData)
 	id, err := r.db.Insert(ctx, &models.AuthUser{
 		Email:                  params.Email,
 		PhoneNumber:            params.PhoneNumber,
@@ -119,7 +133,7 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		TwoFactorEnabled:       false,
 		TwoFactorSecret:        nil,
 		TwoFactorBackupCodes:   nil,
-		AccountStatus:          models.AccountStatusActive,
+		AccountStatus:          models.AccountStatusPending,
 		AccountLockedUntil:     nil,
 		FailedLoginAttempts:    0,
 		LastFailedLoginAt:      nil,
@@ -129,6 +143,7 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		PasswordHistory:        passwordHistoryJson,
 		CreatedByIP:            &params.IPAddress,
 		CreatedByUserAgent:     &params.UserAgent,
+		MetaData:               &metaDataJson,
 	})
 	if err != nil {
 		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
@@ -432,7 +447,6 @@ func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string) p
 	)
 	return nil
 }
-
 func (r *AuthRepository) ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Activating pending user account",
 		logger.String("service", authErrors.ServiceName),
