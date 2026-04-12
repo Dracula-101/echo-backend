@@ -56,8 +56,13 @@ func (r *Router) StrictPriority(enabled bool) {
 	r.strictPriority = enabled
 }
 
-func (r *Router) RegisterExact(method, path string, handler http.Handler) *mux.Route {
-	route := r.mux.NewRoute().Path(path).Methods(method).Handler(handler)
+func (r *Router) RegisterExact(method, path string, handler http.Handler, middlewares ...middleware.Handler) *mux.Route {
+	wrapped := handler
+	for _, m := range middlewares {
+		wrapped = m(wrapped)
+	}
+
+	route := r.mux.NewRoute().Path(path).Methods(method).Handler(wrapped)
 	r.routes = append(r.routes, RouteInfo{
 		Method:  method,
 		Pattern: path,
@@ -66,8 +71,13 @@ func (r *Router) RegisterExact(method, path string, handler http.Handler) *mux.R
 	return route
 }
 
-func (r *Router) RegisterFunc(method, path string, handler http.HandlerFunc) *mux.Route {
-	route := r.mux.NewRoute().Path(path).Methods(method).HandlerFunc(handler)
+func (r *Router) RegisterFunc(method, path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	wrapped := http.Handler(handler)
+	for _, m := range middlewares {
+		wrapped = m(wrapped)
+	}
+
+	route := r.mux.NewRoute().Path(path).Methods(method).Handler(wrapped)
 	r.routes = append(r.routes, RouteInfo{
 		Method:  method,
 		Pattern: path,
@@ -85,36 +95,36 @@ func (r *Router) With(middlewares ...middleware.Handler) *Router {
 	return r
 }
 
-func (r *Router) Handle(path string, method string, handler http.Handler) *mux.Route {
-	return r.RegisterExact(method, path, handler)
+func (r *Router) Handle(path string, method string, handler http.Handler, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(method, path, handler, middlewares...)
 }
 
-func (r *Router) HandleFunc(path string, method string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterFunc(method, path, handler)
+func (r *Router) HandleFunc(path string, method string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterFunc(method, path, handler, middlewares...)
 }
 
-func (r *Router) Get(path string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(http.MethodGet, path, handler)
+func (r *Router) Get(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(http.MethodGet, path, handler, middlewares...)
 }
 
-func (r *Router) Post(path string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(http.MethodPost, path, handler)
+func (r *Router) Post(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(http.MethodPost, path, handler, middlewares...)
 }
 
-func (r *Router) Put(path string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(http.MethodPut, path, handler)
+func (r *Router) Put(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(http.MethodPut, path, handler, middlewares...)
 }
 
-func (r *Router) Delete(path string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(http.MethodDelete, path, handler)
+func (r *Router) Delete(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(http.MethodDelete, path, handler, middlewares...)
 }
 
-func (r *Router) Patch(path string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(http.MethodPatch, path, handler)
+func (r *Router) Patch(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(http.MethodPatch, path, handler, middlewares...)
 }
 
-func (r *Router) Options(path string, handler http.HandlerFunc) *mux.Route {
-	return r.RegisterExact(http.MethodOptions, path, handler)
+func (r *Router) Options(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	return r.RegisterExact(http.MethodOptions, path, handler, middlewares...)
 }
 
 func (r *Router) Use(middleware ...mux.MiddlewareFunc) {

@@ -25,6 +25,13 @@ db-init:
 	@echo "$(BRIGHT_GREEN)$(CHECK) Database initialized$(NC)"
 	@echo ""
 
+db-logs:
+	@echo ""
+	@echo "$(BOLD)$(BRIGHT_GREEN)$(STAR) Viewing PostgreSQL Logs$(NC)"
+	@echo ""
+	@docker logs -f echo-postgres
+	@echo ""
+
 db-seed:
 	@echo ""
 	@echo "$(BOLD)$(BRIGHT_GREEN)$(STAR) Seeding Database$(NC)"

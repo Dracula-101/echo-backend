@@ -1,10 +1,9 @@
-package repository
+package security_event
 
 import (
 	"context"
 	"encoding/json"
 
-	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -12,16 +11,7 @@ import (
 	"shared/server/request"
 )
 
-type SecurityEventInput struct {
-	UserID      string
-	SessionID   *string
-	Status      string
-	Description string
-	UserAgent   string
-	DeviceID    string
-}
-
-type SecurityEventRepositoryInterface interface {
+type SecurityEventInterface interface {
 	LogLoginEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError
 	LogLogoutEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError
 	LogPasswordChangeEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError
@@ -31,29 +21,7 @@ type SecurityEventRepositoryInterface interface {
 	LogRegistrationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError
 }
 
-type SecurityEventRepo struct {
-	db  database.Database
-	log logger.Logger
-}
-
-func NewSecurityEventRepo(db database.Database, log logger.Logger) *SecurityEventRepo {
-	if db == nil {
-		panic("database is required for SecurityEventRepo")
-	}
-	if log == nil {
-		panic("logger is required for SecurityEventRepo")
-	}
-	return &SecurityEventRepo{db: db, log: log}
-}
-
-type enrichedEventInput struct {
-	SecurityEventInput
-	eventType     models.SecurityEventType
-	eventCategory string
-	severity      models.SecuritySeverity
-}
-
-func (r *SecurityEventRepo) logEvent(ctx context.Context, input enrichedEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) logEvent(ctx context.Context, input enrichedEventInput) pkgErrors.AppError {
 	r.log.Info("logging security event",
 		logger.String("user_id", input.UserID),
 		logger.String("event_type", string(input.eventType)),
@@ -106,7 +74,7 @@ func (r *SecurityEventRepo) logEvent(ctx context.Context, input enrichedEventInp
 	return nil
 }
 
-func (r *SecurityEventRepo) LogLoginEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogLoginEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventLogin,
@@ -115,7 +83,7 @@ func (r *SecurityEventRepo) LogLoginEvent(ctx context.Context, event SecurityEve
 	})
 }
 
-func (r *SecurityEventRepo) LogLogoutEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogLogoutEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventLogout,
@@ -124,7 +92,7 @@ func (r *SecurityEventRepo) LogLogoutEvent(ctx context.Context, event SecurityEv
 	})
 }
 
-func (r *SecurityEventRepo) LogPasswordChangeEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogPasswordChangeEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventPasswordChange,
@@ -133,7 +101,7 @@ func (r *SecurityEventRepo) LogPasswordChangeEvent(ctx context.Context, event Se
 	})
 }
 
-func (r *SecurityEventRepo) LogPasswordResetRequestEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogPasswordResetRequestEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventPasswordResetRequested,
@@ -142,7 +110,7 @@ func (r *SecurityEventRepo) LogPasswordResetRequestEvent(ctx context.Context, ev
 	})
 }
 
-func (r *SecurityEventRepo) LogEmailVerificationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogEmailVerificationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventEmailVerified,
@@ -151,7 +119,7 @@ func (r *SecurityEventRepo) LogEmailVerificationEvent(ctx context.Context, event
 	})
 }
 
-func (r *SecurityEventRepo) LogSessionRevocationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogSessionRevocationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventSessionRevoked,
@@ -160,7 +128,7 @@ func (r *SecurityEventRepo) LogSessionRevocationEvent(ctx context.Context, event
 	})
 }
 
-func (r *SecurityEventRepo) LogRegistrationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
+func (r *SecurityEventRepository) LogRegistrationEvent(ctx context.Context, event SecurityEventInput) pkgErrors.AppError {
 	return r.logEvent(ctx, enrichedEventInput{
 		SecurityEventInput: event,
 		eventType:          models.SecurityEventRegistration,

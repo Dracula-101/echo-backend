@@ -1,24 +1,26 @@
 package handler
 
 import (
-	repository "auth-service/internal/repo"
+	"auth-service/internal/repo/security_event"
 	"auth-service/internal/service"
+	"auth-service/internal/service/location"
+	"auth-service/internal/service/session"
 	"shared/pkg/logger"
 )
 
 type AuthHandler struct {
 	authService       service.AuthServiceInterface
-	sessionService    service.SessionServiceInterface
-	locationService   service.LocationServiceInterface
-	securityEventRepo repository.SecurityEventRepositoryInterface
+	sessionService    session.SessionService
+	locationService   location.LocationService
+	securityEventRepo security_event.SecurityEventRepository
 	log               logger.Logger
 }
 
 func NewAuthHandler(
 	authService service.AuthServiceInterface,
-	sessionService service.SessionServiceInterface,
-	locationService service.LocationServiceInterface,
-	securityEventRepo repository.SecurityEventRepositoryInterface,
+	sessionService session.SessionService,
+	locationService location.LocationService,
+	securityEventRepo security_event.SecurityEventRepository,
 	log logger.Logger,
 ) *AuthHandler {
 	return &AuthHandler{

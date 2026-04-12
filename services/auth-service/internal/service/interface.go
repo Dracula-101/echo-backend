@@ -47,8 +47,4 @@ type AuthServiceInterface interface {
 }
 
 // Compile-time interface compliance checks
-var (
-	_ AuthServiceInterface     = (*AuthService)(nil)
-	_ SessionServiceInterface  = (*SessionService)(nil)
-	_ LocationServiceInterface = (*LocationService)(nil)
-)
+var _ AuthServiceInterface = (*AuthService)(nil)

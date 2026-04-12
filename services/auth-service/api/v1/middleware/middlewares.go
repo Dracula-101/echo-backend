@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"auth-service/internal/service"
+	"auth-service/internal/service/location"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func LocationFromIP(locationService service.LocationService, memoryCache cache.Cache) middleware.Handler {
+func LocationFromIP(locationService location.LocationService, memoryCache cache.Cache) middleware.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()

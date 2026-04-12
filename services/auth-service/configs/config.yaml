@@ -45,7 +45,11 @@ cache:
     min_idle_conns: ${REDIS_MIN_IDLE_CONNS:5}
     max_retries: ${REDIS_MAX_RETRIES:3}
     pool_timeout: ${REDIS_POOL_TIMEOUT:4s}
-  
+  memory:
+    max_items: ${MEMORY_CACHE_MAX_ITEMS:1000}
+    default_expiration: ${MEMORY_CACHE_DEFAULT_EXPIRATION:5m}
+    cleanup_interval: ${MEMORY_CACHE_CLEANUP_INTERVAL:10m}
+
 location_service:
   enabled: ${LOCATION_SERVICE_ENABLED:true}
   endpoint: ${LOCATION_SERVICE_ENDPOINT:http://localhost:8090/lookup}

@@ -6,6 +6,7 @@ import (
 	"context"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 // ============================================================================
@@ -14,7 +15,7 @@ import (
 
 func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (bool, *error.AuthError) {
 	s.log.Info("Checking if email is taken", logger.String("email", email))
-	email = normalizeEmail(email)
+	email = utils.NormalizeEmail(email)
 
 	exists, err := s.repo.ExistsByEmail(ctx, email)
 	if err != nil {

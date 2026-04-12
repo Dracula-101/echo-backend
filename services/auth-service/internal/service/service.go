@@ -3,6 +3,11 @@ package service
 import (
 	"auth-service/internal/config"
 	repository "auth-service/internal/repo"
+	"auth-service/internal/repo/email_verification"
+	"auth-service/internal/repo/login_history"
+	"auth-service/internal/repo/password_reset"
+	"auth-service/internal/repo/security_event"
+	"auth-service/internal/repo/session"
 	"shared/pkg/cache"
 	"shared/pkg/email"
 	"shared/pkg/logger"
@@ -12,11 +17,11 @@ import (
 
 type AuthService struct {
 	repo                  repository.AuthRepositoryInterface
-	loginHistoryRepo      repository.LoginHistoryRepositoryInterface
-	sessionRepo           repository.SessionRepositoryInterface
-	passwordResetRepo     repository.PasswordResetTokenRepositoryInterface
-	emailVerificationRepo repository.EmailVerificationTokenRepositoryInterface
-	securityEventRepo     repository.SecurityEventRepositoryInterface
+	loginHistoryRepo      login_history.LoginHistoryRepository
+	sessionRepo           session.SessionRepository
+	passwordResetRepo     password_reset.PasswordResetTokenRepository
+	emailVerificationRepo email_verification.EmailVerificationTokenRepository
+	securityEventRepo     security_event.SecurityEventRepository
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -31,11 +36,11 @@ func NewAuthServiceBuilder() *AuthServiceBuilder {
 
 type AuthServiceBuilder struct {
 	repo                  repository.AuthRepositoryInterface
-	loginHistoryRepo      repository.LoginHistoryRepositoryInterface
-	sessionRepo           repository.SessionRepositoryInterface
-	passwordResetRepo     repository.PasswordResetTokenRepositoryInterface
-	emailVerificationRepo repository.EmailVerificationTokenRepositoryInterface
-	securityEventRepo     repository.SecurityEventRepositoryInterface
+	loginHistoryRepo      login_history.LoginHistoryRepository
+	sessionRepo           session.SessionRepository
+	passwordResetRepo     password_reset.PasswordResetTokenRepository
+	emailVerificationRepo email_verification.EmailVerificationTokenRepository
+	securityEventRepo     security_event.SecurityEventRepository
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -49,27 +54,27 @@ func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepositoryInterface) *
 	return b
 }
 
-func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo repository.LoginHistoryRepositoryInterface) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo login_history.LoginHistoryRepository) *AuthServiceBuilder {
 	b.loginHistoryRepo = repo
 	return b
 }
 
-func (b *AuthServiceBuilder) WithSessionRepo(repo repository.SessionRepositoryInterface) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithSessionRepo(repo session.SessionRepository) *AuthServiceBuilder {
 	b.sessionRepo = repo
 	return b
 }
 
-func (b *AuthServiceBuilder) WithPasswordResetRepo(repo repository.PasswordResetTokenRepositoryInterface) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithPasswordResetRepo(repo password_reset.PasswordResetTokenRepository) *AuthServiceBuilder {
 	b.passwordResetRepo = repo
 	return b
 }
 
-func (b *AuthServiceBuilder) WithEmailVerificationRepo(repo repository.EmailVerificationTokenRepositoryInterface) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithEmailVerificationRepo(repo email_verification.EmailVerificationTokenRepository) *AuthServiceBuilder {
 	b.emailVerificationRepo = repo
 	return b
 }
 
-func (b *AuthServiceBuilder) WithSecurityEventRepo(repo repository.SecurityEventRepositoryInterface) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithSecurityEventRepo(repo security_event.SecurityEventRepository) *AuthServiceBuilder {
 	b.securityEventRepo = repo
 	return b
 }
@@ -107,9 +112,6 @@ func (b *AuthServiceBuilder) WithLogger(log logger.Logger) *AuthServiceBuilder {
 func (b *AuthServiceBuilder) Build() *AuthService {
 	if b.repo == nil {
 		panic("AuthRepository is required")
-	}
-	if b.loginHistoryRepo == nil {
-		panic("LoginHistoryRepo is required")
 	}
 	if b.cfg == nil {
 		panic("Config is required")

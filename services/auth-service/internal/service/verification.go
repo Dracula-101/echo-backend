@@ -8,6 +8,7 @@ import (
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 const (
@@ -150,7 +151,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 		logger.String("email", email),
 	)
 
-	email = normalizeEmail(email)
+	email = utils.NormalizeEmail(email)
 
 	// ── 1. Look up user ──────────────────────────────────────────────────
 	user, err := s.repo.GetUserByEmail(ctx, email)

@@ -4,7 +4,7 @@ import (
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
+	"auth-service/internal/repo/security_event"
 	"net/http"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -97,7 +97,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		logger.String("user_id", output.UserID),
 		logger.String("email", output.Email),
 	)
-	h.securityEventRepo.LogRegistrationEvent(ctx, repository.SecurityEventInput{
+	h.securityEventRepo.LogRegistrationEvent(ctx, security_event.SecurityEventInput{
 		UserID:      output.UserID,
 		Status:      "success",
 		Description: "User registered successfully",

@@ -1,4 +1,4 @@
-package repository
+package email_verification
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	authErrors "auth-service/internal/error"
-	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -22,22 +21,7 @@ type EmailVerificationTokenRepositoryInterface interface {
 	InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError
 }
 
-type EmailVerificationTokenRepo struct {
-	db  database.Database
-	log logger.Logger
-}
-
-func NewEmailVerificationTokenRepo(db database.Database, log logger.Logger) *EmailVerificationTokenRepo {
-	if db == nil {
-		panic("Database is required for EmailVerificationTokenRepo")
-	}
-	if log == nil {
-		panic("Logger is required for EmailVerificationTokenRepo")
-	}
-	return &EmailVerificationTokenRepo{db: db, log: log}
-}
-
-func (r *EmailVerificationTokenRepo) CreateVerificationToken(ctx context.Context, userID string, email string, rawToken string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
+func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.Context, userID string, email string, rawToken string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
 	r.log.Info("Creating email verification token",
 		logger.String("user_id", userID),
 		logger.String("email", email),
@@ -64,7 +48,7 @@ func (r *EmailVerificationTokenRepo) CreateVerificationToken(ctx context.Context
 	return nil
 }
 
-func (r *EmailVerificationTokenRepo) GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError) {
+func (r *EmailVerificationTokenRepository) GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError) {
 	r.log.Debug("Fetching email verification token by hash")
 
 	query := `SELECT * FROM auth.email_verification_tokens WHERE token_hash = $1 LIMIT 1`
@@ -79,7 +63,7 @@ func (r *EmailVerificationTokenRepo) GetVerificationTokenByHash(ctx context.Cont
 	return &token, nil
 }
 
-func (r *EmailVerificationTokenRepo) MarkTokenVerified(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError {
+func (r *EmailVerificationTokenRepository) MarkTokenVerified(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError {
 	// if the token is wrong add to attempt
 	r.log.Info("Marking email verification token as verified",
 		logger.String("token_hash", tokenHash),
@@ -124,7 +108,7 @@ func (r *EmailVerificationTokenRepo) MarkTokenVerified(ctx context.Context, toke
 	return nil
 }
 
-func (r *EmailVerificationTokenRepo) GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError) {
+func (r *EmailVerificationTokenRepository) GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError) {
 	r.log.Debug("Fetching latest email verification token for user",
 		logger.String("user_id", userID),
 	)
@@ -142,7 +126,7 @@ func (r *EmailVerificationTokenRepo) GetLatestTokenByUserID(ctx context.Context,
 	return &token, nil
 }
 
-func (r *EmailVerificationTokenRepo) CountRecentTokensByUserID(ctx context.Context, userID string, since time.Time) (int, pkgErrors.AppError) {
+func (r *EmailVerificationTokenRepository) CountRecentTokensByUserID(ctx context.Context, userID string, since time.Time) (int, pkgErrors.AppError) {
 	r.log.Debug("Counting recent verification tokens for user",
 		logger.String("user_id", userID),
 	)
@@ -157,7 +141,7 @@ func (r *EmailVerificationTokenRepo) CountRecentTokensByUserID(ctx context.Conte
 	return count, nil
 }
 
-func (r *EmailVerificationTokenRepo) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *EmailVerificationTokenRepository) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Deleting old unverified tokens for user",
 		logger.String("user_id", userID),
 	)

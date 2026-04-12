@@ -94,67 +94,162 @@ func (e *DBError) Error() string {
 }
 
 func (e *DBError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.wrapped
 }
 
-func (e *DBError) Code() string                    { return e.code }
-func (e *DBError) Message() string                 { return e.message }
-func (e *DBError) Operation() string               { return e.operation }
-func (e *DBError) Table() string                   { return e.table }
-func (e *DBError) Column() string                  { return e.column }
-func (e *DBError) Constraint() string              { return e.constraint }
-func (e *DBError) SQLState() string                { return e.sqlState }
-func (e *DBError) Query() string                   { return e.query }
-func (e *DBError) Timestamp() time.Time            { return e.timestamp }
-func (e *DBError) Details() map[string]interface{} { return e.details }
+func (e *DBError) Code() string {
+	if e == nil {
+		return ""
+	}
+	return e.code
+}
+
+func (e *DBError) Message() string {
+	if e == nil {
+		return ""
+	}
+	return e.message
+}
+
+func (e *DBError) Operation() string {
+	if e == nil {
+		return ""
+	}
+	return e.operation
+}
+
+func (e *DBError) Table() string {
+	if e == nil {
+		return ""
+	}
+	return e.table
+}
+
+func (e *DBError) Column() string {
+	if e == nil {
+		return ""
+	}
+	return e.column
+}
+
+func (e *DBError) Constraint() string {
+	if e == nil {
+		return ""
+	}
+	return e.constraint
+}
+
+func (e *DBError) SQLState() string {
+	if e == nil {
+		return ""
+	}
+	return e.sqlState
+}
+
+func (e *DBError) Query() string {
+	if e == nil {
+		return ""
+	}
+	return e.query
+}
+
+func (e *DBError) Timestamp() time.Time {
+	if e == nil {
+		return time.Time{}
+	}
+	return e.timestamp
+}
+
+func (e *DBError) Details() map[string]interface{} {
+	if e == nil {
+		return nil
+	}
+	return e.details
+}
 
 // Wrapped returns the underlying error
 func (e *DBError) Wrapped() error {
+	if e == nil {
+		return nil
+	}
 	return e.wrapped
 }
 
 // Builder methods for chaining
 func (e *DBError) WithOperation(operation string) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.operation = operation
 	return e
 }
 
 func (e *DBError) WithTable(table string) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.table = table
 	return e
 }
 
 func (e *DBError) WithColumn(column string) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.column = column
 	return e
 }
 
 func (e *DBError) WithConstraint(constraint string) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.constraint = constraint
 	return e
 }
 
 func (e *DBError) WithSQLState(sqlState string) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.sqlState = sqlState
 	return e
 }
 
 func (e *DBError) WithQuery(query string) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.query = query
 	return e
 }
 
 func (e *DBError) WithDetail(key string, value interface{}) *DBError {
+	if e == nil {
+		return nil
+	}
+	if e.details == nil {
+		e.details = make(map[string]interface{})
+	}
 	e.details[key] = value
 	return e
 }
 
 func (e *DBError) WithWrapped(err error) *DBError {
+	if e == nil {
+		return nil
+	}
 	e.wrapped = err
 	return e
 }
 
 func (e *DBError) IsRetryable() bool {
+	if e == nil {
+		return false
+	}
 	switch e.code {
 	case CodeDBDeadlock, CodeDBSerializationFailure, CodeDBTimeout, CodeDBConnection:
 		return true
@@ -164,6 +259,9 @@ func (e *DBError) IsRetryable() bool {
 }
 
 func (e *DBError) IsClientError() bool {
+	if e == nil {
+		return false
+	}
 	switch e.code {
 	case CodeDBInvalidInput, CodeDBSyntaxError, CodeDBDuplicateKey,
 		CodeDBForeignKey, CodeDBConstraint, CodeDBNotNull, CodeDBCheckViolation:

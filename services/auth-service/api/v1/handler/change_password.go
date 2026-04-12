@@ -3,7 +3,7 @@ package handler
 import (
 	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
+	"auth-service/internal/repo/security_event"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -114,7 +114,7 @@ func (h *AuthHandler) ChangePassword(handler *req.RequestHandler) {
 			logger.String("user_id", userID),
 		)
 	}
-	h.securityEventRepo.LogPasswordChangeEvent(ctx, repository.SecurityEventInput{
+	h.securityEventRepo.LogPasswordChangeEvent(ctx, security_event.SecurityEventInput{
 		UserID: userID,
 		SessionID: func() *string {
 			if ok {

@@ -26,7 +26,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", input.Email),
 	)
-	input.Email = normalizeEmail(input.Email)
+	input.Email = utils.NormalizeEmail(input.Email)
 
 	result, err := s.hashingService.HashPassword(ctx, input.Password)
 	if err != nil {
@@ -150,7 +150,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 // ============================================================================
 
 func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError) {
-	email := normalizeEmail(input.Email)
+	email := utils.NormalizeEmail(input.Email)
 	s.log.Info("User login",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -349,16 +349,14 @@ func (s *AuthService) Logout(ctx context.Context, sessionID string, userID strin
 		logger.String("user_id", userID),
 	)
 
-	if s.sessionRepo != nil {
-		err := s.sessionRepo.RevokeSession(ctx, sessionID, "user_logout")
-		if err != nil {
-			return &authErrors.AuthError{
-				Message: "Failed to revoke session",
-				Code:    authErrors.CodeDatabaseError,
-				Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke session").
-					WithService(authErrors.ServiceName).
-					WithDetail("session_id", sessionID),
-			}
+	err := s.sessionRepo.RevokeSession(ctx, sessionID, "user_logout")
+	if err != nil {
+		return &authErrors.AuthError{
+			Message: "Failed to revoke session",
+			Code:    authErrors.CodeDatabaseError,
+			Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke session").
+				WithService(authErrors.ServiceName).
+				WithDetail("session_id", sessionID),
 		}
 	}
 
@@ -441,9 +439,7 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password
 		}
 	}
 
-	if s.sessionRepo != nil {
-		_ = s.sessionRepo.RevokeAllUserSessions(ctx, userID, "account_deleted")
-	}
+	_ = s.sessionRepo.RevokeAllUserSessions(ctx, userID, "account_deleted")
 
 	s.log.Info("Account deleted successfully",
 		logger.String("service", authErrors.ServiceName),

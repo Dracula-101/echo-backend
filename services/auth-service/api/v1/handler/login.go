@@ -7,7 +7,7 @@ import (
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
+	"auth-service/internal/repo/security_event"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 	req "shared/server/request"
@@ -191,7 +191,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("user_id", userResult.User.ID),
 		logger.String("session_id", session.SessionId),
 	)
-	h.securityEventRepo.LogLoginEvent(ctx, repository.SecurityEventInput{
+	h.securityEventRepo.LogLoginEvent(ctx, security_event.SecurityEventInput{
 		UserID:      userResult.User.ID,
 		SessionID:   &session.SessionId,
 		Status:      "success",
@@ -264,7 +264,7 @@ func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceIn
 		logger.String("user_id", userID),
 		logger.String("reason", failureReason),
 	)
-	h.securityEventRepo.LogLoginEvent(ctx, repository.SecurityEventInput{
+	h.securityEventRepo.LogLoginEvent(ctx, security_event.SecurityEventInput{
 		UserID:      userID,
 		Status:      "failure",
 		Description: fmt.Sprintf("Failed login attempt: %s", failureReason),

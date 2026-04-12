@@ -484,7 +484,7 @@ func Binary(key string, val []byte) Field {
 }
 
 func Error(err error) Field {
-	if err == nil {
+	if isNilError(err) {
 		return &field{key: "error", value: nil, formattedValue: "null"}
 	}
 
@@ -504,10 +504,23 @@ func Error(err error) Field {
 }
 
 func Err(key string, err error) Field {
-	if err == nil {
+	if isNilError(err) {
 		return &field{key: key, value: nil, formattedValue: "null"}
 	}
 	return &field{key: key, value: err.Error(), formattedValue: err.Error()}
+}
+
+func isNilError(err error) bool {
+	if err == nil {
+		return true
+	}
+	v := reflect.ValueOf(err)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func, reflect.Chan:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func Stack(key string, skip int) Field {

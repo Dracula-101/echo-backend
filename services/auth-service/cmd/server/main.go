@@ -2,12 +2,19 @@ package main
 
 import (
 	"auth-service/api/v1/handler"
+	"auth-service/api/v1/middleware"
 	"auth-service/internal/config"
 	"auth-service/internal/health"
 	"auth-service/internal/health/checkers"
 	repository "auth-service/internal/repo"
+	"auth-service/internal/repo/email_verification"
+	"auth-service/internal/repo/login_history"
+	"auth-service/internal/repo/password_reset"
+	"auth-service/internal/repo/security_event"
+	"auth-service/internal/repo/session"
 	"auth-service/internal/service"
-	middleware "auth-service/internal/utils"
+	"auth-service/internal/service/location"
+	sessionSvc "auth-service/internal/service/session"
 	"context"
 	"fmt"
 
@@ -147,18 +154,10 @@ func setupEmailService(cfg config.Config, log logger.Logger) *email.EmailService
 
 func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
 	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
-
-	// Register database health checker
-	if dbClient != nil {
-		healthMgr.RegisterChecker(checkers.NewDatabaseChecker(dbClient))
-	}
-
-	// Register cache health checker
-	if cacheClient != nil && cfg.Cache.Enabled {
+	healthMgr.RegisterChecker(checkers.NewDatabaseChecker(dbClient))
+	if cfg.Cache.Enabled {
 		healthMgr.RegisterChecker(checkers.NewCacheChecker(cacheClient))
-		healthMgr.RegisterChecker(checkers.NewCachePerformanceChecker(cacheClient))
 	}
-
 	return healthMgr
 }
 
@@ -190,7 +189,8 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 	return builder
 }
 
-func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService service.LocationService, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService location.LocationService, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+	skipAuthPaths := []string{"/login", "/register", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh req.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
@@ -206,10 +206,10 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(middleware.LocationFromIP(locationService, memCache)),
+			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
 			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
-			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
-			router.Middleware(coreMiddleware.InterceptUserId("/login", "/register", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification")),
+			router.Middleware(coreMiddleware.InterceptUserId(skipAuthPaths...)),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
@@ -228,7 +228,7 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, log logger.Logger, cfg config.Config) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
@@ -367,8 +367,14 @@ func main() {
 	if cfg.Cache.Enabled {
 		log.Info("Initializing in-memory cache since external cache is disabled")
 		memCache = createMemCacheClient(log)
-	} else {
-		log.Info("External cache is enabled, skipping in-memory cache initialization")
+		defer func() {
+			if memCache != nil {
+				log.Info("Closing in-memory cache")
+				if err := memCache.Close(); err != nil {
+					log.Error("Failed to close in-memory cache", logger.Error(err))
+				}
+			}
+		}()
 	}
 
 	emailService := setupEmailService(*cfg, log)
@@ -376,23 +382,23 @@ func main() {
 	tokenService := createTokenManager(*cfg, log)
 	hashingService := createHashingService(*cfg, log)
 
-	locationService := service.NewLocationService(cfg.LocationService.Endpoint, log)
+	locationService := location.NewLocationService(cfg.LocationService.Endpoint, log)
 
-	loginHistoryRepo := repository.NewLoginHistoryRepo(dbClient, log)
-	sessionRepo := repository.NewSessionRepo(dbClient, log)
-	sessionService := service.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
-	emailVerificationRepo := repository.NewEmailVerificationTokenRepo(dbClient, log)
-	resetTokenRepo := repository.NewPasswordResetTokenRepo(dbClient, log)
-	securityEventRepo := repository.NewSecurityEventRepo(dbClient, log)
+	loginHistoryRepo := login_history.NewLoginHistoryRepo(dbClient, log)
+	sessionRepo := session.NewSessionRepo(dbClient, log)
+	sessionService := sessionSvc.NewSessionService(*sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
+	emailVerificationRepo := email_verification.NewEmailVerificationTokenRepo(dbClient, log)
+	resetTokenRepo := password_reset.NewPasswordResetTokenRepo(dbClient, log)
+	securityEventRepo := security_event.NewSecurityEventRepo(dbClient, log)
 
 	authRepo := repository.NewAuthRepository(dbClient, log)
 	authService := service.NewAuthServiceBuilder().
 		WithRepo(authRepo).
-		WithLoginHistoryRepo(loginHistoryRepo).
-		WithEmailVerificationRepo(emailVerificationRepo).
-		WithPasswordResetRepo(resetTokenRepo).
-		WithSessionRepo(sessionRepo).
-		WithSecurityEventRepo(securityEventRepo).
+		WithLoginHistoryRepo(*loginHistoryRepo).
+		WithEmailVerificationRepo(*emailVerificationRepo).
+		WithPasswordResetRepo(*resetTokenRepo).
+		WithSessionRepo(*sessionRepo).
+		WithSecurityEventRepo(*securityEventRepo).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
 		WithEmailService(*emailService).
@@ -401,7 +407,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(authService, sessionService, locationService, securityEventRepo, log)
+	authHandler := handler.NewAuthHandler(authService, *sessionService, *locationService, *securityEventRepo, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
@@ -412,13 +418,14 @@ func main() {
 	}
 
 	serverCfg := server.Config{
-		Host:           cfg.Server.Host,
-		Port:           cfg.Server.Port,
-		ReadTimeout:    cfg.Server.ReadTimeout,
-		WriteTimeout:   cfg.Server.WriteTimeout,
-		IdleTimeout:    cfg.Server.IdleTimeout,
-		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
-		Handler:        routerInstance.Mux(),
+		Host:            cfg.Server.Host,
+		Port:            cfg.Server.Port,
+		ReadTimeout:     cfg.Server.ReadTimeout,
+		WriteTimeout:    cfg.Server.WriteTimeout,
+		IdleTimeout:     cfg.Server.IdleTimeout,
+		MaxHeaderBytes:  cfg.Server.MaxHeaderBytes,
+		Handler:         routerInstance.Mux(),
+		ShutdownTimeout: cfg.Server.ShutdownTimeout,
 	}
 
 	srv, err := server.New(&serverCfg, log)
@@ -426,7 +433,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, log, *cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {

@@ -9,6 +9,7 @@ import (
 
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddress string, userAgent string) *authErrors.AuthError {
@@ -16,7 +17,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
-	email = normalizeEmail(email)
+	email = utils.NormalizeEmail(email)
 
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -159,10 +160,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token string, newPasswo
 	}
 
 	_ = s.passwordResetRepo.MarkTokenUsed(ctx, resetToken.ID)
-
-	if s.sessionRepo != nil {
-		_ = s.sessionRepo.RevokeAllUserSessions(ctx, resetToken.UserID, "password_reset")
-	}
+	_ = s.sessionRepo.RevokeAllUserSessions(ctx, resetToken.UserID, "password_reset")
 
 	s.log.Info("Password reset successful",
 		logger.String("service", authErrors.ServiceName),

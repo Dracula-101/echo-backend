@@ -1,12 +1,12 @@
-package repository
+package login_history
 
 import (
 	repoModels "auth-service/internal/repo/model"
 	"context"
-	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 // LoginHistoryRepositoryInterface defines the contract for login history repository operations
@@ -21,30 +21,14 @@ type LoginHistoryRepositoryInterface interface {
 }
 
 // ============================================================================
-// Repository Definition
-// ============================================================================
-
-type LoginHistoryRepo struct {
-	db  database.Database
-	log logger.Logger
-}
-
-func NewLoginHistoryRepo(db database.Database, log logger.Logger) *LoginHistoryRepo {
-	return &LoginHistoryRepo{
-		db:  db,
-		log: log,
-	}
-}
-
-// ============================================================================
 // Login History Operations
 // ============================================================================
 
-func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) pkgErrors.AppError {
+func (r *LoginHistoryRepository) CreateLoginHistory(ctx context.Context, input repoModels.CreateLoginHistoryInput) pkgErrors.AppError {
 	r.log.Debug("Creating login history entry",
 		logger.String("user_id", input.UserID),
-		logger.String("status", safeDerefString(input.Status)),
-		logger.String("ip_address", safeDerefString(&input.IPInfo.IP)),
+		logger.String("status", utils.SafeString(input.Status)),
+		logger.String("ip_address", utils.SafeString(&input.IPInfo.IP)),
 	)
 	id, err := r.db.Insert(ctx, &models.LoginHistory{
 		UserID:          input.UserID,
@@ -65,7 +49,7 @@ func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoMod
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create login history").
 			WithDetail("user_id", input.UserID).
-			WithDetail("status", safeDerefString(input.Status))
+			WithDetail("status", utils.SafeString(input.Status))
 	}
 	r.log.Debug("Login history created successfully",
 		logger.String("login_history_id", *id),
@@ -73,7 +57,7 @@ func (r *LoginHistoryRepo) CreateLoginHistory(ctx context.Context, input repoMod
 	return nil
 }
 
-func (r *LoginHistoryRepo) GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, pkgErrors.AppError) {
+func (r *LoginHistoryRepository) GetLoginHistoryByUserID(ctx context.Context, userID string, limit int) ([]*models.LoginHistory, pkgErrors.AppError) {
 	r.log.Debug("Fetching login history by user ID",
 		logger.String("user_id", userID),
 		logger.Int("limit", limit),
@@ -99,7 +83,7 @@ func (r *LoginHistoryRepo) GetLoginHistoryByUserID(ctx context.Context, userID s
 	return histories, nil
 }
 
-func (r *LoginHistoryRepo) GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, pkgErrors.AppError) {
+func (r *LoginHistoryRepository) GetLoginHistoryByID(ctx context.Context, id string) (*models.LoginHistory, pkgErrors.AppError) {
 	r.log.Debug("Fetching login history by ID",
 		logger.String("login_history_id", id),
 	)
@@ -121,7 +105,7 @@ func (r *LoginHistoryRepo) GetLoginHistoryByID(ctx context.Context, id string) (
 	return &history, nil
 }
 
-func (r *LoginHistoryRepo) GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, pkgErrors.AppError) {
+func (r *LoginHistoryRepository) GetFailedLoginAttempts(ctx context.Context, userID string, duration string) (int, pkgErrors.AppError) {
 	r.log.Debug("Counting failed login attempts",
 		logger.String("user_id", userID),
 		logger.String("duration", duration),
@@ -145,7 +129,7 @@ func (r *LoginHistoryRepo) GetFailedLoginAttempts(ctx context.Context, userID st
 	return count, nil
 }
 
-func (r *LoginHistoryRepo) DeleteLoginHistoryByUserID(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *LoginHistoryRepository) DeleteLoginHistoryByUserID(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Debug("Deleting login history by user ID",
 		logger.String("user_id", userID),
 	)
@@ -163,7 +147,7 @@ func (r *LoginHistoryRepo) DeleteLoginHistoryByUserID(ctx context.Context, userI
 	return nil
 }
 
-func (r *LoginHistoryRepo) DeleteLoginHistoryByID(ctx context.Context, id string) pkgErrors.AppError {
+func (r *LoginHistoryRepository) DeleteLoginHistoryByID(ctx context.Context, id string) pkgErrors.AppError {
 	r.log.Debug("Deleting login history by ID",
 		logger.String("login_history_id", id),
 	)
@@ -177,15 +161,4 @@ func (r *LoginHistoryRepo) DeleteLoginHistoryByID(ctx context.Context, id string
 		logger.String("login_history_id", id),
 	)
 	return nil
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-func safeDerefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

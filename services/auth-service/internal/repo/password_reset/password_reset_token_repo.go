@@ -1,4 +1,4 @@
-package repository
+package password_reset
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"shared/pkg/database"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -19,33 +18,18 @@ type PasswordResetTokenRepositoryInterface interface {
 	InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError
 }
 
-type PasswordResetTokenRepo struct {
-	db  database.Database
-	log logger.Logger
-}
-
-func NewPasswordResetTokenRepo(db database.Database, log logger.Logger) *PasswordResetTokenRepo {
-	if db == nil {
-		panic("Database is required for PasswordResetTokenRepo")
-	}
-	if log == nil {
-		panic("Logger is required for PasswordResetTokenRepo")
-	}
-	return &PasswordResetTokenRepo{db: db, log: log}
-}
-
-func (r *PasswordResetTokenRepo) CreateResetToken(ctx context.Context, userID string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
+func (r *PasswordResetTokenRepository) CreateResetToken(ctx context.Context, userID string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
 	r.log.Info("Creating password reset token",
 		logger.String("user_id", userID),
 	)
 
 	now := time.Now()
 	_, err := r.db.Insert(ctx, &models.PasswordResetToken{
-		UserID:    userID,
-		TokenHash: tokenHash,
-		ExpiresAt: expiresAt,
-		IPAddress: &ipAddress,
-		UserAgent: &userAgent,
+		UserID:      userID,
+		TokenHash:   tokenHash,
+		ExpiresAt:   expiresAt,
+		IPAddress:   &ipAddress,
+		UserAgent:   &userAgent,
 		EmailSentAt: &now,
 	})
 	if err != nil {
@@ -59,7 +43,7 @@ func (r *PasswordResetTokenRepo) CreateResetToken(ctx context.Context, userID st
 	return nil
 }
 
-func (r *PasswordResetTokenRepo) GetResetTokenByHash(ctx context.Context, tokenHash string) (*models.PasswordResetToken, pkgErrors.AppError) {
+func (r *PasswordResetTokenRepository) GetResetTokenByHash(ctx context.Context, tokenHash string) (*models.PasswordResetToken, pkgErrors.AppError) {
 	r.log.Debug("Fetching password reset token by hash")
 
 	query := `SELECT * FROM auth.password_reset_tokens WHERE token_hash = $1 LIMIT 1`
@@ -74,7 +58,7 @@ func (r *PasswordResetTokenRepo) GetResetTokenByHash(ctx context.Context, tokenH
 	return &token, nil
 }
 
-func (r *PasswordResetTokenRepo) MarkTokenUsed(ctx context.Context, tokenID string) pkgErrors.AppError {
+func (r *PasswordResetTokenRepository) MarkTokenUsed(ctx context.Context, tokenID string) pkgErrors.AppError {
 	r.log.Info("Marking password reset token as used",
 		logger.String("token_id", tokenID),
 	)
@@ -88,7 +72,7 @@ func (r *PasswordResetTokenRepo) MarkTokenUsed(ctx context.Context, tokenID stri
 	return nil
 }
 
-func (r *PasswordResetTokenRepo) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *PasswordResetTokenRepository) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Invalidating all password reset tokens for user",
 		logger.String("user_id", userID),
 	)

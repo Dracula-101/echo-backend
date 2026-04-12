@@ -84,6 +84,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-echo_db}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
       PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres
+        -c shared_preload_libraries=pg_stat_statements,pg_cron
+        -c pg_cron.database=${POSTGRES_DB:-echo_db}
+        -c pg_stat_statements.track=all
+        -c log_min_duration_statement=100
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro

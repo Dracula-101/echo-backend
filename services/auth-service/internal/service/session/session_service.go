@@ -1,22 +1,17 @@
-package service
+package session
 
 import (
-	"auth-service/internal/config"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
-	repository "auth-service/internal/repo"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"shared/pkg/cache"
-	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
-	"shared/server/common/token"
 
 	"github.com/google/uuid"
 )
@@ -30,44 +25,6 @@ type SessionServiceInterface interface {
 	GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
-}
-
-type SessionService struct {
-	repo         repository.SessionRepositoryInterface
-	tokenService token.JWTTokenService
-	cfg          config.CacheConfig
-	cache        cache.Cache
-	log          logger.Logger
-}
-
-func toDBSessionType(t domain.SessionType) models.SessionType {
-	switch t {
-	case domain.SessionTypeMobile:
-		return models.SessionTypeMobile
-	default:
-		return models.SessionTypeWeb
-	}
-}
-
-func NewSessionService(repo repository.SessionRepositoryInterface, cache cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
-	if repo == nil {
-		panic("SessionRepo is required")
-	}
-	if log == nil {
-		panic("Logger is required")
-	}
-
-	log.Info("Initializing SessionService",
-		logger.String("service", authErrors.ServiceName),
-	)
-
-	return &SessionService{
-		repo:         repo,
-		cache:        cache,
-		tokenService: token,
-		log:          log,
-		cfg:          cfg,
-	}
 }
 
 func (s *SessionService) generateSessionToken(userID string) (string, pkgErrors.AppError) {
