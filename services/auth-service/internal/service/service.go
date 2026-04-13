@@ -1,6 +1,7 @@
 package service
 
 import (
+	ratelimiter "auth-service/api/v1/rate_limiter"
 	"auth-service/internal/config"
 	repository "auth-service/internal/repo"
 	"auth-service/internal/repo/email_verification"
@@ -26,6 +27,7 @@ type AuthService struct {
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
 	cache                 cache.Cache
+	rateLimiter           ratelimiter.RateLimiter
 	cfg                   *config.AuthConfig
 	log                   logger.Logger
 }
@@ -45,6 +47,7 @@ type AuthServiceBuilder struct {
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
 	cache                 cache.Cache
+	rateLimiter           ratelimiter.RateLimiter
 	cfg                   *config.AuthConfig
 	log                   logger.Logger
 }
@@ -76,6 +79,11 @@ func (b *AuthServiceBuilder) WithEmailVerificationRepo(repo email_verification.E
 
 func (b *AuthServiceBuilder) WithSecurityEventRepo(repo security_event.SecurityEventRepository) *AuthServiceBuilder {
 	b.securityEventRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithRateLimiter(rateLimiter ratelimiter.RateLimiter) *AuthServiceBuilder {
+	b.rateLimiter = rateLimiter
 	return b
 }
 
@@ -132,6 +140,7 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 		tokenService:          b.tokenService,
 		hashingService:        b.hashingService,
 		cache:                 b.cache,
+		rateLimiter:           b.rateLimiter,
 		cfg:                   b.cfg,
 		log:                   b.log,
 	}

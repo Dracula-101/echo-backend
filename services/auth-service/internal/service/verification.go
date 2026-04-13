@@ -1,8 +1,10 @@
 package service
 
 import (
+	ratelimiter "auth-service/api/v1/rate_limiter"
 	"auth-service/internal/error"
 	"context"
+	"fmt"
 	"time"
 
 	"shared/pkg/database/postgres/models"
@@ -14,9 +16,7 @@ import (
 
 const (
 	maxVerificationAttempts  = 5
-	verificationTokenTTL     = 24 * time.Hour
-	resendRateLimitWindow    = 1 * time.Hour
-	maxResendTokensPerWindow = 3
+	maxResendTokensPerWindow = 5
 )
 
 func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) (email *string, authErr *error.AuthError) {
@@ -179,7 +179,6 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 		logger.String("user_id", verificationRecord.UserID),
 	)
 
-	defer s.emailVerificationRepo.InvalidateUserTokens(ctx, verificationRecord.UserID)
 	return &user.Email, nil
 }
 
@@ -191,7 +190,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 
 	email = utils.NormalizeEmail(email)
 
-	// ── 1. Look up user ──────────────────────────────────────────────────
+	// ── Look up user ──────────────────────────────────────────────────
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		s.log.Error("Failed to look up user for resend verification",
@@ -206,7 +205,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 		}
 	}
 
-	// ── 2. Reject if ineligible ──────────────────────────────────────────
+	// ── Reject if ineligible ──────────────────────────────────────────
 	if user == nil {
 		return nil, &error.AuthError{
 			Code:    error.CodeUserNotFound,
@@ -231,40 +230,78 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 		}
 	}
 
-	// ── 3. Rate-limit: count recent tokens ───────────────────────────────
-	since := time.Now().Add(-resendRateLimitWindow)
-	count, countErr := s.emailVerificationRepo.CountRecentTokensByUserID(ctx, user.ID, since)
-	if countErr != nil {
-		s.log.Warn("Failed to count recent verification tokens (proceeding anyway)",
+	// ── Rate limit ───────────────────────────────────────────────────
+	allowed, remaining, rlErr := s.rateLimiter.AllowResendVerify(ctx, user.ID, maxResendTokensPerWindow)
+	if rlErr != nil {
+		s.log.Error("Failed to check resend verification rate limit",
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", user.ID),
-			logger.Error(countErr),
-		)
-	}
-	if count >= maxResendTokensPerWindow {
-		s.log.Warn("Resend verification rate limit hit",
-			logger.String("service", error.ServiceName),
-			logger.String("user_id", user.ID),
-			logger.Int("recent_tokens", count),
+			logger.Error(rlErr),
 		)
 		return nil, &error.AuthError{
-			Code:    error.CodeVerificationEmailRecentlySent,
-			Message: "Verification email was recently sent. Please check your inbox or try again later.",
-			Error:   pkgErrors.New(error.CodeVerificationEmailRecentlySent, "rate limit exceeded"),
+			Code:    error.CodeCacheError,
+			Message: "Failed to process request",
+			Error:   rlErr,
+		}
+	}
+	if !allowed {
+		s.log.Warn("Resend verification rate limit exceeded",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Int("remaining_seconds", int(remaining)),
+		)
+		return nil, &error.AuthError{
+			Code:    error.CodeVerificationCooldown,
+			Message: "Too many resend attempts. Please try again later.",
+			Error:   pkgErrors.New(error.CodeVerificationCooldown, "resend verification rate limit exceeded"),
 		}
 	}
 
-	// ── 4. Invalidate old unverified tokens ──────────────────────────────
-	invalidateErr := s.emailVerificationRepo.InvalidateUserTokens(ctx, user.ID)
-	if invalidateErr != nil {
-		s.log.Warn("Failed to invalidate old verification tokens (non-critical)",
+	// Check Redis pwd_reset_sent:{user_id} pattern — equivalent key resend_verify_sent:{user_id}. If present and age < 60 seconds: return 429 with retry_after_seconds = 60 - age.
+	allowed, retryAfter, cacheErr := s.rateLimiter.CanSendPwdReset(ctx, user.ID)
+	if cacheErr != nil {
+		s.log.Error("Failed to check resend verification cooldown",
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", user.ID),
-			logger.Error(invalidateErr),
+			logger.Error(cacheErr),
 		)
+		return nil, &error.AuthError{
+			Code:    error.CodeCacheError,
+			Message: "Failed to process request",
+			Error:   cacheErr,
+		}
+	}
+	if !allowed {
+		s.log.Warn("Resend verification cooldown active",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Int("retry_after_seconds", int(retryAfter)),
+		)
+		return nil, &error.AuthError{
+			Code:    error.CodeVerificationCooldown,
+			Message: fmt.Sprintf("Verification email recently sent. Try again after %d seconds.", int(retryAfter)),
+			Error:   pkgErrors.New(error.CodeVerificationCooldown, "resend verification cooldown active"),
+			Detail: map[string]interface{}{
+				"retry_after_seconds": int(retryAfter),
+			},
+		}
 	}
 
-	// ── 5. Generate new token ────────────────────────────────────────────
+	err = s.emailVerificationRepo.ExpireTokensByUserID(ctx, user.ID)
+	if err != nil {
+		s.log.Error("Failed to expire existing email verification tokens",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Error(err),
+		)
+		return nil, &error.AuthError{
+			Code:    error.CodeDatabaseError,
+			Message: "Failed to process request",
+			Error:   err,
+		}
+	}
+
+	// ── Generate new token ────────────────────────────────────────────
 	rawToken := s.tokenService.GenerateVerificationToken()
 	tokenHash, hashErr := s.hashingService.SimpleHash(ctx, rawToken)
 	if hashErr != nil {
@@ -279,9 +316,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 			Error:   pkgErrors.FromError(hashErr, error.CodeTokenGenerationFailed, "failed to hash verification token"),
 		}
 	}
-
-	expiresAt := time.Now().Add(verificationTokenTTL)
-
+	expiresAt := time.Now().Add(ratelimiter.TTLResendVerify)
 	createErr := s.emailVerificationRepo.CreateVerificationToken(
 		ctx, user.ID, email, *tokenHash, ipAddress, userAgent, expiresAt,
 	)
@@ -298,7 +333,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 		}
 	}
 
-	// ── 6. Send the email (only after DB insert succeeds) ────────────────
+	// ── Send the email (only after DB insert succeeds) ────────────────
 	emailErr := s.emailService.SendEmailVerificationEmail(email, rawToken)
 	if emailErr != nil {
 		s.log.Error("Failed to send verification email",
@@ -311,6 +346,16 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAd
 			Message: "Failed to send verification email. Please try again.",
 			Error:   pkgErrors.FromError(emailErr, error.CodeEmailSendFailed, "failed to send verification email"),
 		}
+	}
+
+	// -─ Set cooldown in Redis ───────────────────────────────────────────
+	err = s.rateLimiter.SetPwdResetCooldown(ctx, user.ID)
+	if err != nil {
+		s.log.Error("Failed to set resend verification cooldown",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Error(err),
+		)
 	}
 
 	s.log.Info("Verification email resent successfully",

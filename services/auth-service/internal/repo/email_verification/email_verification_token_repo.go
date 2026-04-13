@@ -16,8 +16,7 @@ type EmailVerificationTokenRepositoryInterface interface {
 	GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError)
 	AttemptVerification(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError
 	GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError)
-	CountRecentTokensByUserID(ctx context.Context, userID string, since time.Time) (int, pkgErrors.AppError)
-	InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError
+	ExpireTokensByUserID(ctx context.Context, userID string) pkgErrors.AppError
 }
 
 func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
@@ -96,30 +95,15 @@ func (r *EmailVerificationTokenRepository) GetLatestTokenByUserID(ctx context.Co
 	return &token, nil
 }
 
-func (r *EmailVerificationTokenRepository) CountRecentTokensByUserID(ctx context.Context, userID string, since time.Time) (int, pkgErrors.AppError) {
-	r.log.Debug("Counting recent verification tokens for user",
+func (r *EmailVerificationTokenRepository) ExpireTokensByUserID(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Expiring existing email verification tokens for user",
 		logger.String("user_id", userID),
 	)
-
-	query := `SELECT COUNT(*) FROM auth.email_verification_tokens WHERE user_id = $1 AND created_at > $2`
-	var count int
-	err := r.db.QueryRow(ctx, query, userID, since).Scan(&count)
-	if err != nil {
-		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count recent verification tokens").
-			WithDetail("user_id", userID)
-	}
-	return count, nil
-}
-
-func (r *EmailVerificationTokenRepository) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
-	r.log.Info("Deleting old unverified tokens for user",
-		logger.String("user_id", userID),
-	)
-
-	query := `DELETE FROM auth.email_verification_tokens WHERE user_id = $1 AND verified_at IS NULL`
+	// UPDATE auth.email_verification_tokens SET expires_at = NOW() WHERE user_id = $1 AND verified_at IS NULL. Marks all outstanding tokens as expired — prevents old links from working after a resend.
+	query := `UPDATE auth.email_verification_tokens SET expires_at = NOW() WHERE user_id = $1 AND verified_at IS NULL`
 	_, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete old verification tokens").
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to expire existing email verification tokens").
 			WithDetail("user_id", userID)
 	}
 	return nil

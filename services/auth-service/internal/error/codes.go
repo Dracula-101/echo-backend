@@ -27,8 +27,9 @@ const (
 	CodeProfileIncomplete       = "AUTH_PROFILE_INCOMPLETE"
 
 	// Database Errors
-	CodeDatabaseError = "AUTH_DATABASE_ERROR"
-	CodeCacheError    = "AUTH_CACHE_ERROR"
+	CodeDatabaseError     = "AUTH_DATABASE_ERROR"
+	CodeCacheError        = "AUTH_CACHE_ERROR"
+	CodeRateLimitExceeded = "AUTH_RATE_LIMIT_EXCEEDED"
 
 	// Registration Errors
 	CodeInvalidEmail       = "AUTH_INVALID_EMAIL"

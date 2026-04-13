@@ -45,7 +45,7 @@ func (h *AuthHandler) ResendVerification(handler *req.RequestHandler) {
 
 		switch err.Code {
 		case authErrors.CodeEmailAlreadyVerified:
-			response.ConflictError(ctx, handler.Request(), handler.Writer(), err.Message, err.Error)
+			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Email is already verified", nil)
 			return
 		case authErrors.CodeUserNotFound:
 			response.NotFoundError(ctx, handler.Request(), handler.Writer(), err.Message)
@@ -53,13 +53,21 @@ func (h *AuthHandler) ResendVerification(handler *req.RequestHandler) {
 		case authErrors.CodeVerificationEmailRecentlySent:
 			response.TooManyRequestsError(ctx, handler.Request(), handler.Writer(), err.Message, 0)
 			return
-		case authErrors.CodeEmailSendFailed:
+		case authErrors.CodeVerificationCooldown:
+			retryAfter := 60 // Default retry after 60 seconds if not provided
+			if err.Detail != nil {
+				if val, ok := err.Detail["retry_after_seconds"]; ok {
+					if retrySeconds, ok := val.(int); ok {
+						retryAfter = retrySeconds
+					}
+				}
+			}
+			response.TooManyRequestsError(ctx, handler.Request(), handler.Writer(), err.Message, retryAfter)
+			return
+		default:
 			response.InternalServerError(ctx, handler.Request(), handler.Writer(), err.Message, err.Error)
 			return
 		}
-
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to send verification email", err.Error)
-		return
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK,

@@ -46,6 +46,26 @@ func (c *memoryCache) Get(ctx context.Context, key string) ([]byte, error) {
 	return item.value, nil
 }
 
+func (c *memoryCache) GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	item, found := c.items[key]
+	if !found {
+		return nil, 0, cache.ErrNotFound
+	}
+
+	if item.expiration > 0 {
+		now := time.Now().UnixNano()
+		if now > item.expiration {
+			return nil, 0, cache.ErrNotFound
+		}
+		return item.value, time.Duration(item.expiration-now) * time.Nanosecond, nil
+	}
+
+	return item.value, cache.NoExpiration, nil
+}
+
 func (c *memoryCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) pkgErrors.AppError {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -3,6 +3,7 @@ package main
 import (
 	"auth-service/api/v1/handler"
 	"auth-service/api/v1/middleware"
+	ratelimiter "auth-service/api/v1/rate_limiter"
 	"auth-service/internal/config"
 	"auth-service/internal/health"
 	"auth-service/internal/health/checkers"
@@ -16,6 +17,7 @@ import (
 	authCache "auth-service/internal/service/cache"
 	"auth-service/internal/service/location"
 	sessionSvc "auth-service/internal/service/session"
+
 	"context"
 	"fmt"
 
@@ -26,6 +28,8 @@ import (
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
+	"shared/pkg/windowstore"
+	redisWindowStore "shared/pkg/windowstore/redis"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
 	"shared/server/headers"
@@ -136,6 +140,22 @@ func createMemCacheClient(log logger.Logger) cache.Cache {
 	return memCache
 }
 
+func createWindowStore(cfg config.Config, log logger.Logger) windowstore.WindowStore {
+	log.Info("Initializing in-memory window store for rate limiting")
+	windowStore := redisWindowStore.NewRedis(windowstore.Config{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Cache.RedisConfig.RedisHost, cfg.Cache.RedisConfig.RedisPort),
+		DB:       cfg.Cache.RedisConfig.RedisDB,
+		Password: cfg.Cache.RedisConfig.RedisPassword,
+	}, log)
+	return windowStore
+}
+
+func createRateLimiter(cacheClient cache.Cache, windowStore windowstore.WindowStore, log logger.Logger) *ratelimiter.RateLimiter {
+	log.Debug("Setting up Rate Limiter middleware with configuration")
+	rateLimiter := ratelimiter.NewRateLimiter(cacheClient, windowStore, log)
+	return &rateLimiter
+}
+
 func setupEmailService(cfg config.Config, log logger.Logger) *email.EmailService {
 	log.Debug("Setting up Email service with provider", logger.String("provider", cfg.Email.Provider))
 	var emailService email.EmailService
@@ -162,20 +182,94 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 	return healthMgr
 }
 
-func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Logger) *router.Builder {
+func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ratelimiter.RateLimiter, log logger.Logger) *router.Builder {
 	log.Debug("Registering auth routes")
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/register", req.Adapt(h.Register))
-		r.Post("/login", req.Adapt(h.Login))
-		r.Post("/refresh-token", req.Adapt(h.RefreshToken))
-		r.Post("/logout", req.Adapt(h.Logout))
+		r.Post(
+			"/register",
+			req.Adapt(h.Register),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return rateLimiter.AllowRegisterIP(ctx, key, limit)
+				},
+				func(req req.RequestHandler) string {
+					return req.GetClientIP()
+				},
+				5,
+			),
+		)
+		r.Post(
+			"/login",
+			req.Adapt(h.Login),
+			middleware.RateLimitMulti(rateLimiter,
+				middleware.RateLimitCheck{
+					Allow: func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+						return rateLimiter.AllowLoginIP(ctx, key, limit)
+					},
+					Key: func(req req.RequestHandler) string {
+						return req.GetClientIP()
+					},
+					Limit: 10,
+				},
+				middleware.RateLimitCheck{
+					Allow: func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+						if key == "" {
+							return true, 0, nil
+						}
+						return rateLimiter.AllowLoginUser(ctx, key, limit)
+					},
+					Key: func(req req.RequestHandler) string {
+						ok, value := req.GetBodyValue("email")
+						if !ok {
+							return ""
+						}
+						return value
+					},
+					Limit: 5,
+				},
+			),
+		)
+
+		r.Post(
+			"/refresh-token",
+			req.Adapt(h.RefreshToken),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					if key == "" {
+						return true, 0, nil
+					}
+					return rateLimiter.AllowRefreshDevice(ctx, key, limit)
+				},
+				func(req req.RequestHandler) string {
+					deviceID, _ := req.GetDeviceIDFromHeader()
+					return deviceID
+				},
+				10,
+			),
+		)
+		r.Post(
+			"/logout",
+			req.Adapt(h.Logout),
+		)
 
 		r.Post("/forgot-password", req.Adapt(h.ForgotPassword))
 		r.Post("/reset-password", req.Adapt(h.ResetPassword))
 		r.Post("/change-password", req.Adapt(h.ChangePassword))
 
 		r.Post("/verify-email", req.Adapt(h.VerifyEmail))
-		r.Post("/resend-verification", req.Adapt(h.ResendVerification))
+		r.Post(
+			"/resend-verification",
+			req.Adapt(h.ResendVerification),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return rateLimiter.AllowResendVerify(ctx, key, limit)
+				},
+				func(req req.RequestHandler) string {
+					return req.GetClientIP()
+				},
+				5,
+			),
+		)
 
 		r.Get("/sessions", req.Adapt(h.GetSessions))
 		r.Delete("/sessions/{id}", req.Adapt(h.DeleteSession))
@@ -190,7 +284,7 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, log logger.Log
 	return builder
 }
 
-func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService location.LocationService, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService location.LocationService, rateLimiter ratelimiter.RateLimiter, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
 	skipAuthPaths := []string{"/login", "/register", "/verify-email", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh req.RequestHandler) {
@@ -211,6 +305,7 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
 			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
 			router.Middleware(coreMiddleware.InterceptUserId(skipAuthPaths...)),
+			router.Middleware(coreMiddleware.InterceptDeviceId(skipAuthPaths...)),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
@@ -224,7 +319,7 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 		r.Get("/health/readiness", healthHandler.Readiness)
 	})
 
-	builder = setupRoutes(builder, h, log)
+	builder = setupRoutes(builder, h, rateLimiter, log)
 	r := builder.Build()
 	return r, nil
 }
@@ -378,7 +473,22 @@ func main() {
 		}()
 	}
 
+	var windowStore windowstore.WindowStore
+	if cfg.Cache.Enabled {
+		windowStore = createWindowStore(*cfg, log)
+		defer func() {
+			if windowStore != nil {
+				log.Info("Closing window store")
+				err := windowStore.Close()
+				if err != nil {
+					log.Error("Failed to close window store", logger.Error(err))
+				}
+			}
+		}()
+	}
+
 	authCache := authCache.NewAuthCache(cacheClient, log)
+	rateLimiter := createRateLimiter(cacheClient, windowStore, log)
 
 	emailService := setupEmailService(*cfg, log)
 	tokenService := createTokenManager(*cfg, log)
@@ -400,6 +510,7 @@ func main() {
 		WithPasswordResetRepo(*resetTokenRepo).
 		WithSessionRepo(*sessionRepo).
 		WithSecurityEventRepo(*securityEventRepo).
+		WithRateLimiter(*rateLimiter).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
 		WithEmailService(*emailService).
@@ -413,7 +524,7 @@ func main() {
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(authHandler, memCache, *locationService, healthHandler, log)
+	routerInstance, err := createRouter(authHandler, memCache, *locationService, *rateLimiter, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

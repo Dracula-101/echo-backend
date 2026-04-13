@@ -64,6 +64,35 @@ func (c *client) Get(ctx context.Context, key string) ([]byte, error) {
 	return result, err
 }
 
+func (c *client) GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err error) {
+	c.logger.Debug("Getting key with TTL from Redis", logger.String("key", key))
+	pipe := c.rdb.Pipeline()
+	getCmd := pipe.Get(ctx, key)
+	ttlCmd := pipe.TTL(ctx, key)
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		if err == redis.Nil {
+			return nil, 0, cache.ErrNotFound
+		}
+		return nil, 0, err
+	}
+
+	value, err = getCmd.Bytes()
+	if err == redis.Nil {
+		return nil, 0, cache.ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ttl, err = ttlCmd.Result()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return value, ttl, nil
+}
+
 func (c *client) Set(ctx context.Context, key string, value []byte, ttl time.Duration) pkgErrors.AppError {
 	c.logger.Debug("Setting key in Redis", logger.String("key", key))
 	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {

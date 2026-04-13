@@ -9,6 +9,7 @@ type AuthError struct {
 	Message string
 	Code    AuthErrorCode
 	Error   pkgErrors.AppError
+	Detail  map[string]interface{}
 }
 
 const ServiceName = "auth-service"

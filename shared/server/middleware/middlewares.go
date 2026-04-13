@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +18,7 @@ import (
 	cache "shared/pkg/cache"
 	"shared/pkg/logger"
 	sContext "shared/server/context"
+	"shared/server/headers"
 	"shared/server/request"
 	"shared/server/response"
 )
@@ -56,9 +59,6 @@ func InterceptRequestID(header string) Handler {
 }
 
 func CorrelationID(header string) Handler {
-	if header == "" {
-		header = "X-Correlation-ID"
-	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			correlationID := r.Header.Get(header)
@@ -384,12 +384,12 @@ func RealIP(trustedProxies []string) Handler {
 			}
 
 			if len(trustedMap) == 0 || trustedMap[remoteIP] {
-				if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+				if xff := r.Header.Get(headers.XForwardedFor); xff != "" {
 					ips := strings.Split(xff, ",")
 					if len(ips) > 0 {
 						r.RemoteAddr = strings.TrimSpace(ips[0])
 					}
-				} else if xri := r.Header.Get("X-Real-IP"); xri != "" {
+				} else if xri := r.Header.Get(headers.XRealIP); xri != "" {
 					r.RemoteAddr = xri
 				}
 			}
@@ -415,6 +415,13 @@ func GetCorrelationID(ctx context.Context) string {
 
 func GetUserID(ctx context.Context) string {
 	if id, ok := ctx.Value(sContext.UserIDKey).(string); ok {
+		return id
+	}
+	return ""
+}
+
+func GetDeviceID(ctx context.Context) string {
+	if id, ok := ctx.Value(sContext.DeviceIDKey).(string); ok {
 		return id
 	}
 	return ""
@@ -512,10 +519,10 @@ func RateLimit(config RateLimitConfig) Handler {
 
 			if entry.count >= config.RequestsPerWindow {
 				remaining := int(entry.resetTime.Sub(now).Seconds())
-				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", config.RequestsPerWindow))
-				w.Header().Set("X-RateLimit-Remaining", "0")
-				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", entry.resetTime.Unix()))
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", remaining))
+				w.Header().Set(headers.XRateLimitLimit, fmt.Sprintf("%d", config.RequestsPerWindow))
+				w.Header().Set(headers.XRateLimitRemaining, "0")
+				w.Header().Set(headers.XRateLimitReset, fmt.Sprintf("%d", entry.resetTime.Unix()))
+				w.Header().Set(headers.RetryAfter, fmt.Sprintf("%d", remaining))
 				entry.mu.Unlock()
 				config.OnLimitExceeded(w, r)
 				return
@@ -525,9 +532,9 @@ func RateLimit(config RateLimitConfig) Handler {
 			remaining := config.RequestsPerWindow - entry.count
 			entry.mu.Unlock()
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", config.RequestsPerWindow))
-			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", entry.resetTime.Unix()))
+			w.Header().Set(headers.XRateLimitLimit, fmt.Sprintf("%d", config.RequestsPerWindow))
+			w.Header().Set(headers.XRateLimitRemaining, fmt.Sprintf("%d", remaining))
+			w.Header().Set(headers.XRateLimitReset, fmt.Sprintf("%d", entry.resetTime.Unix()))
 
 			next.ServeHTTP(w, r)
 		})
@@ -579,7 +586,7 @@ func TokenBucketRateLimit(requests int, window time.Duration) Handler {
 			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
 
 			if remaining <= 0 {
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(window.Seconds())))
+				w.Header().Set(headers.RetryAfter, fmt.Sprintf("%d", int(window.Seconds())))
 				w.WriteHeader(http.StatusTooManyRequests)
 				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", int(window.Seconds()))
 				return
@@ -625,14 +632,14 @@ func FixedWindowRateLimit(requests int, window time.Duration) Handler {
 			resetTime := data.resetTime
 			data.mu.Unlock()
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", requests))
-			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+			w.Header().Set(headers.XRateLimitLimit, fmt.Sprintf("%d", requests))
+			w.Header().Set(headers.XRateLimitRemaining, fmt.Sprintf("%d", remaining))
+			w.Header().Set(headers.XRateLimitReset, fmt.Sprintf("%d", resetTime.Unix()))
 
 			data.mu.Lock()
 			if data.count >= requests {
 				data.mu.Unlock()
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(resetTime.Sub(now).Seconds())))
+				w.Header().Set(headers.RetryAfter, fmt.Sprintf("%d", int(resetTime.Sub(now).Seconds())))
 				w.WriteHeader(http.StatusTooManyRequests)
 				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", int(window.Seconds()))
 				return
@@ -650,53 +657,94 @@ func SlidingWindowRateLimit(requests int, window time.Duration) Handler {
 		mu         sync.Mutex
 	}
 
-	var clients = make(map[string]*clientData)
-	var mu sync.Mutex
+	var (
+		clients = make(map[string]*clientData)
+		mu      sync.Mutex
+	)
+
+	go func() {
+		for range time.Tick(10 * time.Minute) {
+			now := time.Now()
+			mu.Lock()
+			for key, data := range clients {
+				data.mu.Lock()
+				allExpired := true
+				for _, t := range data.timestamps {
+					if now.Sub(t) < window {
+						allExpired = false
+						break
+					}
+				}
+				if allExpired {
+					delete(clients, key)
+				}
+				data.mu.Unlock()
+			}
+			mu.Unlock()
+		}
+	}()
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := r.RemoteAddr
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				host = r.RemoteAddr
+			}
+			if forwarded := r.Header.Get(headers.XForwardedFor); forwarded != "" {
+				host = strings.Split(forwarded, ",")[0]
+				host = strings.TrimSpace(host)
+			}
+
 			now := time.Now()
+
 			mu.Lock()
-			data, exists := clients[key]
+			data, exists := clients[host]
 			if !exists {
 				data = &clientData{
 					timestamps: make([]time.Time, 0),
 				}
-				clients[key] = data
+				clients[host] = data
 			}
 			mu.Unlock()
+
 			data.mu.Lock()
-			validTimestamps := make([]time.Time, 0)
+
+			valid := data.timestamps[:0]
 			for _, t := range data.timestamps {
 				if now.Sub(t) < window {
-					validTimestamps = append(validTimestamps, t)
+					valid = append(valid, t)
 				}
 			}
-			data.timestamps = validTimestamps
-			remaining := requests - len(data.timestamps)
+			data.timestamps = valid
+
 			var resetTime time.Time
 			if len(data.timestamps) > 0 {
 				resetTime = data.timestamps[0].Add(window)
 			} else {
 				resetTime = now.Add(window)
 			}
-			data.mu.Unlock()
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", requests))
-			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+			remaining := requests - len(data.timestamps)
+			if remaining < 0 {
+				remaining = 0
+			}
 
-			data.mu.Lock()
+			w.Header().Set(headers.XRateLimitLimit, strconv.Itoa(requests))
+			w.Header().Set(headers.XRateLimitRemaining, strconv.Itoa(remaining))
+			w.Header().Set(headers.XRateLimitReset, strconv.FormatInt(resetTime.Unix(), 10))
+
 			if len(data.timestamps) >= requests {
 				data.mu.Unlock()
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(resetTime.Sub(now).Seconds())))
+				retryAfter := int(resetTime.Sub(now).Seconds())
+				w.Header().Set(headers.RetryAfter, strconv.Itoa(retryAfter))
 				w.WriteHeader(http.StatusTooManyRequests)
 				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", int(window.Seconds()))
 				return
 			}
+
 			data.timestamps = append(data.timestamps, now)
 			data.mu.Unlock()
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -723,14 +771,14 @@ func RoundRobinRateLimit(requestsPerInstance int, instanceCountFunc func() int) 
 			remaining := totalRequests - requestCount
 			mu.Unlock()
 
-			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", totalRequests))
-			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetTime.Unix()))
+			w.Header().Set(headers.XRateLimitLimit, fmt.Sprintf("%d", totalRequests))
+			w.Header().Set(headers.XRateLimitRemaining, fmt.Sprintf("%d", remaining))
+			w.Header().Set(headers.XRateLimitReset, fmt.Sprintf("%d", resetTime.Unix()))
 
 			mu.Lock()
 			if requestCount >= totalRequests {
 				mu.Unlock()
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(time.Until(resetTime).Seconds())))
+				w.Header().Set(headers.RetryAfter, fmt.Sprintf("%d", int(time.Until(resetTime).Seconds())))
 				w.WriteHeader(http.StatusTooManyRequests)
 				response.TooManyRequestsError(r.Context(), r, w, "rate limit exceeded", 60)
 				return
@@ -777,13 +825,13 @@ func Compression(config CompressionConfig) Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip compression for WebSocket upgrade requests
-			if strings.ToLower(r.Header.Get("Upgrade")) == "websocket" &&
-				strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") {
+			if strings.ToLower(r.Header.Get(headers.Upgrade)) == "websocket" &&
+				strings.Contains(strings.ToLower(r.Header.Get(headers.Connection)), "upgrade") {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			if !strings.Contains(r.Header.Get(headers.AcceptEncoding), "gzip") {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -828,9 +876,9 @@ func ContentTypeValidator(allowedTypes []string) Handler {
 func NoCache() Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
-			w.Header().Set("Pragma", "no-cache")
-			w.Header().Set("Expires", "0")
+			w.Header().Set(headers.CacheControl, "no-store, no-cache, must-revalidate, private")
+			w.Header().Set(headers.Pragma, "no-cache")
+			w.Header().Set(headers.Expires, "0")
 
 			next.ServeHTTP(w, r)
 		})
@@ -847,7 +895,7 @@ func CacheControl(maxAge int, public bool) Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Cache-Control", cacheValue)
+			w.Header().Set(headers.CacheControl, cacheValue)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -872,7 +920,7 @@ func Auth(config AuthConfig) Handler {
 
 	if config.OnAuthFailed == nil {
 		config.OnAuthFailed = func(handler request.RequestHandler, err error) {
-			handler.Writer().Header().Set("Content-Type", "application/json")
+			handler.Writer().Header().Set(headers.ContentType, "application/json")
 			handler.Writer().WriteHeader(http.StatusUnauthorized)
 			response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "Authentication failed", err)
 		}
@@ -887,7 +935,7 @@ func Auth(config AuthConfig) Handler {
 				}
 			}
 
-			authHeader := r.Header.Get("Authorization")
+			authHeader := r.Header.Get(headers.Authorization)
 			handler := request.NewHandler(r, w)
 			if authHeader == "" {
 				config.OnAuthFailed(*handler, errors.New("missing authorization header"))
@@ -909,8 +957,8 @@ func Auth(config AuthConfig) Handler {
 
 			ctx := SetUserID(r.Context(), userID)
 			newReq := r.WithContext(ctx)
-			newReq.Header.Set("X-User-ID", userID)
-			newReq.Header.Set("X-Session-ID", userID)
+			newReq.Header.Set(headers.XUserID, userID)
+			newReq.Header.Set(headers.XSessionID, userID)
 			next.ServeHTTP(w, newReq)
 		})
 	}
@@ -942,7 +990,7 @@ func InterceptUserId(skipPaths ...string) Handler {
 				}
 			}
 
-			userID := r.Header.Get("X-User-ID")
+			userID := r.Header.Get(headers.XUserID)
 			if userID != "" {
 				ctx := SetUserID(r.Context(), userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -968,7 +1016,7 @@ func InterceptSessionId(skipPaths ...string) Handler {
 				}
 			}
 
-			sessionID := r.Header.Get("X-Session-ID")
+			sessionID := r.Header.Get(headers.XSessionID)
 			if sessionID != "" {
 				ctx := context.WithValue(r.Context(), sContext.SessionIDKey, sessionID)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -976,6 +1024,29 @@ func InterceptSessionId(skipPaths ...string) Handler {
 			}
 
 			response.UnauthorizedError(r.Context(), r, w, "Missing or Invalid Session Token", errors.New("missing session id in header"))
+		})
+	}
+}
+
+func InterceptDeviceId(skipPaths ...string) Handler {
+	skipPaths = append(skipPaths, "/health", "/live", "/ready", "/health/liveness", "/health/readiness", "/metrics")
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip authentication for health and monitoring endpoints
+			for _, skipPath := range skipPaths {
+				if r.URL.Path == skipPath || strings.HasPrefix(r.URL.Path, skipPath+"/") {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			deviceID := r.Header.Get(headers.XDeviceID)
+			if deviceID != "" {
+				ctx := context.WithValue(r.Context(), sContext.DeviceIDKey, deviceID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -1013,9 +1084,18 @@ func APIVersion(headerName string, defaultVersion string) Handler {
 	}
 }
 
-func GetAPIVersion(ctx context.Context) string {
-	if version, ok := ctx.Value(sContext.APIVersionKey).(string); ok {
-		return version
+func InterceptAPIVersion(headerName string, defaultVersion string) Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			version := r.Header.Get(headerName)
+			if version == "" {
+				version = defaultVersion
+			}
+
+			ctx := context.WithValue(r.Context(), sContext.APIVersionKey, version)
+			r.Header.Set(headerName, version)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
-	return "v1"
 }

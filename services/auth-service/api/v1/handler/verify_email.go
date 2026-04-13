@@ -63,24 +63,24 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 			return
 
 		case authErrors.CodeVerificationTokenExpired:
-			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusGone, err.Message, nil)
+			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusGone, "Verification token has expired. Please request a new verification email.", nil)
 			return
 
 		case authErrors.CodeVerificationNotFound:
-			response.NotFoundError(ctx, handler.Request(), handler.Writer(), err.Message)
+			response.NotFoundError(ctx, handler.Request(), handler.Writer(), "Verification token not found")
 			return
 
 		case authErrors.CodeVerificationInvalid,
 			authErrors.CodeTooManyVerificationAttempts:
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), err.Message, err.Error)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid verification token or too many attempts. Please request a new verification email.", err.Error)
 			return
 
 		case authErrors.CodeVerificationEmailRecentlySent:
-			response.TooManyRequestsError(ctx, handler.Request(), handler.Writer(), err.Message, 0)
+			response.TooManyRequestsError(ctx, handler.Request(), handler.Writer(), "Email verification email sent recently. Please try again later.", 0)
 			return
 
 		default:
-			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to verify email", err.Error)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to verify email - unexpected error", err.Error)
 			return
 		}
 	}

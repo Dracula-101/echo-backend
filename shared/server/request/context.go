@@ -86,3 +86,12 @@ func GetIPAddressInfoFromContext(ctx context.Context) (IpAddressInfo, bool) {
 	ipInfo, ok := ctx.Value(sContext.IPAddressInfoKey).(IpAddressInfo)
 	return ipInfo, ok
 }
+
+func WithDeviceID(ctx context.Context, deviceID string) context.Context {
+	return context.WithValue(ctx, sContext.DeviceIDKey, deviceID)
+}
+
+func GetDeviceIDFromContext(ctx context.Context) (string, bool) {
+	deviceID, ok := ctx.Value(sContext.DeviceIDKey).(string)
+	return deviceID, ok
+}

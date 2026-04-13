@@ -98,6 +98,21 @@ func (h *RequestHandler) IsWebSocket() bool {
 
 // GetUserIDFromHeader extracts user ID from context
 func (h *RequestHandler) GetUserIDFromHeader() (string, bool) {
+	userID := h.request.Header.Get(headers.XUserID)
+	if userID != "" {
+		return userID, true
+	}
+
 	userID, ok := h.request.Context().Value(sContext.UserIDKey).(string)
 	return userID, ok
+}
+
+func (h *RequestHandler) GetDeviceIDFromHeader() (string, bool) {
+	deviceID := h.request.Header.Get(headers.XDeviceID)
+	if deviceID != "" {
+		return deviceID, true
+	}
+
+	deviceID, ok := h.request.Context().Value(sContext.DeviceIDKey).(string)
+	return deviceID, ok
 }

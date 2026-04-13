@@ -186,3 +186,14 @@ func (h *RequestHandler) HasFormFile(key string) bool {
 	_, ok := h.request.MultipartForm.File[key]
 	return ok
 }
+
+func (h *RequestHandler) GetBodyValue(key string) (ok bool, value string) {
+	if h.request.Form == nil {
+		h.ParseForm()
+	}
+	values, ok := h.request.Form[key]
+	if !ok || len(values) == 0 {
+		return false, ""
+	}
+	return true, values[0]
+}

@@ -5,6 +5,7 @@ type ContextKey string
 const (
 	RequestIDKey     ContextKey = "request_id"
 	UserIDKey        ContextKey = "user_id"
+	DeviceIDKey      ContextKey = "device_id"
 	ClientIPKey      ContextKey = "client_ip"
 	SessionIDKey     ContextKey = "session_id"
 	SessionTokenKey  ContextKey = "session_token"
