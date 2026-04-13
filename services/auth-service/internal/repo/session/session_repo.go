@@ -22,9 +22,11 @@ type SessionRepository interface {
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
-	EvictOldestSession(ctx context.Context, userID string) pkgErrors.AppError
+	CountActiveSessions(ctx context.Context, userID string) (int64, pkgErrors.AppError)
+	EvictOldestSession(ctx context.Context, userID string) (*domain.Session, pkgErrors.AppError)
 	RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError
 	RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError
+	RevokeActiveDeviceSession(ctx context.Context, userID, deviceID, reason string) (string, pkgErrors.AppError)
 }
 
 // ============================================================================
@@ -183,35 +185,63 @@ func (r *sessionRepository) GetSessionByUserId(ctx context.Context, userID strin
 	return &s, nil
 }
 
-func (r *sessionRepository) EvictOldestSession(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *sessionRepository) CountActiveSessions(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
+	var count int64
+	query := `SELECT COUNT(*) FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`
+	if err := r.db.QueryRow(ctx, query, userID).Scan(&count); err != nil {
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count active sessions").
+			WithDetail("user_id", userID)
+	}
+	return count, nil
+}
+
+// EvictOldestSession revokes the oldest active session for the user and returns
+func (r *sessionRepository) EvictOldestSession(ctx context.Context, userID string) (*domain.Session, pkgErrors.AppError) {
 	r.log.Info("Evicting oldest session for user",
 		logger.String("user_id", userID),
 	)
-	query := `WITH oldest AS (
-		SELECT id FROM auth.sessions
+
+	query := `
+		WITH oldest AS (
+			SELECT id, session_token, user_id
+			FROM auth.sessions
 			WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
 			ORDER BY last_activity_at ASC
 			LIMIT 1
 		)
 		UPDATE auth.sessions
 		SET revoked_at = NOW(),
-			revoked_reason = 'evicted_due_to_session_limit'
-		WHERE id IN (SELECT id FROM oldest)`
-	result, err := r.db.Exec(ctx, query, userID)
+		    revoked_reason = 'session_limit_exceeded'
+		WHERE id = (SELECT id FROM oldest)
+		RETURNING id, session_token, user_id`
+
+	var sessionID, sessionToken, uid string
+	err := r.db.QueryRow(ctx, query, userID).Scan(&sessionID, &sessionToken, &uid)
 	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to evict oldest session").
+		if postgres.IsNotFoundError(err) {
+			r.log.Info("No active session to evict",
+				logger.String("user_id", userID),
+			)
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to evict oldest session").
 			WithDetail("user_id", userID)
 	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected > 0 {
-		r.log.Info("Oldest session evicted",
-			logger.String("user_id", userID),
-			logger.Int64("sessions_evicted", rowsAffected),
-		)
-	} else {
-		r.log.Info("No session evicted (no active sessions found)",
-			logger.String("user_id", userID),
-		)
+
+	r.log.Info("Oldest session evicted",
+		logger.String("user_id", userID),
+		logger.String("session_id", sessionID),
+	)
+	return &domain.Session{ID: sessionID, SessionToken: sessionToken, UserID: uid}, nil
+}
+
+func (r *sessionRepository) InsertOutboxEvent(ctx context.Context, userID string, eventType string, payload []byte) pkgErrors.AppError {
+	query := `INSERT INTO auth.outbox (user_id, event_type, payload, created_at) VALUES ($1, $2, $3, NOW())`
+	_, err := r.db.Exec(ctx, query, userID, eventType, payload)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to insert outbox event").
+			WithDetail("user_id", userID).
+			WithDetail("event_type", eventType)
 	}
 	return nil
 }
@@ -301,4 +331,40 @@ func (r *sessionRepository) RevokeAllUserSessions(ctx context.Context, userID st
 		logger.Int64("sessions_revoked", rowsAffected),
 	)
 	return nil
+}
+
+func (r *sessionRepository) RevokeActiveDeviceSession(ctx context.Context, userID, deviceID, reason string) (string, pkgErrors.AppError) {
+	r.log.Info("Revoking active session for same device",
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+	// Hits idx_auth_sessions_device (user_id, device_id) index.
+	// Returns the revoked session ID so the caller can purge it from Redis.
+	query := `
+		UPDATE auth.sessions
+		SET revoked_at = NOW(),
+		    revoked_reason = $3
+		WHERE user_id = $1
+		  AND device_id = $2
+		  AND revoked_at IS NULL
+		  AND expires_at > NOW()
+		RETURNING id`
+
+	var sessionID string
+	err := r.db.QueryRow(ctx, query, userID, deviceID, reason).Scan(&sessionID)
+	if err != nil {
+		if postgres.IsNotFoundError(err) {
+			return "", nil
+		}
+		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke active device session").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+
+	r.log.Info("Active device session revoked",
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+		logger.String("session_id", sessionID),
+	)
+	return sessionID, nil
 }

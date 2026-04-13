@@ -11,15 +11,24 @@ import (
 )
 
 type RateLimiter interface {
-	AllowLoginIP(ctx context.Context, ip string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowLoginUser(ctx context.Context, userID string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowRegisterIP(ctx context.Context, ip string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowPwdForgot(ctx context.Context, email string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowPwdResetIP(ctx context.Context, ip string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowResendVerify(ctx context.Context, userID string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowOtpSend(ctx context.Context, phone string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	AllowRefreshDevice(ctx context.Context, deviceID string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
-	Allow2FA(ctx context.Context, userID string, limit int64) (allowed bool, remaining int64, error pkgErrors.AppError)
+	AllowLoginIP(ctx context.Context, ip string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementLoginIP(ctx context.Context, ip string) (count int64, error pkgErrors.AppError)
+	AllowLoginUser(ctx context.Context, userID string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementLoginUser(ctx context.Context, userID string) (count int64, error pkgErrors.AppError)
+	AllowRegisterIP(ctx context.Context, ip string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementRegisterIP(ctx context.Context, ip string) (count int64, error pkgErrors.AppError)
+	AllowPwdForgot(ctx context.Context, email string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementPwdForgot(ctx context.Context, email string) (count int64, error pkgErrors.AppError)
+	AllowPwdResetIP(ctx context.Context, ip string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementPwdResetIP(ctx context.Context, ip string) (count int64, error pkgErrors.AppError)
+	AllowResendVerify(ctx context.Context, userID string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementResendVerify(ctx context.Context, userID string) (count int64, error pkgErrors.AppError)
+	AllowOtpSend(ctx context.Context, phone string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementOtpSend(ctx context.Context, phone string) (count int64, error pkgErrors.AppError)
+	AllowRefreshDevice(ctx context.Context, deviceID string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementRefreshDevice(ctx context.Context, deviceID string) (count int64, error pkgErrors.AppError)
+	Allow2FA(ctx context.Context, userID string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	Increment2FA(ctx context.Context, userID string) (count int64, error pkgErrors.AppError)
 
 	AcquireLoginLock(ctx context.Context, userID string) (allowed bool, error pkgErrors.AppError)
 	AcquireRegisterLock(ctx context.Context, email string) (allowed bool, error pkgErrors.AppError)
@@ -29,6 +38,7 @@ type RateLimiter interface {
 
 	IsAccountLocked(ctx context.Context, userID string) (locked bool, error pkgErrors.AppError)
 	LockAccount(ctx context.Context, userID string) pkgErrors.AppError
+	LockAccountExtended(ctx context.Context, userID string) pkgErrors.AppError
 
 	SetPwdResetCooldown(ctx context.Context, userID string) pkgErrors.AppError
 	CanSendPwdReset(ctx context.Context, userID string) (canSend bool, retryAfterSeconds int64, error pkgErrors.AppError)
@@ -48,34 +58,40 @@ func NewRateLimiter(cache cache.Cache, ws windowstore.WindowStore, log logger.Lo
 	}
 }
 
-// ---------------- internal helper (windowstore based) ----------------
+// ---------------- internal helpers (windowstore based) ----------------
 
 func (r *rateLimiter) allowWindow(
 	ctx context.Context,
 	key string,
 	window time.Duration,
 	limit int64,
-) (allowed bool, remaining int64, error pkgErrors.AppError) {
-
-	now := time.Now().Unix()
-
-	err := r.windowStore.Add(ctx, key, now, window)
+) (allowed bool, count int64, error pkgErrors.AppError) {
+	count, err := r.incrementWindow(ctx, key, window)
 	if err != nil {
 		return false, 0, err
+	}
+	return count <= limit, count, nil
+}
+
+func (r *rateLimiter) incrementWindow(
+	ctx context.Context,
+	key string,
+	window time.Duration,
+) (count int64, error pkgErrors.AppError) {
+	now := time.Now().Unix()
+
+	if err := r.windowStore.Add(ctx, key, now, window); err != nil {
+		return 0, err
 	}
 
 	_ = r.windowStore.TrimBefore(ctx, key, now-int64(window.Seconds()))
 
-	count, err2 := r.windowStore.Count(ctx, key, now-int64(window.Seconds()), now)
-	if err2 != nil {
-		return false, 0, err2
+	count, err := r.windowStore.Count(ctx, key, now-int64(window.Seconds()), now)
+	if err != nil {
+		return 0, err
 	}
 
-	if count > limit {
-		return false, count, nil
-	}
-
-	return true, count, nil
+	return count, nil
 }
 
 // ---------------- rate limit funcs ----------------
@@ -84,36 +100,72 @@ func (r *rateLimiter) AllowLoginIP(ctx context.Context, ip string, limit int64) 
 	return r.allowWindow(ctx, RLLoginIPPrefix+ip, TTLLoginWindow, limit)
 }
 
+func (r *rateLimiter) IncrementLoginIP(ctx context.Context, ip string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLLoginIPPrefix+ip, TTLLoginWindow)
+}
+
 func (r *rateLimiter) AllowLoginUser(ctx context.Context, userID string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLLoginUserPrefix+userID, TTLLoginWindow, limit)
+}
+
+func (r *rateLimiter) IncrementLoginUser(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLLoginUserPrefix+userID, TTLLoginWindow)
 }
 
 func (r *rateLimiter) AllowRegisterIP(ctx context.Context, ip string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLRegisterIPPrefix+ip, TTLRegisterIP, limit)
 }
 
+func (r *rateLimiter) IncrementRegisterIP(ctx context.Context, ip string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLRegisterIPPrefix+ip, TTLRegisterIP)
+}
+
 func (r *rateLimiter) AllowPwdForgot(ctx context.Context, email string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLPwdForgotEmailPrefix+email, TTLPwdForgotEmail, limit)
+}
+
+func (r *rateLimiter) IncrementPwdForgot(ctx context.Context, email string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLPwdForgotEmailPrefix+email, TTLPwdForgotEmail)
 }
 
 func (r *rateLimiter) AllowPwdResetIP(ctx context.Context, ip string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLPwdResetIPPrefix+ip, TTLPwdResetIP, limit)
 }
 
+func (r *rateLimiter) IncrementPwdResetIP(ctx context.Context, ip string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLPwdResetIPPrefix+ip, TTLPwdResetIP)
+}
+
 func (r *rateLimiter) AllowResendVerify(ctx context.Context, userID string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLResendVerifyPrefix+userID, TTLResendVerify, limit)
+}
+
+func (r *rateLimiter) IncrementResendVerify(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLResendVerifyPrefix+userID, TTLResendVerify)
 }
 
 func (r *rateLimiter) AllowOtpSend(ctx context.Context, phone string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLOtpSendPhonePrefix+phone, TTLOtpSendPhone, limit)
 }
 
+func (r *rateLimiter) IncrementOtpSend(ctx context.Context, phone string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLOtpSendPhonePrefix+phone, TTLOtpSendPhone)
+}
+
 func (r *rateLimiter) AllowRefreshDevice(ctx context.Context, deviceID string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLRefreshDevicePrefix+deviceID, TTLRefreshDevice, limit)
 }
 
+func (r *rateLimiter) IncrementRefreshDevice(ctx context.Context, deviceID string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLRefreshDevicePrefix+deviceID, TTLRefreshDevice)
+}
+
 func (r *rateLimiter) Allow2FA(ctx context.Context, userID string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RL2FAUserPrefix+userID, TTL2FAUser, limit)
+}
+
+func (r *rateLimiter) Increment2FA(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RL2FAUserPrefix+userID, TTL2FAUser)
 }
 
 // ---------------- locks ----------------
@@ -160,6 +212,10 @@ func (r *rateLimiter) IsAccountLocked(ctx context.Context, userID string) (bool,
 
 func (r *rateLimiter) LockAccount(ctx context.Context, userID string) pkgErrors.AppError {
 	return r.cache.SetBool(ctx, AccountLockedPrefix+userID, true, TTLAccountLocked)
+}
+
+func (r *rateLimiter) LockAccountExtended(ctx context.Context, userID string) pkgErrors.AppError {
+	return r.cache.SetBool(ctx, AccountLockedPrefix+userID, true, TTLAccountLockedExtended)
 }
 
 // ---------------- password reset ----------------

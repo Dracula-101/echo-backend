@@ -13,11 +13,11 @@ type SessionService struct {
 	repo         session.SessionRepository
 	tokenService token.JWTTokenService
 	cfg          config.CacheConfig
-	cache        cache.Cache
+	sessionCache SessionCache
 	log          logger.Logger
 }
 
-func NewSessionService(repo session.SessionRepository, cache cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
+func NewSessionService(repo session.SessionRepository, c cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
 	if log == nil {
 		panic("Logger is required")
 	}
@@ -28,7 +28,7 @@ func NewSessionService(repo session.SessionRepository, cache cache.Cache, token 
 
 	return &SessionService{
 		repo:         repo,
-		cache:        cache,
+		sessionCache: NewSessionCache(c, log),
 		tokenService: token,
 		log:          log,
 		cfg:          cfg,

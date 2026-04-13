@@ -18,6 +18,7 @@ const (
 	CodeSessionNotFound         = "AUTH_SESSION_NOT_FOUND"
 	CodeSessionExpired          = "AUTH_SESSION_EXPIRED"
 	CodeAccountLocked           = "AUTH_ACCOUNT_LOCKED"
+	CodeAccountRecentlyLocked   = "AUTH_ACCOUNT_RECENTLY_LOCKED"
 	CodeAccountDisabled         = "AUTH_ACCOUNT_DISABLED"
 	CodePasswordExpired         = "AUTH_PASSWORD_EXPIRED"
 	CodeTwoFactorRequired       = "AUTH_2FA_REQUIRED"
@@ -25,6 +26,7 @@ const (
 	CodeEmailVerificationFailed = "AUTH_EMAIL_VERIFY_FAILED"
 	CodePhoneVerificationFailed = "AUTH_PHONE_VERIFY_FAILED"
 	CodeProfileIncomplete       = "AUTH_PROFILE_INCOMPLETE"
+	CodeConcurrentLoginDetected       = "AUTH_CONCURRENT_LOGIN_DETECTED"
 
 	// Database Errors
 	CodeDatabaseError     = "AUTH_DATABASE_ERROR"

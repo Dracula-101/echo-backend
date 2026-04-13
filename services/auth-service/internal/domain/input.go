@@ -46,6 +46,7 @@ type CreateSessionInput struct {
 	Longitude       float64
 	IsMobile        bool
 	IsTrustedDevice bool
+	IsNewLocation   bool
 	FCMToken        string
 	APNSToken       string
 	SessionType     SessionType

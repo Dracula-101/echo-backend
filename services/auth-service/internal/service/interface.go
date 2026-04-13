@@ -41,6 +41,10 @@ type AuthServiceInterface interface {
 	DisableMFA(ctx context.Context, userID string, password string) *error.AuthError
 	VerifyMFA(ctx context.Context, userID string, code string) (bool, *error.AuthError)
 
+	// Device trust and location
+	IsDeviceTrusted(ctx context.Context, userID string, deviceID string) (bool, *error.AuthError)
+	IsNewLocation(ctx context.Context, userID string, city string) (bool, *error.AuthError)
+
 	// Account management
 	DeleteAccount(ctx context.Context, userID string, password string, ipAddress string, userAgent string) *error.AuthError
 

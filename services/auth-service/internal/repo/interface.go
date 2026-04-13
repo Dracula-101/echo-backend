@@ -18,15 +18,17 @@ type AuthRepository interface {
 	// User management
 	ExistsByEmail(ctx context.Context, email string) (*models.AccountStatus, pkgErrors.AppError)
 	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
+	LockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError)
-	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError
-	RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError
+	GetLoginAttempts(ctx context.Context, userID string) (int, pkgErrors.AppError)
 
 	// Device management
 	GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError)
 	UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError)
+	IsDeviceTrusted(ctx context.Context, userID string, deviceID string) (bool, pkgErrors.AppError)
+	IsNewLocation(ctx context.Context, userID string, city string) (bool, pkgErrors.AppError)
 
 	// Password management
 	UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError
@@ -43,4 +45,3 @@ type AuthRepository interface {
 	// Account management
 	SoftDeleteUser(ctx context.Context, userID string) pkgErrors.AppError
 }
-

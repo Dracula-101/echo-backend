@@ -18,6 +18,10 @@ import (
 	"shared/server/common/token"
 )
 
+const (
+	MaxLoginAttempts = 10
+)
+
 // ============================================================================
 // User Registration
 // ============================================================================
@@ -159,6 +163,56 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 			logger.String("email", email),
 		)
 
+		s.loginHistoryRepo.CreateLoginHistory(ctx, repoModels.CreateLoginHistoryInput{
+			UserID:        user.ID,
+			DeviceInfo:    input.DeviceInfo,
+			IPInfo:        *input.LocationInfo,
+			SessionID:     nil,
+			LoginMethod:   utils.PtrString("password"),
+			Status:        utils.PtrString("failure"),
+			IsNewDevice:   utils.PtrBool(false),
+			IsNewLocation: utils.PtrBool(false),
+			FailureReason: utils.PtrString("invalid_password"),
+			UserAgent:     utils.PtrString(input.DeviceInfo.UserAgent),
+		})
+
+		// get attempts and lock account if necessary
+		attempts, attemptsErr := s.repo.GetLoginAttempts(ctx, user.ID)
+		if attemptsErr != nil {
+			s.log.Error("Failed to get login attempts",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("email", email),
+				logger.String("user_id", user.ID),
+				logger.Error(attemptsErr),
+			)
+		} else {
+			if attempts+1 >= MaxLoginAttempts {
+				lockErr := s.repo.LockUserAccount(ctx, user.ID)
+				if lockErr != nil {
+					s.log.Error("Failed to lock user account after max login attempts",
+						logger.String("service", authErrors.ServiceName),
+						logger.String("email", email),
+						logger.String("user_id", user.ID),
+						logger.Error(lockErr),
+					)
+				} else {
+					s.log.Warn("User account locked due to too many failed login attempts",
+						logger.String("service", authErrors.ServiceName),
+						logger.String("email", email),
+						logger.String("user_id", user.ID),
+					)
+					return nil, &error.AuthError{
+						Message: "Account is locked due to too many failed login attempts",
+						Code:    authErrors.CodeAccountRecentlyLocked,
+						Error: pkgErrors.New(authErrors.CodeAccountRecentlyLocked, "account is locked due to too many failed login attempts").
+							WithService(authErrors.ServiceName).
+							WithDetail("email", email).
+							WithDetail("user_id", user.ID),
+					}
+				}
+			}
+		}
+
 		return nil, &error.AuthError{
 			Message: "Wrong email or password",
 			Code:    authErrors.CodeInvalidCredentials,
@@ -215,6 +269,17 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		logger.String("email", email),
 		logger.String("user_id", user.ID),
 	)
+
+	isNewLocation, locationErr := s.repo.IsNewLocation(ctx, user.ID, input.LocationInfo.City)
+	if locationErr != nil {
+		s.log.Error("Failed to determine login location",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", email),
+			logger.String("user_id", user.ID),
+			logger.String("city", input.LocationInfo.City),
+		)
+		isNewLocation = false
+	}
 	s.loginHistoryRepo.CreateLoginHistory(ctx, repoModels.CreateLoginHistoryInput{
 		UserID:        user.ID,
 		DeviceInfo:    input.DeviceInfo,
@@ -223,7 +288,7 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		LoginMethod:   utils.PtrString("password"),
 		Status:        utils.PtrString("success"),
 		IsNewDevice:   utils.PtrBool(false),
-		IsNewLocation: utils.PtrBool(false),
+		IsNewLocation: utils.PtrBool(isNewLocation),
 		FailureReason: nil,
 
 		UserAgent: utils.PtrString(input.DeviceInfo.UserAgent),
@@ -387,4 +452,32 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password
 		logger.String("user_id", userID),
 	)
 	return nil
+}
+
+// ============================================================================
+// Device Trust
+// ============================================================================
+
+func (s *AuthService) IsDeviceTrusted(ctx context.Context, userID string, deviceID string) (bool, *authErrors.AuthError) {
+	trusted, err := s.repo.IsDeviceTrusted(ctx, userID, deviceID)
+	if err != nil {
+		return false, &authErrors.AuthError{
+			Message: "Failed to determine device trust",
+			Code:    authErrors.CodeDatabaseError,
+			Error:   err,
+		}
+	}
+	return trusted, nil
+}
+
+func (s *AuthService) IsNewLocation(ctx context.Context, userID string, city string) (bool, *authErrors.AuthError) {
+	isNew, err := s.repo.IsNewLocation(ctx, userID, city)
+	if err != nil {
+		return false, &authErrors.AuthError{
+			Message: "Failed to determine login location",
+			Code:    authErrors.CodeDatabaseError,
+			Error:   err,
+		}
+	}
+	return isNew, nil
 }

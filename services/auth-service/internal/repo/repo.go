@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"shared/pkg/database"
@@ -18,6 +19,10 @@ import (
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 	"shared/server/request"
+)
+
+const (
+	AccountLockDuration = 30 * time.Minute
 )
 
 // ============================================================================
@@ -150,6 +155,32 @@ func (r *authRepository) CreateUser(ctx context.Context, params repoModels.Creat
 	)
 
 	return *id, nil
+}
+
+func (r *authRepository) LockUserAccount(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Locking user account",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	lockUntil := time.Now().Add(AccountLockDuration)
+	query := `UPDATE auth.users
+		SET account_locked_until = $1,
+		    updated_at = NOW()
+		WHERE id = $2`
+	result, err := r.db.Exec(ctx, query, lockUntil, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to lock user account").
+			WithDetail("user_id", userID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("User account locked successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
 }
 
 func (r *authRepository) UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError {
@@ -290,6 +321,37 @@ func (r *authRepository) GetUserByID(ctx context.Context, userID string) (*domai
 	}, nil
 }
 
+func (r *authRepository) GetLoginAttempts(ctx context.Context, userID string) (int, pkgErrors.AppError) {
+	r.log.Debug("Fetching failed login attempts for user",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT failed_login_attempts FROM auth.users WHERE id = $1 LIMIT 1`
+	row := r.db.QueryRow(ctx, query, userID)
+	var attempts int
+	err := row.Scan(&attempts)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("User not found when fetching login attempts",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return 0, nil
+		}
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get login attempts for user").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Debug("Failed login attempts fetched successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int("failed_login_attempts", attempts),
+	)
+
+	return attempts, nil
+}
+
 func (r *authRepository) GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError) {
 	r.log.Debug("Fetching active device for user",
 		logger.String("service", authErrors.ServiceName),
@@ -319,63 +381,6 @@ func (r *authRepository) GetUserActiveDevice(ctx context.Context, userID string)
 		logger.String("device_id", device.DeviceID),
 	)
 	return domain.NewUserDevice(device), nil
-}
-
-// ============================================================================
-// Login Tracking
-// ============================================================================
-
-func (r *authRepository) RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError {
-	r.log.Info("Recording failed login attempt",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-	)
-
-	query := `UPDATE auth.users
-		SET failed_login_attempts = failed_login_attempts + 1,
-		    last_failed_login_at = NOW(),
-		    updated_at = NOW()
-		WHERE id = $1`
-	result, err := r.db.Exec(ctx, query, userID)
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to record failed login").
-			WithDetail("user_id", userID)
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	r.log.Info("Failed login recorded successfully",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-		logger.Int64("rows_affected", rowsAffected),
-	)
-	return nil
-}
-
-func (r *authRepository) RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError {
-	r.log.Info("Recording successful login",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-	)
-
-	query := `UPDATE auth.users
-		SET failed_login_attempts = 0,
-		    last_failed_login_at = NULL,
-			last_successful_login_at = NOW(),
-		    updated_at = NOW()
-		WHERE id = $1`
-	result, err := r.db.Exec(ctx, query, userID)
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to record successful login").
-			WithDetail("user_id", userID)
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	r.log.Info("Successful login recorded",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-		logger.Int64("rows_affected", rowsAffected),
-	)
-	return nil
 }
 
 // ============================================================================
@@ -639,6 +644,112 @@ func (r *authRepository) SoftDeleteUser(ctx context.Context, userID string) pkgE
 // ============================================================================
 // Device Management
 // ============================================================================
+func (r *authRepository) IsDeviceTrusted(ctx context.Context, userID string, deviceID string) (bool, pkgErrors.AppError) {
+	r.log.Debug("Checking device trust via login history",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	// Primary signal: successful login history for this device.
+	var loginCount int64
+	loginQuery := `SELECT COUNT(*) FROM auth.login_history WHERE user_id = $1 AND device_id = $2 AND status = 'success'`
+	if err := r.db.QueryRow(ctx, loginQuery, userID, deviceID).Scan(&loginCount); err != nil {
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query login history for device trust").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+
+	if loginCount > 0 {
+		r.log.Debug("Device is trusted — successful login history found",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+			logger.Int64("successful_logins", loginCount),
+		)
+		return true, nil
+	}
+
+	// Edge-case check: device may exist in users.devices (registered via a
+	// different flow) but has no successful login history.
+	// Uses idx_users_devices_device_id. Trust is denied regardless.
+	var deviceID_ string
+	deviceQuery := `SELECT id FROM users.devices WHERE user_id = $1 AND device_id = $2 AND is_active = true LIMIT 1`
+	err := r.db.QueryRow(ctx, deviceQuery, userID, deviceID).Scan(&deviceID_)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query device registration for trust check").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+
+	if deviceID_ != "" {
+		r.log.Debug("Device registered but no successful login history — not trusted",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+		)
+	} else {
+		r.log.Debug("Device unknown — not trusted",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+		)
+	}
+
+	return false, nil
+}
+
+// IsNewLocation returns true when the given city has not appeared in the user's
+func (r *authRepository) IsNewLocation(ctx context.Context, userID string, city string) (bool, pkgErrors.AppError) {
+	r.log.Debug("Checking login location history",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("city", city),
+	)
+
+	if city == "" {
+		return true, nil
+	}
+
+	query := `
+		SELECT DISTINCT location_city
+		FROM auth.login_history
+		WHERE user_id = $1
+		  AND status = 'success'
+		  AND location_city IS NOT NULL
+		ORDER BY MAX(created_at) DESC
+		LIMIT 10`
+
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query login location history").
+			WithDetail("user_id", userID)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var knownCity string
+		if scanErr := rows.Scan(&knownCity); scanErr != nil {
+			return false, pkgErrors.FromError(scanErr, pkgErrors.CodeDatabaseError, "failed to scan login location city").
+				WithDetail("user_id", userID)
+		}
+		if strings.EqualFold(knownCity, city) {
+			r.log.Debug("Location is known",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("city", city),
+			)
+			return false, nil
+		}
+	}
+
+	r.log.Debug("New login location detected",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("city", city),
+	)
+	return true, nil
+}
 
 func (r *authRepository) UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError) {
 	r.log.Info("Updating user device",

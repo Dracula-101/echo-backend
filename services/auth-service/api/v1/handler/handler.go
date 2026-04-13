@@ -1,6 +1,7 @@
 package handler
 
 import (
+	ratelimiter "auth-service/api/v1/rate_limiter"
 	"auth-service/internal/service"
 	"auth-service/internal/service/cache"
 	"auth-service/internal/service/location"
@@ -13,6 +14,7 @@ type AuthHandler struct {
 	sessionService  session.SessionService
 	locationService location.LocationService
 	authCache       cache.AuthCache
+	rateLimiter     ratelimiter.RateLimiter
 	log             logger.Logger
 }
 
@@ -21,6 +23,7 @@ func NewAuthHandler(
 	sessionService session.SessionService,
 	locationService location.LocationService,
 	authCache cache.AuthCache,
+	rateLimiter ratelimiter.RateLimiter,
 	log logger.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
@@ -28,6 +31,7 @@ func NewAuthHandler(
 		sessionService:  sessionService,
 		locationService: locationService,
 		authCache:       authCache,
+		rateLimiter:     rateLimiter,
 		log:             log,
 	}
 }

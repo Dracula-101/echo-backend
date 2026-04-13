@@ -34,6 +34,8 @@ func NewSessionCache(cache cache.Cache, log logger.Logger) SessionCache {
 }
 
 type SessionCache interface {
+	GetSession(sessionToken string) (*SessionData, pkgErrors.AppError)
+	DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError
 	SetSession(context context.Context, userID string, sessionId string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError
 	SetPre2FA_Auth(context context.Context, token string, userID string, deviceInfo request.DeviceInfo, ip string) pkgErrors.AppError
 	Set2FA_Setup(context context.Context, userID string, secretBase32 string, backupCodesPlainJSON string) pkgErrors.AppError
@@ -42,13 +44,16 @@ type SessionCache interface {
 	SetOAuthJWK(context context.Context, provider string, jwkSetJSON string) pkgErrors.AppError
 	SetUserStatus(context context.Context, userID string, accountStatus string, twoFactorEnabled bool) pkgErrors.AppError
 
-	GetSession(sessionToken string) (*SessionData, pkgErrors.AppError)
 	GetPre2FA_Auth(token string) (*Pre2FAData, pkgErrors.AppError)
 	Get2FA_Setup(userID string) (*Setup2FAData, pkgErrors.AppError)
 	GetRefreshUsed(refreshToken string) (bool, pkgErrors.AppError)
 	GetTOTPUsed(userID string, code string) (bool, pkgErrors.AppError)
 	GetOAuthJWK(provider string) (string, pkgErrors.AppError)
 	GetUserStatus(userID string) (*UserStatusData, pkgErrors.AppError)
+}
+
+func (c *sessionCache) DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError {
+	return c.cache.Delete(ctx, "session:"+sessionID)
 }
 
 func (c *sessionCache) SetSession(context context.Context, userID string, sessionId string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError {

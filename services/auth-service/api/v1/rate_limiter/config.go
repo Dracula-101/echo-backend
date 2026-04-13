@@ -38,7 +38,8 @@ var (
 	TTLLockLogin    = 10 * time.Second
 	TTLLockRegister = 10 * time.Second
 
-	TTLPwdResetSent  = 5 * time.Minute
-	TTLAccountLocked = 30 * time.Minute
-	TTLIPBlocked     = 24 * time.Hour
+	TTLPwdResetSent          = 5 * time.Minute
+	TTLAccountLocked         = 30 * time.Minute
+	TTLAccountLockedExtended = 24 * time.Hour
+	TTLIPBlocked             = 24 * time.Hour
 )

@@ -200,32 +200,14 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 		r.Post(
 			"/login",
 			req.Adapt(h.Login),
-			middleware.RateLimitMulti(rateLimiter,
-				middleware.RateLimitCheck{
-					Allow: func(ctx context.Context, key string, limit int64) (bool, int64, error) {
-						return rateLimiter.AllowLoginIP(ctx, key, limit)
-					},
-					Key: func(req req.RequestHandler) string {
-						return req.GetClientIP()
-					},
-					Limit: 10,
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return rateLimiter.AllowLoginIP(ctx, key, limit)
 				},
-				middleware.RateLimitCheck{
-					Allow: func(ctx context.Context, key string, limit int64) (bool, int64, error) {
-						if key == "" {
-							return true, 0, nil
-						}
-						return rateLimiter.AllowLoginUser(ctx, key, limit)
-					},
-					Key: func(req req.RequestHandler) string {
-						ok, value := req.GetBodyValue("email")
-						if !ok {
-							return ""
-						}
-						return value
-					},
-					Limit: 5,
+				func(req req.RequestHandler) string {
+					return req.GetClientIP()
 				},
+				10,
 			),
 		)
 
@@ -516,7 +498,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(*authService, *sessionService, *locationService, authCache, log)
+	authHandler := handler.NewAuthHandler(*authService, *sessionService, *locationService, authCache, *rateLimiter, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
