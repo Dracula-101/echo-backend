@@ -22,12 +22,12 @@ func newTransaction(tx *sql.Tx, log *dbLogger) *Transaction {
 	return &Transaction{tx: tx, log: log}
 }
 
-// Insert inserts a new record within the transaction.
-func (t *Transaction) Insert(ctx context.Context, model database.Model) (id *string, dbErr *database.DBError) {
+// Create inserts a new record within the transaction.
+func (t *Transaction) Create(ctx context.Context, model database.Model) (id *string, err *database.DBError) {
 	table := model.TableName()
 	pkField := getPrimaryKeyField(model)
 
-	fields, values := getFieldsAndValues(model)
+	fields, values := getInsertableFieldsAndValues(model, pkField)
 	if len(fields) == 0 {
 		return nil, t.log.NoFieldsError("TX:Create", table)
 	}
@@ -37,7 +37,7 @@ func (t *Transaction) Insert(ctx context.Context, model database.Model) (id *str
 
 	t.log.TxQueryStart("Create", table, len(fields))
 
-	var returnedID string
+	var returnedID interface{}
 	if err := t.tx.QueryRowContext(ctx, query, args...).Scan(&returnedID); err != nil {
 		return nil, t.log.TxQueryError("Create", table, query, args, err)
 	}
@@ -47,8 +47,9 @@ func (t *Transaction) Insert(ctx context.Context, model database.Model) (id *str
 			WithDetail("table", table)
 	}
 
-	t.log.TxQuerySuccess("Create", table, formatPrimaryKey(returnedID))
-	return &returnedID, nil
+	idStr := fmt.Sprint(returnedID)
+	t.log.TxQuerySuccess("Create", table, idStr)
+	return &idStr, nil
 }
 
 // FindByID retrieves a record by primary key within the transaction.

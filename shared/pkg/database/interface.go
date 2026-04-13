@@ -39,7 +39,7 @@ type Database interface {
 }
 
 type Transaction interface {
-	Insert(ctx context.Context, model Model) (id *string, err *DBError)
+	Create(ctx context.Context, model Model) (id *string, err *DBError)
 	FindByID(ctx context.Context, model Model, id interface{}) *DBError
 	Update(ctx context.Context, model Model) *DBError
 	Delete(ctx context.Context, model Model) *DBError

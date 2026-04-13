@@ -8,6 +8,7 @@ import (
 	"shared/pkg/email"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
+	"shared/server/request"
 )
 
 // AuthServiceInterface defines the contract for authentication service operations
@@ -31,7 +32,7 @@ type AuthServiceInterface interface {
 	ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string, ipAddress string, userAgent string) *error.AuthError
 
 	// Email verification
-	VerifyEmail(ctx context.Context, token string, userId string, ipAddress string, userAgent string) *error.AuthError
+	VerifyEmail(ctx context.Context, token string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) *error.AuthError
 	SendEmailVerification(ctx context.Context, userID string, email string, ipAddress string, userAgent string) *error.AuthError
 	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError)
 

@@ -17,6 +17,7 @@ type DeviceInfo struct {
 	AppVersion   string
 	Model        string
 	Manufacturer string
+	UserAgent    string
 }
 
 // IsMobile returns true if the device is mobile
@@ -135,6 +136,7 @@ func (h *RequestHandler) GetDeviceInfo() DeviceInfo {
 	if appVersion == "" {
 		appVersion = "unknown"
 	}
+	userAgent := h.GetUserAgent()
 
 	return DeviceInfo{
 		ID:           id,
@@ -146,6 +148,7 @@ func (h *RequestHandler) GetDeviceInfo() DeviceInfo {
 		Model:        model,
 		AppVersion:   appVersion,
 		Manufacturer: manufacturer,
+		UserAgent:    userAgent,
 	}
 }
 

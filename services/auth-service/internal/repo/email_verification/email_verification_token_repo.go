@@ -56,6 +56,10 @@ func (r *EmailVerificationTokenRepository) GetVerificationTokenByHash(ctx contex
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
+		r.log.Error("Failed to get email verification token",
+			logger.String("token_hash", tokenHash),
+			logger.Error(err),
+		)
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get email verification token")
 	}
 	return &token, nil

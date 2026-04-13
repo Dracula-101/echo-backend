@@ -6,6 +6,7 @@ import (
 	"context"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
+	"shared/server/request"
 )
 
 // ============================================================================
@@ -27,7 +28,7 @@ type AuthRepositoryInterface interface {
 	UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError
 
 	// Email verification
-	MarkEmailVerified(ctx context.Context, userID string, ipAddress string, userAgent string) pkgErrors.AppError
+	MarkEmailVerified(ctx context.Context, userID string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) pkgErrors.AppError
 	ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError
 
 	// Two-factor authentication

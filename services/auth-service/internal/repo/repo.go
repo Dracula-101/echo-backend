@@ -9,14 +9,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"shared/pkg/database/postgres/models"
+	dbModels "shared/pkg/database/postgres/models"
 	"time"
 
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
-	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
+	"shared/server/request"
 )
 
 // ============================================================================
@@ -49,7 +51,7 @@ func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository 
 // ============================================================================
 // Email Operations
 // ============================================================================
-func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*models.AccountStatus, pkgErrors.AppError) {
+func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*dbModels.AccountStatus, pkgErrors.AppError) {
 	r.log.Debug("Checking if email exists",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -57,7 +59,7 @@ func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*mode
 	//Query auth.users using idx_auth_users_email: SELECT id, account_status FROM auth.users WHERE LOWER(email) = LOWER($1)
 	query := `SELECT account_status FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`
 	row := r.db.QueryRow(ctx, query, email)
-	var accountStatus models.AccountStatus
+	var accountStatus dbModels.AccountStatus
 	err := row.Scan(&accountStatus)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -112,7 +114,7 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		"registration_app_version": utils.SafeString(&params.AppVersion),
 	}
 	metaDataJson := utils.MarshalRawMessageSafe(metaData)
-	id, err := r.db.Insert(ctx, &models.AuthUser{
+	id, err := r.db.Insert(ctx, &dbModels.AuthUser{
 		Email:                  params.Email,
 		PhoneNumber:            params.PhoneNumber,
 		PhoneCountryCode:       params.PhoneCountryCode,
@@ -125,7 +127,7 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		TwoFactorEnabled:       false,
 		TwoFactorSecret:        nil,
 		TwoFactorBackupCodes:   nil,
-		AccountStatus:          models.AccountStatusPending,
+		AccountStatus:          dbModels.AccountStatusPending,
 		AccountLockedUntil:     nil,
 		FailedLoginAttempts:    0,
 		LastFailedLoginAt:      nil,
@@ -190,7 +192,7 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 
 	query := `SELECT  * FROM auth.users WHERE email = $1 LIMIT 1`
 	row := r.db.QueryRow(ctx, query, email)
-	var user models.AuthUser
+	var user dbModels.AuthUser
 	err := row.ScanModel(&user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -244,7 +246,7 @@ func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domai
 
 	query := `SELECT * FROM auth.users WHERE id = $1 LIMIT 1`
 	row := r.db.QueryRow(ctx, query, userID)
-	var user models.AuthUser
+	var user dbModels.AuthUser
 	err := row.ScanModel(&user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -297,7 +299,7 @@ func (r *AuthRepository) GetUserActiveDevice(ctx context.Context, userID string)
 
 	query := `SELECT * FROM users.devices WHERE user_id = $1 AND is_active = TRUE LIMIT 1`
 	row := r.db.QueryRow(ctx, query, userID)
-	var device models.Device
+	var device dbModels.Device
 	err := row.ScanModel(&device)
 	if err != nil {
 		if postgres.IsNotFoundError(err) {
@@ -415,7 +417,7 @@ func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, hash
 // Email Verification
 // ============================================================================
 
-func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, ipAddress string, userAgent string) pkgErrors.AppError {
+func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) pkgErrors.AppError {
 	r.log.Info("Marking email as verified",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -444,15 +446,37 @@ func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, i
 	}
 
 	updateUserQuery := `UPDATE auth.users SET email_verified = TRUE, account_status = $1, updated_at = NOW() WHERE id = $2`
-	_, err = tx.Exec(ctx, updateUserQuery, models.AccountStatusActive, userID)
+	_, err = tx.Exec(ctx, updateUserQuery, dbModels.AccountStatusActive, userID)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update user email verification status").
 			WithDetail("user_id", userID).
 			WithDetail("query", updateUserQuery)
 	}
 
-	insertEventQuery := `INSERT INTO auth.security_events (user_id, event_type, event_category, severity, status, ip_address, user_agent, created_at) VALUES ($1, 'email_verified', 'account_management', 'info', 'success', $2, $3, NOW())`
-	_, err = tx.Exec(ctx, insertEventQuery, userID, ipAddress, userAgent) // IP and User Agent can be passed as parameters if available
+	metaData := map[string]interface{}{
+		"device_platform": deviceInfo.Platform,
+		"ip_country":      location.Country,
+		"app_version":     deviceInfo.AppVersion,
+	}
+	metaDataJson := utils.MarshalRawMessageSafe(metaData)
+	insertEventQuery := `INSERT INTO auth.security_events
+		(user_id, event_type, event_category, severity, status, description, ip_address, user_agent, device_id, location_country, location_city, created_at, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+	_, err = tx.Exec(ctx, insertEventQuery,
+		userID,
+		dbModels.SecurityEventEmailVerified,
+		"account_management",
+		dbModels.SecuritySeverityLow,
+		"success",
+		fmt.Sprintf("User email verified from IP %s using %s", location.IP, deviceInfo.UserAgent),
+		location.IP,
+		deviceInfo.UserAgent,
+		deviceInfo.ID,
+		location.Country,
+		location.City,
+		time.Now(),
+		metaDataJson,
+	)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to insert security event for email verification").
 			WithDetail("user_id", userID).

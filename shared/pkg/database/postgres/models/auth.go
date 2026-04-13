@@ -171,16 +171,17 @@ func (p *PasswordResetToken) PrimaryKey() interface{} {
 }
 
 type EmailVerificationToken struct {
-	ID         string     `db:"id" json:"id" pk:"true"`
-	UserID     string     `db:"user_id" json:"user_id"`
-	Email      string     `db:"email" json:"email"`
-	TokenHash  string     `db:"token_hash" json:"-"`
-	ExpiresAt  time.Time  `db:"expires_at" json:"expires_at"`
-	VerifiedAt *time.Time `db:"verified_at" json:"verified_at,omitempty"`
-	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
-	IPAddress  *string    `db:"ip_address" json:"ip_address,omitempty"`
-	UserAgent  *string    `db:"user_agent" json:"user_agent,omitempty"`
-	Attempts   int        `db:"attempts" json:"attempts"`
+	ID          string     `db:"id" json:"id" pk:"true"`
+	UserID      string     `db:"user_id" json:"user_id"`
+	Email       string     `db:"email" json:"email"`
+	TokenHash   string     `db:"token_hash" json:"-"`
+	ExpiresAt   time.Time  `db:"expires_at" json:"expires_at"`
+	VerifiedAt  *time.Time `db:"verified_at" json:"verified_at,omitempty"`
+	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
+	IPAddress   *string    `db:"ip_address" json:"ip_address,omitempty"`
+	UserAgent   *string    `db:"user_agent" json:"user_agent,omitempty"`
+	Attempts    int        `db:"attempts" json:"attempts"`
+	MaxAttempts int        `db:"max_attempts" json:"max_attempts"`
 }
 
 func (e *EmailVerificationToken) TableName() string {

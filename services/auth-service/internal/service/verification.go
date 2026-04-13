@@ -9,6 +9,7 @@ import (
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
+	"shared/server/request"
 )
 
 const (
@@ -18,17 +19,18 @@ const (
 	maxResendTokensPerWindow = 3
 )
 
-func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID string, ipAddress string, userAgent string) *error.AuthError {
+func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) *error.AuthError {
 	s.log.Info("Processing email verification",
 		logger.String("service", error.ServiceName),
-		logger.String("user_id", userID),
+		logger.String("ip_address", location.IP),
+		logger.String("user_agent", deviceInfo.UserAgent),
 	)
 
 	tokenHash, hashErr := s.hashingService.SimpleHash(ctx, rawToken)
 	if hashErr != nil {
 		s.log.Error("Failed to hash verification token",
-			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("ip_address", location.IP),
+			logger.String("user_agent", deviceInfo.UserAgent),
 			logger.Error(hashErr),
 		)
 		return &error.AuthError{
@@ -42,7 +44,8 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	if getErr != nil {
 		s.log.Error("Failed to retrieve verification token",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("ip_address", location.IP),
+			logger.String("user_agent", deviceInfo.UserAgent),
 			logger.Error(getErr),
 		)
 		return &error.AuthError{
@@ -52,10 +55,11 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
-	if verificationRecord == nil || verificationRecord.UserID != userID {
+	if verificationRecord == nil {
 		s.log.Warn("Invalid verification token",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("ip_address", location.IP),
+			logger.String("user_agent", deviceInfo.UserAgent),
 		)
 		return &error.AuthError{
 			Code:    error.CodeInvalidVerificationToken,
@@ -64,11 +68,11 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
-	user, userErr := s.repo.GetUserByID(ctx, userID)
+	user, userErr := s.repo.GetUserByID(ctx, verificationRecord.UserID)
 	if userErr != nil {
 		s.log.Error("Failed to retrieve user for email verification",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 			logger.Error(userErr),
 		)
 		return &error.AuthError{
@@ -81,7 +85,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	if user == nil {
 		s.log.Warn("User not found for email verification",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 		)
 		return &error.AuthError{
 			Code:    error.CodeUserNotFound,
@@ -93,7 +97,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	if user.EmailVerified {
 		s.log.Warn("Email already verified",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 		)
 		return &error.AuthError{
 			Code:    error.CodeEmailAlreadyVerified,
@@ -105,7 +109,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	if verificationRecord.ExpiresAt.Before(time.Now()) {
 		s.log.Warn("Expired verification token",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 		)
 		return &error.AuthError{
 			Code:    error.CodeVerificationTokenExpired,
@@ -117,7 +121,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 	if verificationRecord.Attempts >= maxVerificationAttempts {
 		s.log.Warn("Too many verification attempts",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 		)
 		return &error.AuthError{
 			Code:    error.CodeTooManyVerificationAttempts,
@@ -126,12 +130,12 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
-	// add attempt before updating to prevent
-	err := s.emailVerificationRepo.AttemptVerification(ctx, *tokenHash, userID)
+	// add attempt before updating to prevent race conditions
+	err := s.emailVerificationRepo.AttemptVerification(ctx, *tokenHash, verificationRecord.UserID)
 	if err != nil {
 		s.log.Warn("Failed to record verification attempt (proceeding anyway)",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 			logger.Error(err),
 		)
 		return &error.AuthError{
@@ -141,11 +145,11 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
-	updateErr := s.repo.MarkEmailVerified(ctx, userID, ipAddress, userAgent)
+	updateErr := s.repo.MarkEmailVerified(ctx, verificationRecord.UserID, deviceInfo, location)
 	if updateErr != nil {
 		s.log.Error("Failed to mark user email as verified",
 			logger.String("service", error.ServiceName),
-			logger.String("user_id", userID),
+			logger.String("user_id", verificationRecord.UserID),
 			logger.Error(updateErr),
 		)
 		return &error.AuthError{
@@ -157,7 +161,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 
 	s.log.Info("Email verified successfully",
 		logger.String("service", error.ServiceName),
-		logger.String("user_id", userID),
+		logger.String("user_id", verificationRecord.UserID),
 	)
 
 	return nil

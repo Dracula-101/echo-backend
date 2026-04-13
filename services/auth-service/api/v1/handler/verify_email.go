@@ -3,6 +3,7 @@ package handler
 import (
 	authErrors "auth-service/internal/error"
 	"shared/pkg/logger"
+	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
 )
@@ -36,17 +37,16 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 		return
 	}
 
-	userID, ok := req.GetUserIDFromContext(ctx)
+	deviceInfo := handler.GetDeviceInfo()
+	locationInfo, ok := request.GetIPAddressInfoFromContext(ctx)
 	if !ok {
-		h.log.Warn("User ID not found in context",
+		h.log.Warn("Failed to extract location info from context",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
 		)
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Unauthorized", nil)
-		return
+		locationInfo = request.NewIpAddressInfo()
 	}
-
-	err := h.authService.VerifyEmail(ctx, token, userID, handler.GetClientIP(), handler.GetUserAgent())
+	err := h.authService.VerifyEmail(ctx, token, deviceInfo, locationInfo)
 	if err != nil {
 		h.log.Warn("Email verification failed",
 			logger.String("service", authErrors.ServiceName),
@@ -55,32 +55,31 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 		)
 
 		switch err.Code {
-		// 409 Conflict — already verified
 		case authErrors.CodeEmailAlreadyVerified:
-			response.ConflictError(ctx, handler.Request(), handler.Writer(), "Email is already verified", err.Error)
+			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Email is already verified", nil)
 			return
 
-		// 410 Gone — token expired, prompt to resend
 		case authErrors.CodeVerificationTokenExpired:
 			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusGone, err.Message, nil)
 			return
 
-		// 400 Bad Request — invalid token, not found, or too many attempts
-		case authErrors.CodeVerificationNotFound,
-			authErrors.CodeVerificationInvalid,
+		case authErrors.CodeVerificationNotFound:
+			response.NotFoundError(ctx, handler.Request(), handler.Writer(), err.Message)
+			return
+
+		case authErrors.CodeVerificationInvalid,
 			authErrors.CodeTooManyVerificationAttempts:
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), err.Message, err.Error)
 			return
 
-		// 429 Too Many Requests (kept for completeness)
 		case authErrors.CodeVerificationEmailRecentlySent:
 			response.TooManyRequestsError(ctx, handler.Request(), handler.Writer(), err.Message, 0)
 			return
-		}
 
-		// Fallback — 500
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to verify email", err.Error)
-		return
+		default:
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to verify email", err.Error)
+			return
+		}
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Email verified successfully", nil)
