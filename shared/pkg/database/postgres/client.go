@@ -78,7 +78,7 @@ func (c *Client) Insert(ctx context.Context, model database.Model) (*string, *da
 	table := model.TableName()
 	pkField := getPrimaryKeyField(model)
 
-	fields, values := getFieldsAndValues(model)
+	fields, values := getInsertableFieldsAndValues(model, pkField)
 	if len(fields) == 0 {
 		return nil, c.log.NoFieldsError("Insert", table)
 	}
@@ -88,13 +88,19 @@ func (c *Client) Insert(ctx context.Context, model database.Model) (*string, *da
 
 	c.log.QueryStart("Insert", table, len(fields))
 
-	var returnedID string
+	var returnedID interface{}
 	if err := c.db.QueryRowContext(ctx, query, args...).Scan(&returnedID); err != nil {
 		return nil, c.log.QueryError("Insert", table, query, args, err)
 	}
 
-	c.log.QuerySuccess("Insert", table, formatPrimaryKey(returnedID))
-	return &returnedID, nil
+	if err := setPrimaryKeyValue(model, pkField, returnedID); err != nil {
+		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to set primary key").
+			WithDetail("table", table)
+	}
+
+	id := formatPrimaryKey(returnedID)
+	c.log.QuerySuccess("Insert", table, id)
+	return &id, nil
 }
 
 // Upsert inserts or updates a record based on primary key conflict.

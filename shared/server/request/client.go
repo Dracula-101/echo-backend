@@ -63,7 +63,7 @@ func NewIpAddressInfo() IpAddressInfo {
 		CountryCode: "Unknown",
 		Timezone:    "Unknown",
 		ISP:         "Unknown",
-		IP:          "Unknown",
+		IP:          "1.1.1.1",
 	}
 }
 

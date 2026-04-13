@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	LocationTimeout = time.Millisecond * 150
+	LocationTimeout = time.Millisecond * 250
 )
 
 func LocationFromIP(

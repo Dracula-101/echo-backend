@@ -92,33 +92,6 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		logger.String("ip_address", params.IPAddress),
 	)
 
-	tx, dbErr := r.db.BeginTx(ctx, nil)
-	if dbErr != nil {
-		return "", pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to begin transaction")
-	}
-
-	var txErr *database.DBError
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p)
-		} else if txErr != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// Begin transaction. Set app.current_user_id = NULL (registering user has no ID yet, so RLS insert policies use WITH CHECK (TRUE) which allows the insert).
-
-	_, err := tx.Exec(ctx, `SET LOCAL app.current_user_id = NULL`)
-	if err != nil {
-		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to set current_user_id for transaction").
-			WithDetail("email", params.Email)
-	}
-
-	r.log.Debug("Inserting user record",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("email", params.Email),
-	)
 	now := time.Now()
 	passwordHistory := fmt.Sprintf(`[{"hash":"%s","salt":"%s","algorithm":"%s","changed_at":"%s"}]`,
 		params.PasswordHash,
@@ -127,13 +100,19 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		now.Format(time.RFC3339),
 	)
 	passwordHistoryJson := json.RawMessage(passwordHistory)
+
+	r.log.Debug("Inserting user record",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", params.Email),
+	)
+
 	metaData := map[string]interface{}{
 		"registration_type":        "email",
 		"ip_country":               utils.SafeString(&params.Country),
 		"registration_app_version": utils.SafeString(&params.AppVersion),
 	}
 	metaDataJson := utils.MarshalRawMessageSafe(metaData)
-	id, err := tx.Insert(ctx, &models.AuthUser{
+	id, err := r.db.Insert(ctx, &models.AuthUser{
 		Email:                  params.Email,
 		PhoneNumber:            params.PhoneNumber,
 		PhoneCountryCode:       params.PhoneCountryCode,
@@ -162,16 +141,13 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
 			WithDetail("email", params.Email)
 	}
-	txErr = tx.Commit()
-	if txErr != nil {
-		return "", pkgErrors.FromError(txErr, pkgErrors.CodeDatabaseError, "failed to commit transaction for creating user").
-			WithDetail("email", params.Email)
-	}
+
 	r.log.Info("User created successfully",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("email", params.Email),
 		logger.String("user_id", *id),
+		logger.String("email", params.Email),
 	)
+
 	return *id, nil
 }
 
