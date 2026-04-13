@@ -19,7 +19,7 @@ const (
 	maxResendTokensPerWindow = 3
 )
 
-func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) *error.AuthError {
+func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) (email *string, authErr *error.AuthError) {
 	s.log.Info("Processing email verification",
 		logger.String("service", error.ServiceName),
 		logger.String("ip_address", location.IP),
@@ -33,7 +33,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("user_agent", deviceInfo.UserAgent),
 			logger.Error(hashErr),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeTokenGenerationFailed,
 			Message: "Failed to create verification token",
 			Error:   pkgErrors.FromError(hashErr, error.CodeTokenGenerationFailed, "failed to hash verification token"),
@@ -48,7 +48,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("user_agent", deviceInfo.UserAgent),
 			logger.Error(getErr),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeVerificationNotFound,
 			Message: "Verification token not found",
 			Error:   pkgErrors.FromError(getErr, error.CodeVerificationNotFound, "failed to retrieve verification token"),
@@ -61,7 +61,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("ip_address", location.IP),
 			logger.String("user_agent", deviceInfo.UserAgent),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeInvalidVerificationToken,
 			Message: "Invalid verification token",
 			Error:   pkgErrors.New(error.CodeInvalidVerificationToken, "token not found or does not belong to user"),
@@ -75,7 +75,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("user_id", verificationRecord.UserID),
 			logger.Error(userErr),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeDatabaseError,
 			Message: "Failed to process request",
 			Error:   pkgErrors.FromError(userErr, error.CodeDatabaseError, "failed to retrieve user"),
@@ -87,7 +87,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", verificationRecord.UserID),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeUserNotFound,
 			Message: "User not found",
 			Error:   pkgErrors.New(error.CodeUserNotFound, "user not found"),
@@ -99,10 +99,25 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", verificationRecord.UserID),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeEmailAlreadyVerified,
 			Message: "Email is already verified",
 			Error:   pkgErrors.New(error.CodeEmailAlreadyVerified, "email already verified"),
+		}
+	}
+
+	if user.AccountStatus == models.AccountStatusDeleted ||
+		user.AccountStatus == models.AccountStatusSuspended ||
+		user.AccountStatus == models.AccountStatusDeactivated {
+		s.log.Warn("Account ineligible for email verification",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", verificationRecord.UserID),
+			logger.String("account_status", string(user.AccountStatus)),
+		)
+		return nil, &error.AuthError{
+			Code:    error.CodeUserNotFound,
+			Message: "User not found",
+			Error:   pkgErrors.New(error.CodeUserNotFound, "account ineligible"),
 		}
 	}
 
@@ -111,7 +126,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", verificationRecord.UserID),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeVerificationTokenExpired,
 			Message: "Verification token has expired",
 			Error:   pkgErrors.New(error.CodeVerificationTokenExpired, "verification token expired"),
@@ -123,7 +138,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", verificationRecord.UserID),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeTooManyVerificationAttempts,
 			Message: "Too many verification attempts. Please request a new verification email.",
 			Error:   pkgErrors.New(error.CodeTooManyVerificationAttempts, "too many verification attempts"),
@@ -138,7 +153,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("user_id", verificationRecord.UserID),
 			logger.Error(err),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeDatabaseError,
 			Message: "Failed to process verification attempt",
 			Error:   pkgErrors.FromError(err, error.CodeDatabaseError, "failed to record verification attempt"),
@@ -152,7 +167,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 			logger.String("user_id", verificationRecord.UserID),
 			logger.Error(updateErr),
 		)
-		return &error.AuthError{
+		return nil, &error.AuthError{
 			Code:    error.CodeDatabaseError,
 			Message: "Failed to process verification attempt",
 			Error:   pkgErrors.FromError(updateErr, error.CodeDatabaseError, "failed to mark user email as verified"),
@@ -164,7 +179,8 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 		logger.String("user_id", verificationRecord.UserID),
 	)
 
-	return nil
+	defer s.emailVerificationRepo.InvalidateUserTokens(ctx, verificationRecord.UserID)
+	return &user.Email, nil
 }
 
 func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError) {

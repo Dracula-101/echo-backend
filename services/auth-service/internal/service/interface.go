@@ -32,7 +32,7 @@ type AuthServiceInterface interface {
 	ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string, ipAddress string, userAgent string) *error.AuthError
 
 	// Email verification
-	VerifyEmail(ctx context.Context, token string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) *error.AuthError
+	VerifyEmail(ctx context.Context, token string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) (*string, *error.AuthError)
 	SendEmailVerification(ctx context.Context, userID string, email string, ipAddress string, userAgent string) *error.AuthError
 	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError)
 

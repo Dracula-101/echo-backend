@@ -46,7 +46,7 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 		)
 		locationInfo = request.NewIpAddressInfo()
 	}
-	err := h.authService.VerifyEmail(ctx, token, deviceInfo, locationInfo)
+	email, err := h.authService.VerifyEmail(ctx, token, deviceInfo, locationInfo)
 	if err != nil {
 		h.log.Warn("Email verification failed",
 			logger.String("service", authErrors.ServiceName),
@@ -55,6 +55,9 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 		)
 
 		switch err.Code {
+		case authErrors.CodeUserNotFound:
+			response.NotFoundError(ctx, handler.Request(), handler.Writer(), "User not found for the provided verification token")
+			return
 		case authErrors.CodeEmailAlreadyVerified:
 			response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Email is already verified", nil)
 			return
@@ -80,6 +83,9 @@ func (h *AuthHandler) VerifyEmail(handler *req.RequestHandler) {
 			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to verify email", err.Error)
 			return
 		}
+	}
+	if email != nil {
+		h.authCache.ReleaseRegisterEmailLock(ctx, *email)
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Email verified successfully", nil)
