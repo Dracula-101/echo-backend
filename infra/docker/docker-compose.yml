@@ -75,7 +75,9 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     <<: *service-base
-    image: postgres:15-alpine
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     container_name: echo-postgres
     ports: [ "${POSTGRES_PORT:-5432}:5432" ]
     environment:
@@ -87,7 +89,7 @@ services:
     command: >
       postgres
         -c shared_preload_libraries=pg_stat_statements,pg_cron
-        -c pg_cron.database=${POSTGRES_DB:-echo_db}
+        -c cron.database_name=${POSTGRES_DB:-echo_db}
         -c pg_stat_statements.track=all
         -c log_min_duration_statement=100
     volumes:

@@ -5,19 +5,22 @@ import (
 	"shared/pkg/logger"
 )
 
-type PasswordResetTokenRepository struct {
+type passwordResetTokenRepository struct {
 	db  database.Database
 	log logger.Logger
 }
 
-func NewPasswordResetTokenRepo(db database.Database, log logger.Logger) *PasswordResetTokenRepository {
+func NewPasswordResetTokenRepo(db database.Database, log logger.Logger) PasswordResetTokenRepository {
 	if db == nil {
 		panic("Database is required for PasswordResetTokenRepo")
 	}
 	if log == nil {
 		panic("Logger is required for PasswordResetTokenRepo")
 	}
-	return &PasswordResetTokenRepository{db: db, log: log}
+	return &passwordResetTokenRepository{
+		db:  db,
+		log: log,
+	}
 }
 
-var _ PasswordResetTokenRepositoryInterface = (*PasswordResetTokenRepository)(nil)
+var _ PasswordResetTokenRepository = (*passwordResetTokenRepository)(nil)

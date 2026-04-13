@@ -11,14 +11,14 @@ import (
 	"shared/pkg/logger"
 )
 
-type PasswordResetTokenRepositoryInterface interface {
+type PasswordResetTokenRepository interface {
 	CreateResetToken(ctx context.Context, userID string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError
 	GetResetTokenByHash(ctx context.Context, tokenHash string) (*models.PasswordResetToken, pkgErrors.AppError)
 	MarkTokenUsed(ctx context.Context, tokenID string) pkgErrors.AppError
 	InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError
 }
 
-func (r *PasswordResetTokenRepository) CreateResetToken(ctx context.Context, userID string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
+func (r *passwordResetTokenRepository) CreateResetToken(ctx context.Context, userID string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
 	r.log.Info("Creating password reset token",
 		logger.String("user_id", userID),
 	)
@@ -43,7 +43,7 @@ func (r *PasswordResetTokenRepository) CreateResetToken(ctx context.Context, use
 	return nil
 }
 
-func (r *PasswordResetTokenRepository) GetResetTokenByHash(ctx context.Context, tokenHash string) (*models.PasswordResetToken, pkgErrors.AppError) {
+func (r *passwordResetTokenRepository) GetResetTokenByHash(ctx context.Context, tokenHash string) (*models.PasswordResetToken, pkgErrors.AppError) {
 	r.log.Debug("Fetching password reset token by hash")
 
 	query := `SELECT * FROM auth.password_reset_tokens WHERE token_hash = $1 LIMIT 1`
@@ -58,7 +58,7 @@ func (r *PasswordResetTokenRepository) GetResetTokenByHash(ctx context.Context, 
 	return &token, nil
 }
 
-func (r *PasswordResetTokenRepository) MarkTokenUsed(ctx context.Context, tokenID string) pkgErrors.AppError {
+func (r *passwordResetTokenRepository) MarkTokenUsed(ctx context.Context, tokenID string) pkgErrors.AppError {
 	r.log.Info("Marking password reset token as used",
 		logger.String("token_id", tokenID),
 	)
@@ -72,7 +72,7 @@ func (r *PasswordResetTokenRepository) MarkTokenUsed(ctx context.Context, tokenI
 	return nil
 }
 
-func (r *PasswordResetTokenRepository) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *passwordResetTokenRepository) InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Invalidating all password reset tokens for user",
 		logger.String("user_id", userID),
 	)

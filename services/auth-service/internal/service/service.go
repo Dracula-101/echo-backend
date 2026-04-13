@@ -7,7 +7,6 @@ import (
 	"auth-service/internal/repo/email_verification"
 	"auth-service/internal/repo/login_history"
 	"auth-service/internal/repo/password_reset"
-	"auth-service/internal/repo/security_event"
 	"auth-service/internal/repo/session"
 	"shared/pkg/cache"
 	"shared/pkg/email"
@@ -18,11 +17,10 @@ import (
 
 type AuthService struct {
 	repo                  repository.AuthRepository
-	loginHistoryRepo      login_history.LoginHistoryRepository
+	loginHistoryRepo      login_history.LoginHistoryRespository
 	sessionRepo           session.SessionRepository
 	passwordResetRepo     password_reset.PasswordResetTokenRepository
 	emailVerificationRepo email_verification.EmailVerificationTokenRepository
-	securityEventRepo     security_event.SecurityEventRepository
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -38,11 +36,10 @@ func NewAuthServiceBuilder() *AuthServiceBuilder {
 
 type AuthServiceBuilder struct {
 	repo                  repository.AuthRepository
-	loginHistoryRepo      login_history.LoginHistoryRepository
+	loginHistoryRepo      login_history.LoginHistoryRespository
 	sessionRepo           session.SessionRepository
 	passwordResetRepo     password_reset.PasswordResetTokenRepository
 	emailVerificationRepo email_verification.EmailVerificationTokenRepository
-	securityEventRepo     security_event.SecurityEventRepository
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -57,7 +54,7 @@ func (b *AuthServiceBuilder) WithRepo(repo repository.AuthRepository) *AuthServi
 	return b
 }
 
-func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo login_history.LoginHistoryRepository) *AuthServiceBuilder {
+func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo login_history.LoginHistoryRespository) *AuthServiceBuilder {
 	b.loginHistoryRepo = repo
 	return b
 }
@@ -74,11 +71,6 @@ func (b *AuthServiceBuilder) WithPasswordResetRepo(repo password_reset.PasswordR
 
 func (b *AuthServiceBuilder) WithEmailVerificationRepo(repo email_verification.EmailVerificationTokenRepository) *AuthServiceBuilder {
 	b.emailVerificationRepo = repo
-	return b
-}
-
-func (b *AuthServiceBuilder) WithSecurityEventRepo(repo security_event.SecurityEventRepository) *AuthServiceBuilder {
-	b.securityEventRepo = repo
 	return b
 }
 
@@ -135,7 +127,6 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 		sessionRepo:           b.sessionRepo,
 		passwordResetRepo:     b.passwordResetRepo,
 		emailVerificationRepo: b.emailVerificationRepo,
-		securityEventRepo:     b.securityEventRepo,
 		emailService:          b.emailService,
 		tokenService:          b.tokenService,
 		hashingService:        b.hashingService,

@@ -9,16 +9,16 @@ import (
 // Repository Definition
 // ============================================================================
 
-type SessionRepository struct {
+type sessionRepository struct {
 	db  database.Database
 	log logger.Logger
 }
 
-func NewSessionRepo(db database.Database, log logger.Logger) *SessionRepository {
-	return &SessionRepository{
+func NewSessionRepo(db database.Database, log logger.Logger) SessionRepository {
+	return &sessionRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-var _ SessionRepositoryInterface = (*SessionRepository)(nil)
+var _ SessionRepository = (*sessionRepository)(nil)

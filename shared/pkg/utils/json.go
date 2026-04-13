@@ -25,3 +25,20 @@ func MarshalRawMessageSafe(v interface{}) json.RawMessage {
 func UnmarshalRawMessageSafe(data json.RawMessage, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
+
+func MarshalRawMessageToMapSafe(data json.RawMessage) map[string]interface{} {
+	var result map[string]interface{}
+	err := json.Unmarshal(data, &result)
+	if err != nil {
+		return map[string]interface{}{}
+	}
+	return result
+}
+
+func UnmarshalRawMessageToMapSafe(v map[string]interface{}) json.RawMessage {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(data)
+}

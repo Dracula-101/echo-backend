@@ -49,8 +49,9 @@ run_file() {
         return 0
     fi
     echo "   + $label"
-    if ! psql_db -v ON_ERROR_STOP=1 -f "$file" --quiet 2>&1 \
-            | grep -v "^NOTICE:" | grep -v "^$" | grep -v "^DO$"; then
+    local output
+    if ! output=$(psql_db -v ON_ERROR_STOP=1 -f "$file" --quiet 2>&1); then
+        echo "$output" | grep -v "^NOTICE:" | grep -v "^$" | grep -v "^DO$"
         echo "   [ERROR] Failed on: $file"
         exit 1
     fi
@@ -110,10 +111,10 @@ echo ""
 echo "[4/8] Creating schemas..."
 for f in \
     "auth.schema.sql" \
-    "users.schema.sql" \
+    "user.schema.sql" \
+    "message.schema.sql" \
     "media.schema.sql" \
-    "messages.schema.sql" \
-    "notifications.schema.sql" \
+    "notification.schema.sql" \
     "analytics.schema.sql" \
     "location.schema.sql"
 do
@@ -145,9 +146,9 @@ for dir in auth users media messages notifications; do
         echo "   [WARN] Not found: triggers/$dir"
         continue
     fi
-    for f in $(ls "$dir_path"/*.sql 2>/dev/null | sort -V); do
+    while IFS= read -r -d '' f; do
         run_file "$f" "$dir/$(basename "$f")"
-    done
+    done < <(find "$dir_path" -maxdepth 1 -name '*.sql' -print0 | sort -zV)
 done
 
 echo ""
@@ -182,8 +183,8 @@ if [ "$SKIP_CRON" = false ]; then
     echo ""
     echo "[ + ] Scheduling pg_cron jobs..."
     if [ -f "$DATABASE_DIR/pg_cron.sql" ]; then
-        if ! psql_db -v ON_ERROR_STOP=1 -f "$DATABASE_DIR/pg_cron.sql" --quiet \
-                2>&1 | grep -v "^NOTICE:" | grep -v "^$"; then
+        if ! cron_output=$(psql_db -v ON_ERROR_STOP=1 -f "$DATABASE_DIR/pg_cron.sql" --quiet 2>&1); then
+            echo "$cron_output" | grep -v "^NOTICE:" | grep -v "^$"
             echo "      [WARN] pg_cron scheduling failed."
             echo "             Ensure shared_preload_libraries includes 'pg_cron' and Postgres is restarted."
         fi

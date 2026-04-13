@@ -13,7 +13,7 @@ import (
 )
 
 // SessionRepositoryInterface defines the contract for session repository operations
-type SessionRepositoryInterface interface {
+type SessionRepository interface {
 	// Session management
 	CreateSession(ctx context.Context, session *domain.Session) pkgErrors.AppError
 	GetSessionByUserId(ctx context.Context, userID string, deviceID *string) (*domain.Session, pkgErrors.AppError)
@@ -31,7 +31,7 @@ type SessionRepositoryInterface interface {
 // Session Management
 // ============================================================================
 
-func (r *SessionRepository) CreateSession(ctx context.Context, session *domain.Session) pkgErrors.AppError {
+func (r *sessionRepository) CreateSession(ctx context.Context, session *domain.Session) pkgErrors.AppError {
 	r.log.Debug("Creating new session",
 		logger.String("user_id", session.UserID),
 		logger.String("device_id", session.DeviceID),
@@ -49,7 +49,7 @@ func (r *SessionRepository) CreateSession(ctx context.Context, session *domain.S
 	return nil
 }
 
-func (r *SessionRepository) GetAllSessionsByUserId(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) GetAllSessionsByUserId(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Fetching all sessions by user ID",
 		logger.String("user_id", userID),
 	)
@@ -86,7 +86,7 @@ func (r *SessionRepository) GetAllSessionsByUserId(ctx context.Context, userID s
 	return result, nil
 }
 
-func (r *SessionRepository) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Fetching session by refresh token")
 	var session models.AuthSession
 	// Hits auth.sessions using idx_auth_sessions_refresh_token (unique B-tree on refresh_token). Condition: refresh_token = $1. Returns full session row including revoked_at and expires_at.
@@ -111,7 +111,7 @@ func (r *SessionRepository) GetSessionByRefreshToken(ctx context.Context, refres
 	return &s, nil
 }
 
-func (r *SessionRepository) UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Updating session",
 		logger.String("session_id", session.ID),
 		logger.Any("updates", session),
@@ -153,7 +153,7 @@ func (r *SessionRepository) UpdateSession(ctx context.Context, session *domain.U
 	return &s, nil
 }
 
-func (r *SessionRepository) GetSessionByUserId(ctx context.Context, userID string, deviceID *string) (*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) GetSessionByUserId(ctx context.Context, userID string, deviceID *string) (*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Fetching session by user ID",
 		logger.String("user_id", userID),
 	)
@@ -183,7 +183,7 @@ func (r *SessionRepository) GetSessionByUserId(ctx context.Context, userID strin
 	return &s, nil
 }
 
-func (r *SessionRepository) EvictOldestSession(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *sessionRepository) EvictOldestSession(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Evicting oldest session for user",
 		logger.String("user_id", userID),
 	)
@@ -216,7 +216,7 @@ func (r *SessionRepository) EvictOldestSession(ctx context.Context, userID strin
 	return nil
 }
 
-func (r *SessionRepository) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {
+func (r *sessionRepository) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {
 	r.log.Debug("Deleting session",
 		logger.String("session_id", sessionID),
 	)
@@ -232,7 +232,7 @@ func (r *SessionRepository) DeleteSessionByID(ctx context.Context, sessionID str
 	return nil
 }
 
-func (r *SessionRepository) GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Fetching session by ID",
 		logger.String("session_id", sessionID),
 	)
@@ -261,7 +261,7 @@ func (r *SessionRepository) GetSessionByID(ctx context.Context, sessionID string
 	return &s, nil
 }
 
-func (r *SessionRepository) RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError {
+func (r *sessionRepository) RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError {
 	r.log.Info("Revoking session",
 		logger.String("session_id", sessionID),
 		logger.String("reason", reason),
@@ -281,7 +281,7 @@ func (r *SessionRepository) RevokeSession(ctx context.Context, sessionID string,
 	return nil
 }
 
-func (r *SessionRepository) RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError {
+func (r *sessionRepository) RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError {
 	r.log.Info("Revoking all sessions for user",
 		logger.String("user_id", userID),
 		logger.String("reason", reason),

@@ -9,12 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"shared/pkg/database/postgres/models"
-	dbModels "shared/pkg/database/postgres/models"
 	"time"
 
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
+	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -25,12 +24,12 @@ import (
 // Repository Definition
 // ============================================================================
 
-type AuthRepository struct {
+type authRepository struct {
 	db  database.Database
 	log logger.Logger
 }
 
-func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository {
+func NewAuthRepository(db database.Database, log logger.Logger) AuthRepository {
 	if db == nil {
 		panic("Database is required for AuthRepository")
 	}
@@ -42,7 +41,7 @@ func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository 
 		logger.String("service", authErrors.ServiceName),
 	)
 
-	return &AuthRepository{
+	return &authRepository{
 		db:  db,
 		log: log,
 	}
@@ -51,7 +50,7 @@ func NewAuthRepository(db database.Database, log logger.Logger) *AuthRepository 
 // ============================================================================
 // Email Operations
 // ============================================================================
-func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*dbModels.AccountStatus, pkgErrors.AppError) {
+func (r *authRepository) ExistsByEmail(ctx context.Context, email string) (*dbModels.AccountStatus, pkgErrors.AppError) {
 	r.log.Debug("Checking if email exists",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -86,7 +85,7 @@ func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*dbMo
 // User Creation
 // ============================================================================
 
-func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.CreateUserParams) (string, pkgErrors.AppError) {
+func (r *authRepository) CreateUser(ctx context.Context, params repoModels.CreateUserParams) (string, pkgErrors.AppError) {
 	r.log.Info("Creating user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", params.Email),
@@ -153,7 +152,7 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 	return *id, nil
 }
 
-func (r *AuthRepository) UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Unlocking user account",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -184,7 +183,7 @@ func (r *AuthRepository) UnlockUserAccount(ctx context.Context, userID string) p
 // User Retrieval
 // ============================================================================
 
-func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError) {
+func (r *authRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError) {
 	r.log.Debug("Fetching user by email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -238,7 +237,7 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	}, nil
 }
 
-func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError) {
+func (r *authRepository) GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError) {
 	r.log.Debug("Fetching user by ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -291,7 +290,7 @@ func (r *AuthRepository) GetUserByID(ctx context.Context, userID string) (*domai
 	}, nil
 }
 
-func (r *AuthRepository) GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError) {
+func (r *authRepository) GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError) {
 	r.log.Debug("Fetching active device for user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -326,7 +325,7 @@ func (r *AuthRepository) GetUserActiveDevice(ctx context.Context, userID string)
 // Login Tracking
 // ============================================================================
 
-func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Recording failed login attempt",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -352,7 +351,7 @@ func (r *AuthRepository) RecordFailedLogin(ctx context.Context, userID string) p
 	return nil
 }
 
-func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Recording successful login",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -383,7 +382,7 @@ func (r *AuthRepository) RecordSuccessfulLogin(ctx context.Context, userID strin
 // Password Management
 // ============================================================================
 
-func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError {
+func (r *authRepository) UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError {
 	r.log.Info("Updating user password",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -417,7 +416,7 @@ func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, hash
 // Email Verification
 // ============================================================================
 
-func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) pkgErrors.AppError {
+func (r *authRepository) MarkEmailVerified(ctx context.Context, userID string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) pkgErrors.AppError {
 	r.log.Info("Marking email as verified",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -468,7 +467,7 @@ func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, d
 		"account_management",
 		dbModels.SecuritySeverityLow,
 		"success",
-		fmt.Sprintf("User email verified from IP %s using %s", location.IP, deviceInfo.UserAgent),
+		"Email verified successfully",
 		location.IP,
 		deviceInfo.UserAgent,
 		deviceInfo.ID,
@@ -509,7 +508,7 @@ func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, d
 
 	return nil
 }
-func (r *AuthRepository) ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Activating pending user account",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -519,7 +518,7 @@ func (r *AuthRepository) ActivatePendingUser(ctx context.Context, userID string)
 		SET account_status = $1,
 		    updated_at = NOW()
 		WHERE id = $2 AND account_status = $3`
-	result, err := r.db.Exec(ctx, query, models.AccountStatusActive, userID, models.AccountStatusPending)
+	result, err := r.db.Exec(ctx, query, dbModels.AccountStatusActive, userID, dbModels.AccountStatusPending)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to activate pending user").
 			WithDetail("user_id", userID)
@@ -538,7 +537,7 @@ func (r *AuthRepository) ActivatePendingUser(ctx context.Context, userID string)
 // Two-Factor Authentication
 // ============================================================================
 
-func (r *AuthRepository) Update2FASecret(ctx context.Context, userID string, secret string) pkgErrors.AppError {
+func (r *authRepository) Update2FASecret(ctx context.Context, userID string, secret string) pkgErrors.AppError {
 	r.log.Info("Updating 2FA secret",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -561,7 +560,7 @@ func (r *AuthRepository) Update2FASecret(ctx context.Context, userID string, sec
 	return nil
 }
 
-func (r *AuthRepository) Enable2FA(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) Enable2FA(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Enabling 2FA",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -584,7 +583,7 @@ func (r *AuthRepository) Enable2FA(ctx context.Context, userID string) pkgErrors
 	return nil
 }
 
-func (r *AuthRepository) Disable2FA(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) Disable2FA(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Disabling 2FA",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -613,7 +612,7 @@ func (r *AuthRepository) Disable2FA(ctx context.Context, userID string) pkgError
 // Account Management
 // ============================================================================
 
-func (r *AuthRepository) SoftDeleteUser(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *authRepository) SoftDeleteUser(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Soft deleting user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -624,7 +623,7 @@ func (r *AuthRepository) SoftDeleteUser(ctx context.Context, userID string) pkgE
 		    deleted_at = NOW(),
 		    updated_at = NOW()
 		WHERE id = $2`
-	_, err := r.db.Exec(ctx, query, models.AccountStatusDeleted, userID)
+	_, err := r.db.Exec(ctx, query, dbModels.AccountStatusDeleted, userID)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to soft delete user").
 			WithDetail("user_id", userID)
@@ -635,4 +634,98 @@ func (r *AuthRepository) SoftDeleteUser(ctx context.Context, userID string) pkgE
 		logger.String("user_id", userID),
 	)
 	return nil
+}
+
+// ============================================================================
+// Device Management
+// ============================================================================
+
+func (r *authRepository) UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError) {
+	r.log.Info("Updating user device",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+
+	var count int
+	checkQuery := `SELECT COUNT(1) FROM users.devices WHERE user_id = $1 AND device_id = $2`
+	err := r.db.QueryRow(ctx, checkQuery, userID, deviceID).Scan(&count)
+	if err != nil && !postgres.IsNotFoundError(err) {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to check if device exists").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+	if count == 0 {
+		r.log.Info("Device does not exist, skipping update",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.String("device_id", deviceID),
+		)
+		return nil, nil
+	}
+
+	updateQuery := `UPDATE users.devices
+		SET app_version = COALESCE($1, app_version),
+		    fcm_token = COALESCE($2, fcm_token),
+		    apns_token = COALESCE($3, apns_token),
+		    push_enabled = COALESCE($4, push_enabled),
+		    is_active = COALESCE($5, is_active),
+			is_current_device = COALESCE($6, is_current_device),
+			last_active_at = NOW()
+		WHERE user_id = $7 AND device_id = $8`
+	result, err := r.db.Exec(ctx, updateQuery,
+		update.AppVersion,
+		update.FCMToken,
+		update.APNSToken,
+		update.PushEnabled,
+		update.IsActive,
+		update.IsCurrentDevice,
+		userID,
+		deviceID,
+	)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update user device").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("User device updated successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+
+	if update.IsCurrentDevice != nil && *update.IsCurrentDevice {
+		unsetQuery := `UPDATE users.devices SET is_current_device = FALSE, last_active_at = NOW() WHERE user_id = $1 AND device_id != $2`
+		result, err := r.db.Exec(ctx, unsetQuery, userID, deviceID)
+		if err != nil {
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to unset current device flag for other devices").
+				WithDetail("user_id", userID).
+				WithDetail("device_id", deviceID)
+		}
+		rowsAffected, _ := result.RowsAffected()
+		r.log.Info("Other devices' current device flag unset",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Int64("rows_affected", rowsAffected),
+		)
+	}
+
+	fetchQuery := `SELECT * FROM users.devices WHERE user_id = $1 AND device_id = $2 LIMIT 1`
+	row := r.db.QueryRow(ctx, fetchQuery, userID, deviceID)
+	var updated dbModels.Device
+	if err := row.ScanModel(&updated); err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to fetch updated user device").
+			WithDetail("user_id", userID).
+			WithDetail("device_id", deviceID)
+	}
+
+	r.log.Info("Fetched updated user device successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("device_id", deviceID),
+	)
+	return domain.NewUserDevice(updated), nil
 }

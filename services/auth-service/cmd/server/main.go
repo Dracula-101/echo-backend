@@ -11,7 +11,6 @@ import (
 	"auth-service/internal/repo/email_verification"
 	"auth-service/internal/repo/login_history"
 	"auth-service/internal/repo/password_reset"
-	"auth-service/internal/repo/security_event"
 	"auth-service/internal/repo/session"
 	"auth-service/internal/service"
 	authCache "auth-service/internal/service/cache"
@@ -497,19 +496,17 @@ func main() {
 
 	loginHistoryRepo := login_history.NewLoginHistoryRepo(dbClient, log)
 	sessionRepo := session.NewSessionRepo(dbClient, log)
-	sessionService := sessionSvc.NewSessionService(*sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
+	sessionService := sessionSvc.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
 	emailVerificationRepo := email_verification.NewEmailVerificationTokenRepo(dbClient, log)
 	resetTokenRepo := password_reset.NewPasswordResetTokenRepo(dbClient, log)
-	securityEventRepo := security_event.NewSecurityEventRepo(dbClient, log)
 
 	authRepo := repository.NewAuthRepository(dbClient, log)
 	authService := service.NewAuthServiceBuilder().
-		WithRepo(*authRepo).
-		WithLoginHistoryRepo(*loginHistoryRepo).
-		WithEmailVerificationRepo(*emailVerificationRepo).
-		WithPasswordResetRepo(*resetTokenRepo).
-		WithSessionRepo(*sessionRepo).
-		WithSecurityEventRepo(*securityEventRepo).
+		WithRepo(authRepo).
+		WithLoginHistoryRepo(loginHistoryRepo).
+		WithEmailVerificationRepo(emailVerificationRepo).
+		WithPasswordResetRepo(resetTokenRepo).
+		WithSessionRepo(sessionRepo).
 		WithRateLimiter(*rateLimiter).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
@@ -519,7 +516,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(*authService, *sessionService, *locationService, *securityEventRepo, authCache, log)
+	authHandler := handler.NewAuthHandler(*authService, *sessionService, *locationService, authCache, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

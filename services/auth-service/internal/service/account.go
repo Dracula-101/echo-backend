@@ -210,6 +210,25 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		}
 	}
 
+	s.log.Info("User logged in successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", email),
+		logger.String("user_id", user.ID),
+	)
+	s.loginHistoryRepo.CreateLoginHistory(ctx, repoModels.CreateLoginHistoryInput{
+		UserID:        user.ID,
+		DeviceInfo:    input.DeviceInfo,
+		IPInfo:        *input.LocationInfo,
+		SessionID:     nil,
+		LoginMethod:   utils.PtrString("password"),
+		Status:        utils.PtrString("success"),
+		IsNewDevice:   utils.PtrBool(false),
+		IsNewLocation: utils.PtrBool(false),
+		FailureReason: nil,
+
+		UserAgent: utils.PtrString(input.DeviceInfo.UserAgent),
+	})
+
 	return &domain.LoginResult{
 		User: &domain.User{
 			ID:                     user.ID,

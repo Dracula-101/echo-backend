@@ -9,16 +9,16 @@ import (
 // Repository Definition
 // ============================================================================
 
-type LoginHistoryRepository struct {
+type loginHistoryRepository struct {
 	db  database.Database
 	log logger.Logger
 }
 
-func NewLoginHistoryRepo(db database.Database, log logger.Logger) *LoginHistoryRepository {
-	return &LoginHistoryRepository{
+func NewLoginHistoryRepo(db database.Database, log logger.Logger) LoginHistoryRespository {
+	return &loginHistoryRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-var _ LoginHistoryRepositoryInterface = (*LoginHistoryRepository)(nil)
+var _ LoginHistoryRespository = (*loginHistoryRepository)(nil)

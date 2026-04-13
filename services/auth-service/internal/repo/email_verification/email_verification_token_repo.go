@@ -11,7 +11,7 @@ import (
 	"shared/pkg/logger"
 )
 
-type EmailVerificationTokenRepositoryInterface interface {
+type EmailVerificationTokenRepository interface {
 	CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError
 	GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError)
 	AttemptVerification(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError
@@ -19,7 +19,7 @@ type EmailVerificationTokenRepositoryInterface interface {
 	ExpireTokensByUserID(ctx context.Context, userID string) pkgErrors.AppError
 }
 
-func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
+func (r *emailVerificationTokenRepository) CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError {
 	r.log.Info("Creating email verification token",
 		logger.String("user_id", userID),
 		logger.String("email", email),
@@ -45,7 +45,7 @@ func (r *EmailVerificationTokenRepository) CreateVerificationToken(ctx context.C
 	return nil
 }
 
-func (r *EmailVerificationTokenRepository) GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError) {
+func (r *emailVerificationTokenRepository) GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError) {
 	r.log.Debug("Fetching email verification token by hash")
 
 	query := `SELECT * FROM auth.email_verification_tokens WHERE token_hash = $1 LIMIT 1`
@@ -64,7 +64,7 @@ func (r *EmailVerificationTokenRepository) GetVerificationTokenByHash(ctx contex
 	return &token, nil
 }
 
-func (r *EmailVerificationTokenRepository) AttemptVerification(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError {
+func (r *emailVerificationTokenRepository) AttemptVerification(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError {
 	r.log.Info("Recording email verification attempt",
 		logger.String("token_hash", tokenHash),
 	)
@@ -77,7 +77,7 @@ func (r *EmailVerificationTokenRepository) AttemptVerification(ctx context.Conte
 	return nil
 }
 
-func (r *EmailVerificationTokenRepository) GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError) {
+func (r *emailVerificationTokenRepository) GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError) {
 	r.log.Debug("Fetching latest email verification token for user",
 		logger.String("user_id", userID),
 	)
@@ -95,7 +95,7 @@ func (r *EmailVerificationTokenRepository) GetLatestTokenByUserID(ctx context.Co
 	return &token, nil
 }
 
-func (r *EmailVerificationTokenRepository) ExpireTokensByUserID(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *emailVerificationTokenRepository) ExpireTokensByUserID(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Expiring existing email verification tokens for user",
 		logger.String("user_id", userID),
 	)

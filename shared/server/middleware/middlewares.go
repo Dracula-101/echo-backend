@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -25,6 +27,12 @@ import (
 
 type Handler func(http.Handler) http.Handler
 
+func generateRequestID() string {
+	b := make([]byte, 8) // 16 hex chars
+	_, _ = rand.Read(b)
+	return "req-" + hex.EncodeToString(b)
+}
+
 func RequestID(header string) Handler {
 	if header == "" {
 		header = "X-Request-ID"
@@ -33,7 +41,7 @@ func RequestID(header string) Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestID := r.Header.Get(header)
 			if requestID == "" {
-				requestID = uuid.New().String()
+				requestID = generateRequestID()
 			}
 			ctx := context.WithValue(r.Context(), sContext.RequestIDKey, requestID)
 			w.Header().Set(header, requestID)
@@ -291,14 +299,14 @@ func CORS(allowedOrigins []string, allowedMethods []string, allowedHeaders []str
 
 			if allowed {
 				if origin != "" {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set(headers.AccessControlAllowOrigin, origin)
 				} else {
-					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Header().Set(headers.AccessControlAllowOrigin, "*")
 				}
-				w.Header().Set("Access-Control-Allow-Methods", joinStrings(allowedMethods))
-				w.Header().Set("Access-Control-Allow-Headers", joinStrings(allowedHeaders))
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Max-Age", "86400")
+				w.Header().Set(headers.AccessControlAllowMethods, joinStrings(allowedMethods))
+				w.Header().Set(headers.AccessControlAllowHeaders, joinStrings(allowedHeaders))
+				w.Header().Set(headers.AccessControlAllowCredentials, "true")
+				w.Header().Set(headers.AccessControlMaxAge, "86400")
 			}
 
 			if r.Method == http.MethodOptions {
@@ -795,6 +803,23 @@ type CompressionConfig struct {
 	Level        int
 	MinSize      int
 	ContentTypes []string
+}
+
+func DefaultCompressionConfig() CompressionConfig {
+	return CompressionConfig{
+		Level:   6,
+		MinSize: 1024,
+		ContentTypes: []string{
+			"text/html",
+			"text/css",
+			"text/plain",
+			"text/javascript",
+			"application/javascript",
+			"application/json",
+			"application/xml",
+			"text/xml",
+		},
+	}
 }
 
 func Compression(config CompressionConfig) Handler {

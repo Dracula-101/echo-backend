@@ -41,6 +41,7 @@ const (
 	CodeTooManyRequests       = "TOO_MANY_REQUESTS"
 	CodeUnprocessableEntity   = "UNPROCESSABLE_ENTITY"
 	CodeRateLimitExceeded     = "RATE_LIMIT_EXCEEDED"
+	CodeResourceLocked        = "RESOURCE_LOCKED"
 	CodeValidationFailed      = "VALIDATION_FAILED"
 
 	// --- 4xx: Auth-related ---

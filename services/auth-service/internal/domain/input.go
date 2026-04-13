@@ -18,9 +18,10 @@ type RegisterUserInput struct {
 }
 
 type LoginInput struct {
-	Email    string
-	Password string
-	DeviceID string
+	Email        string
+	Password     string
+	DeviceInfo   request.DeviceInfo
+	LocationInfo *request.IpAddressInfo
 }
 
 type FailedLoginAttemptInput struct {

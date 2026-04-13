@@ -14,7 +14,7 @@ import (
 // ============================================================================
 
 // AuthRepositoryInterface defines the contract for authentication repository operations
-type AuthRepositoryInterface interface {
+type AuthRepository interface {
 	// User management
 	ExistsByEmail(ctx context.Context, email string) (*models.AccountStatus, pkgErrors.AppError)
 	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
@@ -23,6 +23,10 @@ type AuthRepositoryInterface interface {
 	GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError)
 	RecordFailedLogin(ctx context.Context, userID string) pkgErrors.AppError
 	RecordSuccessfulLogin(ctx context.Context, userID string) pkgErrors.AppError
+
+	// Device management
+	GetUserActiveDevice(ctx context.Context, userID string) (*domain.UserDevice, pkgErrors.AppError)
+	UpdateUserDevice(ctx context.Context, userID string, deviceID string, update domain.UpdateUserDevice) (*domain.UserDevice, pkgErrors.AppError)
 
 	// Password management
 	UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError
@@ -40,5 +44,3 @@ type AuthRepositoryInterface interface {
 	SoftDeleteUser(ctx context.Context, userID string) pkgErrors.AppError
 }
 
-// Compile-time interface compliance checks
-var _ AuthRepositoryInterface = (*AuthRepository)(nil)

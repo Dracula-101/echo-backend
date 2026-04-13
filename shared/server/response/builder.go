@@ -217,6 +217,11 @@ func (b *Builder) Conflict(w http.ResponseWriter) error {
 	return b.Send(w, http.StatusConflict)
 }
 
+func (b *Builder) Locked(w http.ResponseWriter) error {
+	b.response.Success = false
+	return b.Send(w, http.StatusLocked)
+}
+
 func (b *Builder) UnprocessableEntity(w http.ResponseWriter) error {
 	b.response.Success = false
 	return b.Send(w, http.StatusUnprocessableEntity)

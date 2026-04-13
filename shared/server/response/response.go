@@ -70,6 +70,7 @@ const (
 
 	// Resource & Conflict
 	ErrorTypeNotFound         ErrorType = "not_found_error"
+	ErrorTypeLocked           ErrorType = "locked_error"
 	ErrorTypeConflict         ErrorType = "conflict_error"
 	ErrorTypeConflictResource ErrorType = "conflict_resource_error"
 

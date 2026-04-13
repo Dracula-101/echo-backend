@@ -14,6 +14,7 @@ import (
 
 var (
 	RegisterEmailLockPrefix = "lock:register:"
+	IPBlockedPrefix         = "ip_blocked:"
 )
 
 var (
@@ -23,6 +24,8 @@ var (
 type AuthCache interface {
 	AcquireRegisterEmailLock(context context.Context, email string) *authError.AuthError
 	ReleaseRegisterEmailLock(context context.Context, email string) *authError.AuthError
+	CheckIPBlocked(context context.Context, ip string) *authError.AuthError
+	BlockIP(context context.Context, ip string, duration time.Duration) *authError.AuthError
 }
 
 type authCache struct {
@@ -79,6 +82,47 @@ func (s *authCache) ReleaseRegisterEmailLock(ctx context.Context, email string) 
 			Error: pkgErrors.FromError(err, authError.CodeCacheError, "failed to release email lock").
 				WithService(authError.ServiceName).
 				WithDetail("email", email),
+		}
+	}
+	return nil
+}
+
+func (s *authCache) CheckIPBlocked(ctx context.Context, ip string) *authError.AuthError {
+	s.log.Info("Checking if IP is blocked", logger.String("ip", ip))
+	blocked, err := s.cache.Get(ctx, IPBlockedPrefix+ip)
+	if err != nil {
+		s.log.Error("Failed to check IP block status", logger.String("ip", ip), logger.Error(err))
+		return &authError.AuthError{
+			Message: "Failed to check IP block status",
+			Code:    authError.CodeCacheError,
+			Error: pkgErrors.FromError(err, authError.CodeCacheError, "failed to check IP block status").
+				WithService(authError.ServiceName).
+				WithDetail("ip", ip),
+		}
+	}
+	if blocked != nil {
+		return &authError.AuthError{
+			Message: "IP is blocked",
+			Code:    authError.CodeIPBlocked,
+			Error: pkgErrors.New(authError.CodeIPBlocked, "IP is blocked").
+				WithService(authError.ServiceName).
+				WithDetail("ip", ip),
+		}
+	}
+	return nil
+}
+
+func (s *authCache) BlockIP(ctx context.Context, ip string, duration time.Duration) *authError.AuthError {
+	s.log.Info("Blocking IP", logger.String("ip", ip), logger.Duration("duration", duration))
+	err := s.cache.SetBool(ctx, IPBlockedPrefix+ip, true, duration)
+	if err != nil {
+		s.log.Error("Failed to block IP", logger.String("ip", ip), logger.Error(err))
+		return &authError.AuthError{
+			Message: "Failed to block IP",
+			Code:    authError.CodeCacheError,
+			Error: pkgErrors.FromError(err, authError.CodeCacheError, "failed to block IP").
+				WithService(authError.ServiceName).
+				WithDetail("ip", ip),
 		}
 	}
 	return nil

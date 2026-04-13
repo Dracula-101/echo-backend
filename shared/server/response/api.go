@@ -228,6 +228,25 @@ func ValidationError(ctx context.Context, r *http.Request, w http.ResponseWriter
 		UnprocessableEntity(w)
 }
 
+// 423 LockedError creates a 423 Locked error response
+func LockedError(ctx context.Context, r *http.Request, w http.ResponseWriter, resource string) error {
+	message := fmt.Sprintf("%s is locked", resource)
+	err := errors.New(errors.CodeResourceLocked, message)
+	errorDetails := ErrorDetailsFromError(err, false)
+	errorDetails.Description = "The requested resource is currently locked and cannot be accessed."
+	errorDetails.Type = ErrorTypeLocked
+	errorDetails.Context = map[string]interface{}{
+		"resource": resource,
+	}
+
+	return Error().
+		WithContext(ctx).
+		WithRequest(r).
+		WithError(errorDetails).
+		WithMessage(message).
+		Locked(w)
+}
+
 // RateLimitError creates a 429 Too Many Requests error response
 func RateLimitError(ctx context.Context, r *http.Request, w http.ResponseWriter, retryAfter int) error {
 	err := errors.New(errors.CodeRateLimitExceeded, "Rate limit exceeded")

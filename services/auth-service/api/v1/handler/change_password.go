@@ -3,7 +3,6 @@ package handler
 import (
 	"auth-service/api/v1/dto"
 	authErrors "auth-service/internal/error"
-	"auth-service/internal/repo/security_event"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -106,27 +105,5 @@ func (h *AuthHandler) ChangePassword(handler *req.RequestHandler) {
 		logger.String("request_id", requestID),
 		logger.String("user_id", userID),
 	)
-	sessionId, ok := req.GetSessionIDFromContext(ctx)
-	if !ok {
-		h.log.Warn("Session ID not found in context for security event logging",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("user_id", userID),
-		)
-	}
-	h.securityEventRepo.LogPasswordChangeEvent(ctx, security_event.SecurityEventInput{
-		UserID: userID,
-		SessionID: func() *string {
-			if ok {
-				return &sessionId
-			} else {
-				return nil
-			}
-		}(),
-		Status:      "success",
-		Description: "User changed their password successfully",
-		UserAgent:   handler.GetUserAgent(),
-		DeviceID:    handler.GetDeviceInfo().ID,
-	})
 	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Password changed successfully", nil)
 }

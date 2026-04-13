@@ -109,21 +109,8 @@ func setupMiddleware(r *router.Builder, cfg *config.Config, log logger.Logger) *
 	commonChain.Append(coreMiddleware.APIVersion(headers.XAPIVersion, cfg.Service.Version))
 	commonChain.Append(coreMiddleware.CORS(cfg.Security.AllowedOrigins, cfg.Security.AllowedMethods, cfg.Security.AllowedHeaders))
 	commonChain.Append(coreMiddleware.CacheControl(cfg.Security.MaxAge, true))
-	// Body limit removed for API Gateway - backend services handle their own body size validation
-	// Applying MaxBytesReader at gateway breaks reverse proxy for large uploads
 	if cfg.Server.EnableCompression {
-		commonChain.Append(coreMiddleware.Compression(coreMiddleware.CompressionConfig{
-			Level:   4,
-			MinSize: 1024,
-			ContentTypes: []string{
-				"application/json",
-				"text/plain",
-				"text/html",
-				"text/css",
-				"application/javascript",
-				"application/xml",
-			},
-		}))
+		commonChain.Append(coreMiddleware.Compression(coreMiddleware.DefaultCompressionConfig()))
 	}
 	r = r.WithMiddlewareChain(commonChain)
 	return r
@@ -196,6 +183,7 @@ func createRouter(cfg *config.Config, proxyManager *proxy.Manager, tokenService 
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
+			router.Middleware(coreMiddleware.SecurityHeaders(map[string]string{})),
 			router.Middleware(coreMiddleware.RequestID(headers.XRequestID)),
 			router.Middleware(coreMiddleware.CorrelationID(headers.XCorrelationID)),
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),

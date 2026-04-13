@@ -3,13 +3,14 @@ package handler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"auth-service/api/v1/dto"
 	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
-	"auth-service/internal/repo/security_event"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
+	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
 )
@@ -47,29 +48,39 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
+	cacheErr := h.authCache.CheckIPBlocked(ctx, handler.GetClientIP())
+	if cacheErr != nil {
+		if cacheErr.Code == authErrors.CodeIPBlocked {
+			h.log.Warn("Blocked login attempt from IP",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("ip_address", handler.GetClientIP()),
+			)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Too many failed login attempts from this IP. Please try again later.", nil)
+			return
+		}
+	}
+
+	if len(loginRequest.Password) > 128 {
+		h.log.Warn("Login attempt with excessively long password",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("email", loginRequest.Email),
+		)
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid credentials - please check your email and password.", nil)
+		return
+	}
+
 	deviceInfo := handler.GetDeviceInfo()
 	browserInfo := handler.GetBrowserInfo()
 	userAgent := handler.GetUserAgent()
-	clientIP := handler.GetClientIP()
+	locationInfo, _ := request.GetIPAddressInfoFromContext(ctx)
 
 	h.log.Debug("Extracting request metadata",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("device_os", deviceInfo.OS),
 		logger.String("browser", browserInfo.Name),
 	)
-
-	locationInfo, locationErr := h.locationService.Lookup(clientIP)
-	if locationErr != nil {
-		h.log.Error("Failed to lookup location",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("ip_address", clientIP),
-			logger.Error(locationErr),
-		)
-	}
-	if locationInfo == nil {
-		locationInfo = &req.IpAddressInfo{IP: clientIP}
-	}
 
 	user, authErr := h.authService.GetUserByEmail(ctx, loginRequest.Email)
 	if authErr != nil {
@@ -83,6 +94,8 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			logger.String("request_id", requestID),
 			logger.String("email", loginRequest.Email),
 		)
+		// delay by 200ms to mitigate user enumeration attacks
+		utils.SleepWithContext(ctx, time.Millisecond*200)
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), fmt.Sprintf("User does not exist with email %s", loginRequest.Email), nil)
 		return
 	}
@@ -93,14 +106,16 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	}
 
 	userResult, authErr := h.authService.Login(ctx, domain.LoginInput{
-		Email:    loginRequest.Email,
-		Password: loginRequest.Password,
+		Email:        loginRequest.Email,
+		Password:     loginRequest.Password,
+		DeviceInfo:   deviceInfo,
+		LocationInfo: &locationInfo,
 	})
 	if authErr != nil {
 		if authErr.Code == authErrors.CodeInvalidCredentials {
-			h.recordFailedLogin(ctx, deviceInfo, locationInfo, user.ID, userAgent, authErr.Message)
+			h.recordFailedLogin(ctx, deviceInfo, &locationInfo, user.ID, userAgent, authErr.Message)
 		}
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
 		return
 	}
 	if userResult == nil {
@@ -129,7 +144,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			Device:          deviceInfo,
 			Browser:         browserInfo,
 			UserAgent:       userAgent,
-			IP:              *locationInfo,
+			IP:              locationInfo,
 			Latitude:        locationInfo.Latitude,
 			Longitude:       locationInfo.Longitude,
 			IsMobile:        isMobile,
@@ -191,14 +206,6 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("user_id", userResult.User.ID),
 		logger.String("session_id", session.SessionId),
 	)
-	h.securityEventRepo.LogLoginEvent(ctx, security_event.SecurityEventInput{
-		UserID:      userResult.User.ID,
-		SessionID:   &session.SessionId,
-		Status:      "success",
-		Description: "User logged in successfully",
-		UserAgent:   userAgent,
-		DeviceID:    deviceInfo.ID,
-	})
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Login successful",
 		dto.NewLoginResponse(
@@ -217,14 +224,19 @@ func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req
 	switch statusErr {
 	case authErrors.ErrAccountDeactivated:
 		message = "Account is deactivated. Please contact support."
+		response.ForbiddenError(ctx, handler.Request(), handler.Writer(), message, statusErr)
 	case authErrors.ErrAccountSuspended:
 		message = "Account is suspended. Please contact support."
+		response.ForbiddenError(ctx, handler.Request(), handler.Writer(), message, statusErr)
 	case authErrors.ErrAccountLocked:
 		message = "Account is locked due to multiple failed login attempts. Please reset your password or contact support."
+		response.LockedError(ctx, handler.Request(), handler.Writer(), message)
 	case authErrors.ErrAccountPending:
 		message = "Account is pending verification. Please verify your account before logging in."
+		response.ForbiddenError(ctx, handler.Request(), handler.Writer(), message, statusErr)
 	case authErrors.ErrAccountDeleted:
 		message = "Account has been deleted. Please contact support for further assistance."
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), message, statusErr)
 	default:
 		h.log.Error("Unknown account status during login",
 			logger.String("service", authErrors.ServiceName),
@@ -233,10 +245,7 @@ func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req
 			logger.Error(statusErr),
 		)
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login due to unknown account status", nil)
-		return
 	}
-
-	response.BadRequestError(ctx, handler.Request(), handler.Writer(), message, nil)
 }
 
 func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceInfo, locationInfo *req.IpAddressInfo, userID string, userAgent string, failureReason string) {
@@ -264,11 +273,4 @@ func (h *AuthHandler) recordFailedLogin(ctx context.Context, device req.DeviceIn
 		logger.String("user_id", userID),
 		logger.String("reason", failureReason),
 	)
-	h.securityEventRepo.LogLoginEvent(ctx, security_event.SecurityEventInput{
-		UserID:      userID,
-		Status:      "failure",
-		Description: fmt.Sprintf("Failed login attempt: %s", failureReason),
-		UserAgent:   userAgent,
-		DeviceID:    device.ID,
-	})
 }

@@ -16,6 +16,15 @@ db-up:
 	@echo "  DB:   $(CYAN)echo_db$(NC)"
 	@echo ""
 
+db-down:
+	@echo ""
+	@echo "$(BOLD)$(BRIGHT_RED)$(CROSS) Stopping PostgreSQL$(NC)"
+	@echo ""
+	@$(DOCKER_COMPOSE) down -v --remove-orphans
+	@echo ""
+	@echo "$(BRIGHT_GREEN)$(CHECK) PostgreSQL stopped and removed$(NC)"
+	@echo ""
+
 db-init:
 	@echo ""
 	@echo "$(BOLD)$(BRIGHT_GREEN)$(STAR) Initializing Database$(NC)"
