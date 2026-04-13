@@ -6,10 +6,15 @@ import (
 	"net"
 	"net/http"
 	"shared/pkg/cache"
+	"shared/server/headers"
 	"shared/server/middleware"
 	"shared/server/request"
 	"strings"
 	"time"
+)
+
+var (
+	LocationTTL = 24 * time.Hour
 )
 
 func LocationFromIP(locationService location.LocationService, memoryCache cache.Cache) middleware.Handler {
@@ -24,7 +29,7 @@ func LocationFromIP(locationService location.LocationService, memoryCache cache.
 				return
 			}
 
-			cacheKey := "location:" + ip
+			cacheKey := "geo:" + ip
 
 			if cached, err := memoryCache.Get(ctx, cacheKey); err == nil {
 				var location request.IpAddressInfo
@@ -36,7 +41,7 @@ func LocationFromIP(locationService location.LocationService, memoryCache cache.
 			location, _ := locationService.Lookup(ip)
 			if location != nil {
 				if data, err := json.Marshal(location); err == nil {
-					memoryCache.Set(ctx, cacheKey, data, 24*time.Hour)
+					memoryCache.Set(ctx, cacheKey, data, LocationTTL)
 				}
 				next.ServeHTTP(w, r.WithContext(request.WithIPAddressInfo(ctx, *location)))
 				return
@@ -47,10 +52,10 @@ func LocationFromIP(locationService location.LocationService, memoryCache cache.
 }
 
 func realIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+	if xff := r.Header.Get(headers.XForwardedFor); xff != "" {
 		return strings.TrimSpace(strings.Split(xff, ",")[0])
 	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+	if xri := r.Header.Get(headers.XRealIP); xri != "" {
 		return xri
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
