@@ -45,29 +45,6 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		logger.String("algorithm", string(result.Algorithm)),
 	)
 
-	tokenResult, err := s.tokenService.IssueAccessToken(ctx, input.Email, token.IssueOptions{
-		ExpiresIn: 24 * time.Hour,
-		Metadata: map[string]interface{}{
-			"purpose": "email_verification",
-			"email":   input.Email,
-		},
-		Audience: []string{"auth_service_email_verification"},
-	})
-	if err != nil {
-		return nil, &error.AuthError{
-			Message: "Failed to generate token",
-			Code:    authErrors.CodeTokenGenerationFailed,
-			Error: pkgErrors.FromError(err, authErrors.CodeTokenGenerationFailed, "failed to generate verification token").
-				WithService(authErrors.ServiceName).
-				WithDetail("email", input.Email).
-				WithDetail("purpose", "email_verification"),
-		}
-	}
-	s.log.Debug("Email verification token generated successfully",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("token", tokenResult.Token),
-	)
-
 	userID, err := s.repo.CreateUser(ctx, repoModels.CreateUserParams{
 		Email:             input.Email,
 		PasswordHash:      result.Encoded,

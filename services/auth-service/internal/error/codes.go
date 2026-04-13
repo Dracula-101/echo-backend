@@ -55,6 +55,7 @@ const (
 
 	// Email Verification Errors
 	CodeEmailAlreadyVerified     = "AUTH_EMAIL_ALREADY_VERIFIED"
+	CodeInvalidVerificationToken = "AUTH_INVALID_VERIFICATION_TOKEN"
 	CodeVerificationTokenExpired = "AUTH_VERIFICATION_TOKEN_EXPIRED"
 	CodeVerificationCooldown     = "AUTH_VERIFICATION_COOLDOWN"
 	CodeEmailLocked              = "AUTH_EMAIL_LOCKED"

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	authErrors "auth-service/internal/error"
 	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -15,7 +14,7 @@ import (
 type EmailVerificationTokenRepositoryInterface interface {
 	CreateVerificationToken(ctx context.Context, userID string, email string, tokenHash string, ipAddress string, userAgent string, expiresAt time.Time) pkgErrors.AppError
 	GetVerificationTokenByHash(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, pkgErrors.AppError)
-	MarkTokenVerified(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError
+	AttemptVerification(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError
 	GetLatestTokenByUserID(ctx context.Context, userID string) (*models.EmailVerificationToken, pkgErrors.AppError)
 	CountRecentTokensByUserID(ctx context.Context, userID string, since time.Time) (int, pkgErrors.AppError)
 	InvalidateUserTokens(ctx context.Context, userID string) pkgErrors.AppError
@@ -62,48 +61,16 @@ func (r *EmailVerificationTokenRepository) GetVerificationTokenByHash(ctx contex
 	return &token, nil
 }
 
-func (r *EmailVerificationTokenRepository) MarkTokenVerified(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError {
-	// if the token is wrong add to attempt
-	r.log.Info("Marking email verification token as verified",
+func (r *EmailVerificationTokenRepository) AttemptVerification(ctx context.Context, tokenHash string, userId string) pkgErrors.AppError {
+	r.log.Info("Recording email verification attempt",
 		logger.String("token_hash", tokenHash),
 	)
 
-	// check if the token exists
-	query := `SELECT * FROM auth.email_verification_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`
-	var token models.EmailVerificationToken
-	err := r.db.QueryRow(ctx, query, userId).ScanModel(&token)
+	query := `UPDATE auth.email_verification_tokens SET attempts = attempts + 1 WHERE token_hash = $1 AND user_id = $2`
+	_, err := r.db.Exec(ctx, query, tokenHash, userId)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return pkgErrors.New(authErrors.CodeVerificationNotFound, "verification token not found")
-		}
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get email verification token")
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to record email verification attempt")
 	}
-
-	if token.VerifiedAt != nil {
-		return nil
-	}
-	if token.ExpiresAt.Before(time.Now()) {
-		return pkgErrors.New(authErrors.CodeVerificationTokenExpired, "verification token expired")
-	}
-
-	if token.TokenHash != tokenHash {
-		query := `UPDATE auth.email_verification_tokens SET attempts = attempts + 1 WHERE token_hash = $1 AND user_id = $2`
-		_, err := r.db.Exec(ctx, query, tokenHash, userId)
-		if err != nil {
-			return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update verification token attempts")
-		}
-		return pkgErrors.New(authErrors.CodeVerificationInvalid, "invalid verification token")
-	}
-
-	query = `UPDATE auth.email_verification_tokens SET verified_at = $1 WHERE token_hash = $2 AND user_id = $3`
-	_, err = r.db.Exec(ctx, query, time.Now(), tokenHash, userId)
-	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to mark email verification token as verified")
-	}
-
-	r.log.Info("Email verification token marked as verified",
-		logger.String("token_hash", tokenHash),
-	)
 	return nil
 }
 

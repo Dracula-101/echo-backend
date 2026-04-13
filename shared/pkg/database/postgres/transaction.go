@@ -22,14 +22,14 @@ func newTransaction(tx *sql.Tx, log *dbLogger) *Transaction {
 	return &Transaction{tx: tx, log: log}
 }
 
-// Create inserts a new record within the transaction.
-func (t *Transaction) Create(ctx context.Context, model database.Model) *database.DBError {
+// Insert inserts a new record within the transaction.
+func (t *Transaction) Insert(ctx context.Context, model database.Model) (id *string, dbErr *database.DBError) {
 	table := model.TableName()
 	pkField := getPrimaryKeyField(model)
 
 	fields, values := getFieldsAndValues(model)
 	if len(fields) == 0 {
-		return t.log.NoFieldsError("TX:Create", table)
+		return nil, t.log.NoFieldsError("TX:Create", table)
 	}
 
 	query := buildInsertQuery(table, fields, pkField)
@@ -37,18 +37,18 @@ func (t *Transaction) Create(ctx context.Context, model database.Model) *databas
 
 	t.log.TxQueryStart("Create", table, len(fields))
 
-	var returnedID interface{}
+	var returnedID string
 	if err := t.tx.QueryRowContext(ctx, query, args...).Scan(&returnedID); err != nil {
-		return t.log.TxQueryError("Create", table, query, args, err)
+		return nil, t.log.TxQueryError("Create", table, query, args, err)
 	}
 
 	if err := setPrimaryKeyValue(model, pkField, returnedID); err != nil {
-		return database.WrapDBError(err, database.CodeDBInternal, "failed to set primary key").
+		return nil, database.WrapDBError(err, database.CodeDBInternal, "failed to set primary key").
 			WithDetail("table", table)
 	}
 
 	t.log.TxQuerySuccess("Create", table, formatPrimaryKey(returnedID))
-	return nil
+	return &returnedID, nil
 }
 
 // FindByID retrieves a record by primary key within the transaction.

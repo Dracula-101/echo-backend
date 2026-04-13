@@ -142,6 +142,7 @@ CREATE TABLE auth.email_verification_tokens (
 CREATE TABLE auth.security_events (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id          UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    -- set to NULL on session deletion to preserve event history without orphaned references
     session_id       UUID REFERENCES auth.sessions(id) ON DELETE SET NULL,
     event_type       VARCHAR(100) NOT NULL,
     event_category   VARCHAR(50),

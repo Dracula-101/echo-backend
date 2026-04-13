@@ -27,7 +27,7 @@ type AuthRepositoryInterface interface {
 	UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError
 
 	// Email verification
-	MarkEmailVerified(ctx context.Context, userID string) pkgErrors.AppError
+	MarkEmailVerified(ctx context.Context, userID string, ipAddress string, userAgent string) pkgErrors.AppError
 	ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError
 
 	// Two-factor authentication

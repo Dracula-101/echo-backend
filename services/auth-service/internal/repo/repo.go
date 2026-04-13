@@ -85,14 +85,6 @@ func (r *AuthRepository) ExistsByEmail(ctx context.Context, email string) (*mode
 // ============================================================================
 
 func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.CreateUserParams) (string, pkgErrors.AppError) {
-	if params.Email == "" {
-		return "", pkgErrors.New(pkgErrors.CodeInvalidArgument, "email is required for user creation")
-	}
-	if params.PasswordHash == "" {
-		return "", pkgErrors.New(pkgErrors.CodeInvalidArgument, "password hash is required for user creation").
-			WithDetail("email", params.Email)
-	}
-
 	r.log.Info("Creating user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", params.Email),
@@ -100,6 +92,33 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		logger.String("ip_address", params.IPAddress),
 	)
 
+	tx, dbErr := r.db.BeginTx(ctx, nil)
+	if dbErr != nil {
+		return "", pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to begin transaction")
+	}
+
+	var txErr *database.DBError
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if txErr != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Begin transaction. Set app.current_user_id = NULL (registering user has no ID yet, so RLS insert policies use WITH CHECK (TRUE) which allows the insert).
+
+	_, err := tx.Exec(ctx, `SET LOCAL app.current_user_id = NULL`)
+	if err != nil {
+		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to set current_user_id for transaction").
+			WithDetail("email", params.Email)
+	}
+
+	r.log.Debug("Inserting user record",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("email", params.Email),
+	)
 	now := time.Now()
 	passwordHistory := fmt.Sprintf(`[{"hash":"%s","salt":"%s","algorithm":"%s","changed_at":"%s"}]`,
 		params.PasswordHash,
@@ -108,19 +127,13 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		now.Format(time.RFC3339),
 	)
 	passwordHistoryJson := json.RawMessage(passwordHistory)
-
-	r.log.Debug("Inserting user record",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("email", params.Email),
-	)
-
 	metaData := map[string]interface{}{
 		"registration_type":        "email",
 		"ip_country":               utils.SafeString(&params.Country),
 		"registration_app_version": utils.SafeString(&params.AppVersion),
 	}
 	metaDataJson := utils.MarshalRawMessageSafe(metaData)
-	id, err := r.db.Insert(ctx, &models.AuthUser{
+	id, err := tx.Insert(ctx, &models.AuthUser{
 		Email:                  params.Email,
 		PhoneNumber:            params.PhoneNumber,
 		PhoneCountryCode:       params.PhoneCountryCode,
@@ -149,13 +162,16 @@ func (r *AuthRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
 			WithDetail("email", params.Email)
 	}
-
+	txErr = tx.Commit()
+	if txErr != nil {
+		return "", pkgErrors.FromError(txErr, pkgErrors.CodeDatabaseError, "failed to commit transaction for creating user").
+			WithDetail("email", params.Email)
+	}
 	r.log.Info("User created successfully",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", *id),
 		logger.String("email", params.Email),
+		logger.String("user_id", *id),
 	)
-
 	return *id, nil
 }
 
@@ -423,28 +439,74 @@ func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, hash
 // Email Verification
 // ============================================================================
 
-func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string) pkgErrors.AppError {
+func (r *AuthRepository) MarkEmailVerified(ctx context.Context, userID string, ipAddress string, userAgent string) pkgErrors.AppError {
 	r.log.Info("Marking email as verified",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 	)
 
-	query := `UPDATE auth.users
-		SET email_verified = TRUE,
-		    updated_at = NOW()
-		WHERE id = $1`
-	result, err := r.db.Exec(ctx, query, userID)
+	tx, dbErr := r.db.BeginTx(ctx, nil)
+	if dbErr != nil {
+		return pkgErrors.FromError(dbErr, pkgErrors.CodeInternal, "failed to begin transaction")
+	}
+	var txErr *database.DBError
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if txErr != nil {
+			tx.Rollback()
+		}
+	}()
+
+	updateTokenQuery := `UPDATE auth.email_verification_tokens SET verified_at = NOW() WHERE user_id = $1 AND verified_at IS NULL`
+	_, err := tx.Exec(ctx, updateTokenQuery, userID)
 	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to mark email as verified").
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update email verification token").
+			WithDetail("user_id", userID).
+			WithDetail("query", updateTokenQuery)
+	}
+
+	updateUserQuery := `UPDATE auth.users SET email_verified = TRUE, account_status = $1, updated_at = NOW() WHERE id = $2`
+	_, err = tx.Exec(ctx, updateUserQuery, models.AccountStatusActive, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update user email verification status").
+			WithDetail("user_id", userID).
+			WithDetail("query", updateUserQuery)
+	}
+
+	insertEventQuery := `INSERT INTO auth.security_events (user_id, event_type, event_category, severity, status, ip_address, user_agent, created_at) VALUES ($1, 'email_verified', 'account_management', 'info', 'success', $2, $3, NOW())`
+	_, err = tx.Exec(ctx, insertEventQuery, userID, ipAddress, userAgent) // IP and User Agent can be passed as parameters if available
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to insert security event for email verification").
+			WithDetail("user_id", userID).
+			WithDetail("query", insertEventQuery)
+	}
+
+	insertOutboxQuery := `INSERT INTO auth.outbox (user_id, event_type, payload, created_at) VALUES ($1, 'auth.email.verified', $2, NOW())`
+	payload := map[string]interface{}{
+		"user_id": userID,
+		"event":   "auth.email.verified",
+	}
+	payloadJson, _ := json.Marshal(payload)
+	_, err = tx.Exec(ctx, insertOutboxQuery, userID, payloadJson)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to insert outbox event for email verification").
+			WithDetail("user_id", userID).
+			WithDetail("query", insertOutboxQuery)
+	}
+
+	txErr = tx.Commit()
+	if txErr != nil {
+		return pkgErrors.FromError(txErr, pkgErrors.CodeDatabaseError, "failed to commit transaction for marking email verified").
 			WithDetail("user_id", userID)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	r.log.Info("Email marked as verified",
+	r.log.Info("Email marked as verified successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
-		logger.Int64("rows_affected", rowsAffected),
 	)
+
 	return nil
 }
 func (r *AuthRepository) ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError {

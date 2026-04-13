@@ -38,29 +38,63 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
-	// ── 1. Fetch the latest token for this user ──────────────────────────
-	latestToken, dbErr := s.emailVerificationRepo.GetLatestTokenByUserID(ctx, userID)
-	if dbErr != nil {
+	verificationRecord, getErr := s.emailVerificationRepo.GetVerificationTokenByHash(ctx, *tokenHash)
+	if getErr != nil {
+		s.log.Error("Failed to retrieve verification token",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(getErr),
+		)
 		return &error.AuthError{
-			Code:    error.CodeDatabaseError,
-			Message: "Failed to look up verification token",
-			Error:   dbErr,
+			Code:    error.CodeVerificationNotFound,
+			Message: "Verification token not found",
+			Error:   pkgErrors.FromError(getErr, error.CodeVerificationNotFound, "failed to retrieve verification token"),
 		}
 	}
-	if latestToken == nil {
-		s.log.Warn("No verification token found for user",
+
+	if verificationRecord == nil || verificationRecord.UserID != userID {
+		s.log.Warn("Invalid verification token",
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", userID),
 		)
 		return &error.AuthError{
-			Code:    error.CodeVerificationNotFound,
-			Message: "Invalid or expired verification token",
-			Error:   pkgErrors.New(error.CodeVerificationNotFound, "no verification token found for user"),
+			Code:    error.CodeInvalidVerificationToken,
+			Message: "Invalid verification token",
+			Error:   pkgErrors.New(error.CodeInvalidVerificationToken, "token not found or does not belong to user"),
 		}
 	}
 
-	// ── 2. Already verified ──────────────────────────────────────────────
-	if latestToken.VerifiedAt != nil {
+	user, userErr := s.repo.GetUserByID(ctx, userID)
+	if userErr != nil {
+		s.log.Error("Failed to retrieve user for email verification",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(userErr),
+		)
+		return &error.AuthError{
+			Code:    error.CodeDatabaseError,
+			Message: "Failed to process request",
+			Error:   pkgErrors.FromError(userErr, error.CodeDatabaseError, "failed to retrieve user"),
+		}
+	}
+
+	if user == nil {
+		s.log.Warn("User not found for email verification",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+		)
+		return &error.AuthError{
+			Code:    error.CodeUserNotFound,
+			Message: "User not found",
+			Error:   pkgErrors.New(error.CodeUserNotFound, "user not found"),
+		}
+	}
+
+	if user.EmailVerified {
+		s.log.Warn("Email already verified",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+		)
 		return &error.AuthError{
 			Code:    error.CodeEmailAlreadyVerified,
 			Message: "Email is already verified",
@@ -68,73 +102,56 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		}
 	}
 
-	// ── 3. Expired ───────────────────────────────────────────────────────
-	if latestToken.ExpiresAt.Before(time.Now()) {
+	if verificationRecord.ExpiresAt.Before(time.Now()) {
+		s.log.Warn("Expired verification token",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+		)
 		return &error.AuthError{
 			Code:    error.CodeVerificationTokenExpired,
-			Message: "Verification token has expired. Please request a new one.",
-			Error:   pkgErrors.New(error.CodeVerificationTokenExpired, "token expired"),
+			Message: "Verification token has expired",
+			Error:   pkgErrors.New(error.CodeVerificationTokenExpired, "verification token expired"),
 		}
 	}
 
-	// ── 4. Too many wrong attempts ───────────────────────────────────────
-	if latestToken.Attempts >= maxVerificationAttempts {
-		s.log.Warn("Verification attempt threshold exceeded",
+	if verificationRecord.Attempts >= maxVerificationAttempts {
+		s.log.Warn("Too many verification attempts",
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", userID),
-			logger.Int("attempts", latestToken.Attempts),
 		)
 		return &error.AuthError{
 			Code:    error.CodeTooManyVerificationAttempts,
-			Message: "Too many failed attempts. Please request a new verification email.",
-			Error:   pkgErrors.New(error.CodeTooManyVerificationAttempts, "max attempts exceeded"),
+			Message: "Too many verification attempts. Please request a new verification email.",
+			Error:   pkgErrors.New(error.CodeTooManyVerificationAttempts, "too many verification attempts"),
 		}
 	}
 
-	// ── 5. Hash mismatch → delegate to repo (increments attempts) ────────
-	if latestToken.TokenHash != *tokenHash {
-		_ = s.emailVerificationRepo.MarkTokenVerified(ctx, *tokenHash, userID)
-		return &error.AuthError{
-			Code:    error.CodeVerificationInvalid,
-			Message: "Invalid verification token",
-			Error:   pkgErrors.New(error.CodeVerificationInvalid, "token hash mismatch"),
-		}
-	}
-
-	// ── 6. Mark the token as verified ────────────────────────────────────
-	markErr := s.emailVerificationRepo.MarkTokenVerified(ctx, *tokenHash, userID)
-	if markErr != nil {
-		return &error.AuthError{
-			Code:    error.CodeEmailVerificationFailed,
-			Message: "Failed to verify email",
-			Error:   markErr,
-		}
-	}
-
-	// ── 7. Mark the user email as verified ───────────────────────────────
-	verifyErr := s.repo.MarkEmailVerified(ctx, userID)
-	if verifyErr != nil {
-		return &error.AuthError{
-			Code:    error.CodeDatabaseError,
-			Message: "Failed to update user verification status",
-			Error:   verifyErr,
-		}
-	}
-
-	// ── 8. If account is pending, flip to active ─────────────────────────
-	user, getUserErr := s.repo.GetUserByID(ctx, userID)
-	if getUserErr == nil && user != nil && user.AccountStatus == models.AccountStatusPending {
-		s.log.Info("Activating pending account after email verification",
+	// add attempt before updating to prevent
+	err := s.emailVerificationRepo.AttemptVerification(ctx, *tokenHash, userID)
+	if err != nil {
+		s.log.Warn("Failed to record verification attempt (proceeding anyway)",
 			logger.String("service", error.ServiceName),
 			logger.String("user_id", userID),
+			logger.Error(err),
 		)
-		activateErr := s.repo.ActivatePendingUser(ctx, userID)
-		if activateErr != nil {
-			s.log.Warn("Failed to activate pending account (non-critical)",
-				logger.String("service", error.ServiceName),
-				logger.String("user_id", userID),
-				logger.Error(activateErr),
-			)
+		return &error.AuthError{
+			Code:    error.CodeDatabaseError,
+			Message: "Failed to process verification attempt",
+			Error:   pkgErrors.FromError(err, error.CodeDatabaseError, "failed to record verification attempt"),
+		}
+	}
+
+	updateErr := s.repo.MarkEmailVerified(ctx, userID, ipAddress, userAgent)
+	if updateErr != nil {
+		s.log.Error("Failed to mark user email as verified",
+			logger.String("service", error.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(updateErr),
+		)
+		return &error.AuthError{
+			Code:    error.CodeDatabaseError,
+			Message: "Failed to process verification attempt",
+			Error:   pkgErrors.FromError(updateErr, error.CodeDatabaseError, "failed to mark user email as verified"),
 		}
 	}
 
@@ -142,6 +159,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, userID s
 		logger.String("service", error.ServiceName),
 		logger.String("user_id", userID),
 	)
+
 	return nil
 }
 
