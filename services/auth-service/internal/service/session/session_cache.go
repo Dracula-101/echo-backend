@@ -34,7 +34,7 @@ func NewSessionCache(cache cache.Cache, log logger.Logger) SessionCache {
 }
 
 type SessionCache interface {
-	SetSession(context context.Context, userID string, sessionId string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError
+	SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError
 	SetPre2FA_Auth(context context.Context, token string, userID string, deviceInfo request.DeviceInfo, ip string) pkgErrors.AppError
 	Set2FA_Setup(context context.Context, userID string, secretBase32 string, backupCodesPlainJSON string) pkgErrors.AppError
 	SetRefreshUsed(context context.Context, refreshToken string) pkgErrors.AppError
@@ -50,7 +50,7 @@ type SessionCache interface {
 	GetOAuthJWK(provider string) (string, pkgErrors.AppError)
 	GetUserStatus(userID string) (*UserStatusData, pkgErrors.AppError)
 
-	DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError
+	DeleteSession(ctx context.Context, sessionToken string) pkgErrors.AppError
 	DeleteRefreshUsed(ctx context.Context, refreshToken string) pkgErrors.AppError
 }
 
@@ -71,15 +71,17 @@ func (c *sessionCache) GetSession(sessionToken string) (*SessionData, pkgErrors.
 	return &data, nil
 }
 
-func (c *sessionCache) DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError {
-	return c.cache.Delete(ctx, "session:"+sessionID)
+func (c *sessionCache) DeleteSession(ctx context.Context, sessionToken string) pkgErrors.AppError {
+	key := "session:" + sessionToken
+	return c.cache.Delete(ctx, key)
 }
 
-func (c *sessionCache) SetSession(context context.Context, userID string, sessionId string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError {
-	key := "session:" + sessionId
+func (c *sessionCache) SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError {
+	key := "session:" + sessionToken
 	value := SessionData{
 		UserID:        userID,
 		SessionID:     sessionId,
+		SessionToken:  sessionToken,
 		DeviceID:      deviceID,
 		ExpiresAt:     expiresAt.Unix(),
 		AccountStatus: accountStatus,

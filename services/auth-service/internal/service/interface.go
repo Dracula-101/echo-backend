@@ -25,7 +25,7 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, refreshToken string, deviceID string) (*domain.RefreshTokenResult, *error.AuthError)
 
 	// Session management
-	Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *error.AuthError
+	Logout(ctx context.Context, userID string, sessionID string, ipAddress string, userAgent string, revokeFromAllDevices bool) *error.AuthError
 
 	// Password management
 	ForgotPassword(ctx context.Context, email string, ipAddress string, userAgent string) *error.AuthError

@@ -8,6 +8,7 @@ import (
 type SessionData struct {
 	UserID        string
 	SessionID     string
+	SessionToken  string
 	DeviceID      string
 	ExpiresAt     int64
 	AccountStatus string

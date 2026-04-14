@@ -8,8 +8,8 @@ import (
 
 // LogoutRequest represents the payload required to log out a user session.
 type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
-	SessionID    string `json:"session_id" validate:"required"`
+	RevokeAllDevices bool   `json:"revoke_all_devices" validate:"omitempty"`
+	RevokeReason     string `json:"revoke_reason" validate:"omitempty,oneof=user_logout lost_device suspicious_activity"`
 }
 
 // NewLogoutRequest constructs a logout request with zero values.
@@ -27,16 +27,23 @@ func (r *LogoutRequest) ValidateErrors(ve validator.ValidationErrors) ([]request
 	var errs []request.ValidationErrorDetail
 	for _, err := range ve {
 		switch err.Field() {
-		case "RefreshToken":
+		case "RevokeAllDevices":
 			errs = append(errs, request.ValidationErrorDetail{
-				Msg:  "Refresh token is required",
+				Msg:  "Revoke all devices flag is required",
 				Code: request.REQUIRED_FIELD,
 			})
-		case "SessionID":
-			errs = append(errs, request.ValidationErrorDetail{
-				Msg:  "Session ID is required",
-				Code: request.REQUIRED_FIELD,
-			})
+		case "RevokeReason":
+			if err.Tag() == "oneof" {
+				errs = append(errs, request.ValidationErrorDetail{
+					Msg:  "Revoke reason must be one of: user_logout, lost_device, suspicious_activity",
+					Code: request.PATTERN_MISMATCH,
+				})
+			} else if err.Tag() == "string" {
+				errs = append(errs, request.ValidationErrorDetail{
+					Msg:  "Revoke reason must be a string",
+					Code: request.REQUIRED_FIELD,
+				})
+			}
 		}
 	}
 	return errs, nil

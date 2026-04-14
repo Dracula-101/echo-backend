@@ -134,7 +134,7 @@ func (s *sessionService) CreateSession(ctx context.Context, input domain.CreateS
 			WithDetail("user_id", input.UserID)
 	}
 
-	if cacheErr := s.sessionCache.SetSession(ctx, input.UserID, sessionID, input.Device.ID, input.ExpiresAt, "active"); cacheErr != nil {
+	if cacheErr := s.sessionCache.SetSession(ctx, input.UserID, sessionID, sessionToken, input.Device.ID, input.ExpiresAt, "active"); cacheErr != nil {
 		s.log.Warn("Failed to cache session (non-critical)",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("session_id", sessionID),

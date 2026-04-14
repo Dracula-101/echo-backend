@@ -284,6 +284,7 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
 			router.Middleware(coreMiddleware.InterceptUserId(skipAuthPaths...)),
 			router.Middleware(coreMiddleware.InterceptDeviceId(skipAuthPaths...)),
+			router.Middleware(coreMiddleware.InterceptSessionId(skipAuthPaths...)),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),

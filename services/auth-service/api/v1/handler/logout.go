@@ -46,7 +46,18 @@ func (h *AuthHandler) Logout(handler *req.RequestHandler) {
 		return
 	}
 
-	authErr := h.authService.Logout(ctx, logoutRequest.SessionID, userID, handler.GetClientIP(), handler.GetUserAgent())
+	sessionId, ok := req.GetSessionIDFromContext(ctx)
+	if !ok {
+		h.log.Warn("Session ID not found in context",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID),
+		)
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Unauthorized", nil)
+		return
+	}
+
+	authErr := h.authService.Logout(ctx, userID, sessionId, handler.GetClientIP(), handler.GetUserAgent(), logoutRequest.RevokeAllDevices)
 	if authErr != nil {
 		h.log.Warn("Logout failed",
 			logger.String("service", authErrors.ServiceName),

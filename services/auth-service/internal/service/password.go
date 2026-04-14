@@ -159,8 +159,8 @@ func (s *authService) ResetPassword(ctx context.Context, token string, newPasswo
 		}
 	}
 
-	_ = s.passwordResetRepo.MarkTokenUsed(ctx, resetToken.ID)
-	_ = s.sessionRepo.RevokeAllUserSessions(ctx, resetToken.UserID, "password_reset")
+	s.passwordResetRepo.MarkTokenUsed(ctx, resetToken.ID)
+	s.sessionRepo.RevokeAllUserSessions(ctx, resetToken.UserID, "password_reset")
 
 	s.log.Info("Password reset successful",
 		logger.String("service", authErrors.ServiceName),

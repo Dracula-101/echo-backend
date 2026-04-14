@@ -25,8 +25,10 @@ type SessionRepository interface {
 	CountActiveSessions(ctx context.Context, userID string) (int64, pkgErrors.AppError)
 	EvictOldestSession(ctx context.Context, userID string) (*domain.Session, pkgErrors.AppError)
 	RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError
+	ClearNotificationsForSession(ctx context.Context, sessionID string) pkgErrors.AppError
+	ClearNotificationsForAllSessions(ctx context.Context, userID string) pkgErrors.AppError
 	RevokeSessionByRefreshToken(ctx context.Context, refreshToken string, reason string) pkgErrors.AppError
-	RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError
+	RevokeAllUserSessions(ctx context.Context, userID string, reason string) (expiredTokens *[]string, err pkgErrors.AppError)
 	RevokeActiveDeviceSession(ctx context.Context, userID, deviceID, reason string) (string, pkgErrors.AppError)
 }
 
@@ -107,7 +109,6 @@ func (r *sessionRepository) GetSessionByRefreshToken(ctx context.Context, refres
 	json.Unmarshal(*session.Metadata, &metaData)
 	s := domain.FromSessionModel(&session)
 	s.Metadata = metaData
-
 
 	r.log.Debug("Session fetched successfully by refresh token",
 		logger.String("session_id", session.ID),
@@ -313,6 +314,50 @@ func (r *sessionRepository) RevokeSession(ctx context.Context, sessionID string,
 	return nil
 }
 
+func (r *sessionRepository) ClearNotificationsForSession(ctx context.Context, sessionID string) pkgErrors.AppError {
+	r.log.Info("Clearing notifications for session",
+		logger.String("session_id", sessionID),
+	)
+	// If device_type = android and fcm_token is non-null: UPDATE auth.sessions SET fcm_token = NULL WHERE id = $1.
+	// UPDATE users.devices SET fcm_token = NULL, push_enabled = FALSE WHERE user_id = $1 AND device_id = $2
+	// If device_type = ios and apns_token is non-null: UPDATE auth.sessions SET apns_token = NULL WHERE id = $1.
+
+	query := `UPDATE auth.sessions
+		SET fcm_token = NULL,
+		    apns_token = NULL,
+		    push_enabled = FALSE
+		WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, sessionID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to clear notifications for session").
+			WithDetail("session_id", sessionID)
+	}
+	r.log.Info("Notifications cleared for session",
+		logger.String("session_id", sessionID),
+	)
+	return nil
+}
+
+func (r *sessionRepository) ClearNotificationsForAllSessions(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Clearing notifications for all sessions of user",
+		logger.String("user_id", userID),
+	)
+	query := `UPDATE auth.sessions
+		SET fcm_token = NULL,
+		    apns_token = NULL,
+		    push_enabled = FALSE
+		WHERE user_id = $1`
+	_, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to clear notifications for all sessions").
+			WithDetail("user_id", userID)
+	}
+	r.log.Info("Notifications cleared for all sessions of user",
+		logger.String("user_id", userID),
+	)
+	return nil
+}
+
 func (r *sessionRepository) RevokeSessionByRefreshToken(ctx context.Context, refreshToken string, reason string) pkgErrors.AppError {
 	r.log.Info("Revoking session by refresh token",
 		logger.String("reason", reason),
@@ -332,26 +377,42 @@ func (r *sessionRepository) RevokeSessionByRefreshToken(ctx context.Context, ref
 	return nil
 }
 
-func (r *sessionRepository) RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError {
+func (r *sessionRepository) RevokeAllUserSessions(ctx context.Context, userID string, reason string) (*[]string, pkgErrors.AppError) {
 	r.log.Info("Revoking all sessions for user",
 		logger.String("user_id", userID),
 		logger.String("reason", reason),
 	)
+	var expiredTokens []string
 	query := `UPDATE auth.sessions
 		SET revoked_at = NOW(),
-		    revoked_reason = $1
-		WHERE user_id = $2 AND revoked_at IS NULL`
-	result, err := r.db.Exec(ctx, query, reason, userID)
+			revoked_reason = $1
+		WHERE user_id = $2 AND revoked_at IS NULL
+		RETURNING refresh_token`
+	rows, err := r.db.Query(ctx, query, reason, userID)
 	if err != nil {
-		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke all user sessions").
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke all user sessions").
+			WithDetail("user_id", userID).
+			WithDetail("reason", reason)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var token string
+		if err := rows.Scan(&token); err != nil {
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan revoked session token").
+				WithDetail("user_id", userID)
+		}
+		expiredTokens = append(expiredTokens, token)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "error iterating revoked sessions").
 			WithDetail("user_id", userID)
 	}
-	rowsAffected, _ := result.RowsAffected()
-	r.log.Info("All user sessions revoked",
+	r.log.Info("All sessions revoked for user",
 		logger.String("user_id", userID),
-		logger.Int64("sessions_revoked", rowsAffected),
 	)
-	return nil
+	return &expiredTokens, nil
 }
 
 func (r *sessionRepository) RevokeActiveDeviceSession(ctx context.Context, userID, deviceID, reason string) (string, pkgErrors.AppError) {

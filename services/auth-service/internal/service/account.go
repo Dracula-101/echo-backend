@@ -327,28 +327,65 @@ func (s *authService) RecordSuccessfulLogin(ctx context.Context, userID string, 
 	return nil
 }
 
-func (s *authService) Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *authErrors.AuthError {
+func (s *authService) Logout(ctx context.Context, userID string, sessionID string, ipAddress string, userAgent string, revokeFromAllDevices bool) *authErrors.AuthError {
 	s.log.Info("Processing logout",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("session_id", sessionID),
 		logger.String("user_id", userID),
+		logger.String("session_id", sessionID),
 	)
-
-	err := s.sessionRepo.RevokeSession(ctx, sessionID, "user_logout")
-	if err != nil {
-		return &authErrors.AuthError{
-			Message: "Failed to revoke session",
-			Code:    authErrors.CodeDatabaseError,
-			Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke session").
-				WithService(authErrors.ServiceName).
-				WithDetail("session_id", sessionID),
+	if revokeFromAllDevices {
+		expiredTokens, err := s.sessionRepo.RevokeAllUserSessions(ctx, userID, "force_logout_all")
+		if err != nil {
+			s.log.Error("Failed to revoke all sessions during logout",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.Error(err),
+			)
+			return &authErrors.AuthError{
+				Message: "Failed to logout from all devices",
+				Code:    authErrors.CodeDatabaseError,
+				Error: pkgErrors.FromError(err, authErrors.CodeDatabaseError, "failed to revoke all sessions during logout").
+					WithService(authErrors.ServiceName).
+					WithDetail("user_id", userID),
+			}
 		}
+		for _, token := range *expiredTokens {
+			s.sessionCache.DeleteSession(ctx, token)
+		}
+		s.sessionRepo.ClearNotificationsForAllSessions(ctx, userID)
+		// TODO: Insert into auth.outbox for auth.session.revoked event for each 
+		// revoked session to invalidate tokens in cache and trigger any other necessary cleanup
+		
+	} else {
+		//UPDATE auth.sessions SET revoked_at = NOW(), revoked_reason = $1 WHERE id = $2 AND revoked_at IS NULL
+		err := s.sessionRepo.RevokeSession(ctx, sessionID, "user_logout")
+		if err != nil {
+			s.log.Error("Failed to revoke session during logout",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("session_id", sessionID),
+				logger.Error(err),
+			)
+			return &authErrors.AuthError{
+				Message: "Failed to logout",
+				Code:    authErrors.CodeDatabaseError,
+				Error: pkgErrors.FromError(err, authErrors.CodeDatabaseError, "failed to revoke session during logout").
+					WithService(authErrors.ServiceName).
+					WithDetail("user_id", userID).
+					WithDetail("session_id", sessionID),
+			}
+		}
+
+		s.sessionCache.DeleteSession(ctx, sessionID)
+		s.sessionRepo.ClearNotificationsForSession(ctx, sessionID)
 	}
+
+	// TODO: Insert into auth.outbox for auth.session.revoked event to invalidate tokens in cache and trigger any other necessary cleanup
 
 	s.log.Info("Logout successful",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("session_id", sessionID),
 		logger.String("user_id", userID),
+		logger.String("session_id", sessionID),
 	)
 	return nil
 }
@@ -420,7 +457,7 @@ func (s *authService) DeleteAccount(ctx context.Context, userID string, password
 		}
 	}
 
-	_ = s.sessionRepo.RevokeAllUserSessions(ctx, userID, "account_deleted")
+	s.sessionRepo.RevokeAllUserSessions(ctx, userID, "account_deleted")
 
 	s.log.Info("Account deleted successfully",
 		logger.String("service", authErrors.ServiceName),
