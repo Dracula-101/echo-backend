@@ -712,11 +712,12 @@ func (r *authRepository) IsNewLocation(ctx context.Context, userID string, city 
 	}
 
 	query := `
-		SELECT DISTINCT location_city
+		SELECT location_city
 		FROM auth.login_history
 		WHERE user_id = $1
 		  AND status = 'success'
 		  AND location_city IS NOT NULL
+		GROUP BY location_city
 		ORDER BY MAX(created_at) DESC
 		LIMIT 10`
 

@@ -16,18 +16,19 @@ import (
 )
 
 // SessionServiceInterface defines the contract for session service operations
-type SessionServiceInterface interface {
+type SessionService interface {
 	// Session management
 	PrepareSessionSlot(ctx context.Context, userID, deviceID string) pkgErrors.AppError
 	CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError)
+	CheckAndHandleRefreshTokenReplay(ctx context.Context, refreshToken string) (bool, *authErrors.AuthError)
 	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError)
 	GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
 
-func (s *SessionService) generateSessionToken(userID string) (string, pkgErrors.AppError) {
+func (s *sessionService) generateSessionToken(userID string) (string, pkgErrors.AppError) {
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		return "", pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to generate session nonce").
@@ -51,7 +52,7 @@ func (s *SessionService) generateSessionToken(userID string) (string, pkgErrors.
 
 const maxActiveSessions = 10
 
-func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError) {
+func (s *sessionService) CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError) {
 	s.log.Info("Creating session",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", input.UserID),
@@ -156,7 +157,7 @@ func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateS
 
 // PrepareSessionSlot handles same-device deduplication and session cap enforcement
 // before a new session is created. Call this before CreateSession.
-func (s *SessionService) PrepareSessionSlot(ctx context.Context, userID, deviceID string) pkgErrors.AppError {
+func (s *sessionService) PrepareSessionSlot(ctx context.Context, userID, deviceID string) pkgErrors.AppError {
 	if deviceID != "" {
 		revokedID, err := s.repo.RevokeActiveDeviceSession(ctx, userID, deviceID, "new_login_same_device")
 		if err != nil {
@@ -228,7 +229,7 @@ func (s *SessionService) PrepareSessionSlot(ctx context.Context, userID, deviceI
 	return nil
 }
 
-func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError) {
+func (s *sessionService) UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError) {
 	s.log.Info("Updating session",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -266,7 +267,49 @@ func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessi
 	return session, nil
 }
 
-func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError) {
+func (s *sessionService) CheckAndHandleRefreshTokenReplay(ctx context.Context, refreshToken string) (bool, *authErrors.AuthError) {
+	used, cacheErr := s.sessionCache.GetRefreshUsed(refreshToken)
+	if cacheErr != nil {
+		s.log.Error("Failed to check used refresh token in cache",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("refresh_token", refreshToken),
+			logger.Error(cacheErr),
+		)
+		return false, &authErrors.AuthError{
+			Message: "Failed to check used refresh token in cache",
+			Code:    authErrors.CodeCacheError,
+			Error: pkgErrors.FromError(cacheErr, authErrors.CodeCacheError, "failed to check used refresh token in cache").
+				WithService(authErrors.ServiceName).
+				WithDetail("refresh_token", refreshToken),
+		}
+	}
+	if used {
+		s.log.Warn("Refresh token replay detected",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("refresh_token", refreshToken),
+		)
+		// revoke the session associated with this refresh token
+		sessionErr := s.repo.RevokeSession(ctx, refreshToken, "refresh_token_replay")
+		if sessionErr != nil {
+			s.log.Error("Failed to revoke session for refresh token replay",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("refresh_token", refreshToken),
+				logger.Error(sessionErr),
+			)
+			return false, &authErrors.AuthError{
+				Message: "Failed to revoke session for refresh token replay",
+				Code:    authErrors.CodeSessionRevocationFailed,
+				Error: pkgErrors.FromError(sessionErr, authErrors.CodeSessionRevocationFailed, "failed to revoke session for refresh token replay").
+					WithService(authErrors.ServiceName).
+					WithDetail("refresh_token", refreshToken),
+			}
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *sessionService) GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by user ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -300,7 +343,7 @@ func (s *SessionService) GetSessionByUserId(ctx context.Context, userID string, 
 	}, nil
 }
 
-func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {
+func (s *sessionService) DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError {
 	s.log.Info("Deleting session",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -311,6 +354,8 @@ func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string
 		return err.WithService(authErrors.ServiceName)
 	}
 
+	s.sessionCache.DeleteSession(ctx, sessionID)
+
 	s.log.Info("Session deleted successfully",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -319,7 +364,7 @@ func (s *SessionService) DeleteSessionByID(ctx context.Context, sessionID string
 	return nil
 }
 
-func (s *SessionService) GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
+func (s *sessionService) GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
 	s.log.Debug("Fetching all sessions for user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -334,7 +379,7 @@ func (s *SessionService) GetAllSessions(ctx context.Context, userID string) ([]*
 	return sessions, nil
 }
 
-func (s *SessionService) GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError) {
+func (s *sessionService) GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError) {
 	s.log.Debug("Fetching session by ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),

@@ -8,23 +8,25 @@ import (
 	"auth-service/internal/repo/login_history"
 	"auth-service/internal/repo/password_reset"
 	"auth-service/internal/repo/session"
-	"shared/pkg/cache"
+	"auth-service/internal/service/cache"
+	sessionSvc "auth-service/internal/service/session"
 	"shared/pkg/email"
 	"shared/pkg/logger"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
 )
 
-type AuthService struct {
+type authService struct {
 	repo                  repository.AuthRepository
 	loginHistoryRepo      login_history.LoginHistoryRespository
 	sessionRepo           session.SessionRepository
 	passwordResetRepo     password_reset.PasswordResetTokenRepository
 	emailVerificationRepo email_verification.EmailVerificationTokenRepository
+	authCache             cache.AuthCache
+	sessionCache          sessionSvc.SessionCache
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
-	cache                 cache.Cache
 	rateLimiter           ratelimiter.RateLimiter
 	cfg                   *config.AuthConfig
 	log                   logger.Logger
@@ -40,10 +42,11 @@ type AuthServiceBuilder struct {
 	sessionRepo           session.SessionRepository
 	passwordResetRepo     password_reset.PasswordResetTokenRepository
 	emailVerificationRepo email_verification.EmailVerificationTokenRepository
+	authCache             cache.AuthCache
+	sessionCache          sessionSvc.SessionCache
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
-	cache                 cache.Cache
 	rateLimiter           ratelimiter.RateLimiter
 	cfg                   *config.AuthConfig
 	log                   logger.Logger
@@ -61,6 +64,16 @@ func (b *AuthServiceBuilder) WithLoginHistoryRepo(repo login_history.LoginHistor
 
 func (b *AuthServiceBuilder) WithSessionRepo(repo session.SessionRepository) *AuthServiceBuilder {
 	b.sessionRepo = repo
+	return b
+}
+
+func (b *AuthServiceBuilder) WithAuthCache(cache cache.AuthCache) *AuthServiceBuilder {
+	b.authCache = cache
+	return b
+}
+
+func (b *AuthServiceBuilder) WithSessionCache(sessionCache sessionSvc.SessionCache) *AuthServiceBuilder {
+	b.sessionCache = sessionCache
 	return b
 }
 
@@ -94,11 +107,6 @@ func (b *AuthServiceBuilder) WithHashingService(hashingService hashing.HashingSe
 	return b
 }
 
-func (b *AuthServiceBuilder) WithCache(cache cache.Cache) *AuthServiceBuilder {
-	b.cache = cache
-	return b
-}
-
 func (b *AuthServiceBuilder) WithConfig(cfg *config.AuthConfig) *AuthServiceBuilder {
 	b.cfg = cfg
 	return b
@@ -109,7 +117,7 @@ func (b *AuthServiceBuilder) WithLogger(log logger.Logger) *AuthServiceBuilder {
 	return b
 }
 
-func (b *AuthServiceBuilder) Build() *AuthService {
+func (b *AuthServiceBuilder) Build() AuthService {
 	if b.cfg == nil {
 		panic("Config is required")
 	}
@@ -121,30 +129,31 @@ func (b *AuthServiceBuilder) Build() *AuthService {
 		logger.String("service", "auth-service"),
 	)
 
-	return &AuthService{
+	return &authService{
 		repo:                  b.repo,
 		loginHistoryRepo:      b.loginHistoryRepo,
 		sessionRepo:           b.sessionRepo,
 		passwordResetRepo:     b.passwordResetRepo,
 		emailVerificationRepo: b.emailVerificationRepo,
+		authCache:             b.authCache,
+		sessionCache:          b.sessionCache,
 		emailService:          b.emailService,
 		tokenService:          b.tokenService,
 		hashingService:        b.hashingService,
-		cache:                 b.cache,
 		rateLimiter:           b.rateLimiter,
 		cfg:                   b.cfg,
 		log:                   b.log,
 	}
 }
 
-func (s *AuthService) TokenService() token.JWTTokenService {
+func (s *authService) TokenService() token.JWTTokenService {
 	return s.tokenService
 }
 
-func (s *AuthService) HashingService() hashing.HashingService {
+func (s *authService) HashingService() hashing.HashingService {
 	return s.hashingService
 }
 
-func (s *AuthService) EmailService() email.EmailService {
+func (s *authService) EmailService() email.EmailService {
 	return s.emailService
 }

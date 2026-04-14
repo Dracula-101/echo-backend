@@ -19,6 +19,7 @@ var (
 
 var (
 	RegisterEmailLockTTL = 10 * time.Second
+	IPBlockDuration      = 15 * time.Minute
 )
 
 type AuthCache interface {

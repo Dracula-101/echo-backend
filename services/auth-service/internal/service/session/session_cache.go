@@ -34,8 +34,6 @@ func NewSessionCache(cache cache.Cache, log logger.Logger) SessionCache {
 }
 
 type SessionCache interface {
-	GetSession(sessionToken string) (*SessionData, pkgErrors.AppError)
-	DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError
 	SetSession(context context.Context, userID string, sessionId string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError
 	SetPre2FA_Auth(context context.Context, token string, userID string, deviceInfo request.DeviceInfo, ip string) pkgErrors.AppError
 	Set2FA_Setup(context context.Context, userID string, secretBase32 string, backupCodesPlainJSON string) pkgErrors.AppError
@@ -44,12 +42,33 @@ type SessionCache interface {
 	SetOAuthJWK(context context.Context, provider string, jwkSetJSON string) pkgErrors.AppError
 	SetUserStatus(context context.Context, userID string, accountStatus string, twoFactorEnabled bool) pkgErrors.AppError
 
+	GetSession(sessionToken string) (*SessionData, pkgErrors.AppError)
 	GetPre2FA_Auth(token string) (*Pre2FAData, pkgErrors.AppError)
 	Get2FA_Setup(userID string) (*Setup2FAData, pkgErrors.AppError)
 	GetRefreshUsed(refreshToken string) (bool, pkgErrors.AppError)
 	GetTOTPUsed(userID string, code string) (bool, pkgErrors.AppError)
 	GetOAuthJWK(provider string) (string, pkgErrors.AppError)
 	GetUserStatus(userID string) (*UserStatusData, pkgErrors.AppError)
+
+	DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError
+	DeleteRefreshUsed(ctx context.Context, refreshToken string) pkgErrors.AppError
+}
+
+func (c *sessionCache) GetSession(sessionToken string) (*SessionData, pkgErrors.AppError) {
+	key := "session:" + sessionToken
+	dataBytes, err := c.cache.Get(context.Background(), key)
+	if err != nil {
+		if err == cache.ErrNotFound {
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get session from cache")
+	}
+	var data SessionData
+	err = data.FromBytes(dataBytes)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse session data from cache")
+	}
+	return &data, nil
 }
 
 func (c *sessionCache) DeleteSession(ctx context.Context, sessionID string) pkgErrors.AppError {
@@ -104,6 +123,23 @@ func (c *sessionCache) SetOAuthJWK(context context.Context, provider string, jwk
 	return c.cache.Set(context, key, []byte(jwkSetJSON), OAuthJWKTTL)
 }
 
+func (c *sessionCache) GetUserStatus(userID string) (*UserStatusData, pkgErrors.AppError) {
+	key := "user_status:" + userID
+	dataBytes, err := c.cache.Get(context.Background(), key)
+	if err != nil {
+		if err == cache.ErrNotFound {
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get user status from cache")
+	}
+	var data UserStatusData
+	err = data.FromBytes(dataBytes)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse user status data from cache")
+	}
+	return &data, nil
+}
+
 func (c *sessionCache) SetUserStatus(context context.Context, userID string, accountStatus string, twoFactorEnabled bool) pkgErrors.AppError {
 	key := "user_status:" + userID
 	value := UserStatusData{
@@ -111,23 +147,6 @@ func (c *sessionCache) SetUserStatus(context context.Context, userID string, acc
 		TwoFactorEnabled: twoFactorEnabled,
 	}
 	return c.cache.Set(context, key, value.Bytes(), UserStatusTTL)
-}
-
-func (c *sessionCache) GetSession(sessionToken string) (*SessionData, pkgErrors.AppError) {
-	key := "session:" + sessionToken
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
-			return nil, nil
-		}
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get session from cache")
-	}
-	var data SessionData
-	err = data.FromBytes(dataBytes)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse session data from cache")
-	}
-	return &data, nil
 }
 
 func (c *sessionCache) GetPre2FA_Auth(token string) (*Pre2FAData, pkgErrors.AppError) {
@@ -200,19 +219,7 @@ func (c *sessionCache) GetOAuthJWK(provider string) (string, pkgErrors.AppError)
 	return string(dataBytes), nil
 }
 
-func (c *sessionCache) GetUserStatus(userID string) (*UserStatusData, pkgErrors.AppError) {
-	key := "user_status:" + userID
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
-			return nil, nil
-		}
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get user status from cache")
-	}
-	var data UserStatusData
-	err = data.FromBytes(dataBytes)
-	if err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse user status data from cache")
-	}
-	return &data, nil
+func (c *sessionCache) DeleteRefreshUsed(ctx context.Context, refreshToken string) pkgErrors.AppError {
+	key := "refresh_used:" + refreshToken
+	return c.cache.Delete(ctx, key)
 }

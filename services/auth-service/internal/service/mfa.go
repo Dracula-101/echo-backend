@@ -8,7 +8,7 @@ import (
 	"shared/pkg/logger"
 )
 
-func (s *AuthService) EnableMFA(ctx context.Context, userID string, email string) (*domain.MFAEnableOutput, *error.AuthError) {
+func (s *authService) EnableMFA(ctx context.Context, userID string, email string) (*domain.MFAEnableOutput, *error.AuthError) {
 	s.log.Info("Processing MFA enablement",
 		logger.String("service", error.ServiceName),
 		logger.String("user_id", userID),
@@ -28,7 +28,7 @@ func (s *AuthService) EnableMFA(ctx context.Context, userID string, email string
 	}, nil
 }
 
-func (s *AuthService) DisableMFA(ctx context.Context, userID string, password string) *authErrors.AuthError {
+func (s *authService) DisableMFA(ctx context.Context, userID string, password string) *authErrors.AuthError {
 	s.log.Info("Processing MFA disablement",
 		logger.String("service", error.ServiceName),
 		logger.String("user_id", userID),
@@ -44,7 +44,7 @@ func (s *AuthService) DisableMFA(ctx context.Context, userID string, password st
 	return nil
 }
 
-func (s *AuthService) VerifyMFA(ctx context.Context, userID string, mfaCode string) (bool, *authErrors.AuthError) {
+func (s *authService) VerifyMFA(ctx context.Context, userID string, mfaCode string) (bool, *authErrors.AuthError) {
 	s.log.Info("Processing MFA verification",
 		logger.String("service", error.ServiceName),
 		logger.String("user_id", userID),

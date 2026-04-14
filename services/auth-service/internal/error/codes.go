@@ -26,7 +26,8 @@ const (
 	CodeEmailVerificationFailed = "AUTH_EMAIL_VERIFY_FAILED"
 	CodePhoneVerificationFailed = "AUTH_PHONE_VERIFY_FAILED"
 	CodeProfileIncomplete       = "AUTH_PROFILE_INCOMPLETE"
-	CodeConcurrentLoginDetected       = "AUTH_CONCURRENT_LOGIN_DETECTED"
+	CodeConcurrentLoginDetected = "AUTH_CONCURRENT_LOGIN_DETECTED"
+	CodeUserNotActive           = "AUTH_USER_NOT_ACTIVE"
 
 	// Database Errors
 	CodeDatabaseError     = "AUTH_DATABASE_ERROR"
@@ -40,10 +41,14 @@ const (
 	CodeTermsNotAccepted   = "AUTH_TERMS_NOT_ACCEPTED"
 
 	// Session Errors
-	CodeSessionCreationFailed = "AUTH_SESSION_CREATE_FAILED"
-	CodeSessionUpdateFailed   = "AUTH_SESSION_UPDATE_FAILED"
-	CodeInvalidRefreshToken   = "AUTH_INVALID_REFRESH_TOKEN"
-	CodeRefreshTokenExpired   = "AUTH_REFRESH_TOKEN_EXPIRED"
+	CodeSessionCreationFailed   = "AUTH_SESSION_CREATE_FAILED"
+	CodeSessionUpdateFailed     = "AUTH_SESSION_UPDATE_FAILED"
+	CodeInvalidRefreshToken     = "AUTH_INVALID_REFRESH_TOKEN"
+	CodeRefreshTokenExpired     = "AUTH_REFRESH_TOKEN_EXPIRED"
+	CodeSessionRevocationFailed = "AUTH_SESSION_REVOKE_FAILED"
+	CodeExpiredSessionToken     = "AUTH_EXPIRED_SESSION_TOKEN"
+	CodeSessionRevoked          = "AUTH_SESSION_REVOKED"
+	CodeSessionDeviceMismatch   = "AUTH_SESSION_DEVICE_MISMATCH"
 
 	// Security Errors
 	CodeTooManyFailedAttempts = "AUTH_TOO_MANY_FAILED_ATTEMPTS"

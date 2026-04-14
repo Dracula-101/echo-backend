@@ -25,6 +25,7 @@ type SessionRepository interface {
 	CountActiveSessions(ctx context.Context, userID string) (int64, pkgErrors.AppError)
 	EvictOldestSession(ctx context.Context, userID string) (*domain.Session, pkgErrors.AppError)
 	RevokeSession(ctx context.Context, sessionID string, reason string) pkgErrors.AppError
+	RevokeSessionByRefreshToken(ctx context.Context, refreshToken string, reason string) pkgErrors.AppError
 	RevokeAllUserSessions(ctx context.Context, userID string, reason string) pkgErrors.AppError
 	RevokeActiveDeviceSession(ctx context.Context, userID, deviceID, reason string) (string, pkgErrors.AppError)
 }
@@ -106,6 +107,7 @@ func (r *sessionRepository) GetSessionByRefreshToken(ctx context.Context, refres
 	json.Unmarshal(*session.Metadata, &metaData)
 	s := domain.FromSessionModel(&session)
 	s.Metadata = metaData
+
 
 	r.log.Debug("Session fetched successfully by refresh token",
 		logger.String("session_id", session.ID),
@@ -307,6 +309,25 @@ func (r *sessionRepository) RevokeSession(ctx context.Context, sessionID string,
 	}
 	r.log.Info("Session revoked",
 		logger.String("session_id", sessionID),
+	)
+	return nil
+}
+
+func (r *sessionRepository) RevokeSessionByRefreshToken(ctx context.Context, refreshToken string, reason string) pkgErrors.AppError {
+	r.log.Info("Revoking session by refresh token",
+		logger.String("reason", reason),
+	)
+	query := `UPDATE auth.sessions
+		SET revoked_at = NOW(),
+		    revoked_reason = $1
+		WHERE refresh_token = $2 AND revoked_at IS NULL`
+	_, err := r.db.Exec(ctx, query, reason, refreshToken)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to revoke session by refresh token").
+			WithDetail("reason", reason)
+	}
+	r.log.Info("Session revoked by refresh token",
+		logger.String("reason", reason),
 	)
 	return nil
 }

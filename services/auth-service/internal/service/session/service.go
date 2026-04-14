@@ -2,22 +2,21 @@ package session
 
 import (
 	"auth-service/internal/config"
+	sessionRepo "auth-service/internal/repo/session"
 	authErrors "auth-service/internal/error"
-	"auth-service/internal/repo/session"
-	"shared/pkg/cache"
 	"shared/pkg/logger"
 	"shared/server/common/token"
 )
 
-type SessionService struct {
-	repo         session.SessionRepository
+type sessionService struct {
+	repo         sessionRepo.SessionRepository
 	tokenService token.JWTTokenService
 	cfg          config.CacheConfig
 	sessionCache SessionCache
 	log          logger.Logger
 }
 
-func NewSessionService(repo session.SessionRepository, c cache.Cache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) *SessionService {
+func NewSessionService(repo sessionRepo.SessionRepository, sessionCache SessionCache, token token.JWTTokenService, log logger.Logger, cfg config.CacheConfig) SessionService {
 	if log == nil {
 		panic("Logger is required")
 	}
@@ -26,13 +25,13 @@ func NewSessionService(repo session.SessionRepository, c cache.Cache, token toke
 		logger.String("service", authErrors.ServiceName),
 	)
 
-	return &SessionService{
+	return &sessionService{
 		repo:         repo,
-		sessionCache: NewSessionCache(c, log),
+		sessionCache: sessionCache,
 		tokenService: token,
 		log:          log,
 		cfg:          cfg,
 	}
 }
 
-var _ SessionServiceInterface = (*SessionService)(nil)
+var _ SessionService = (*sessionService)(nil)

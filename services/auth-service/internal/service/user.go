@@ -13,7 +13,7 @@ import (
 // User Retrieval
 // ============================================================================
 
-func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, *error.AuthError) {
+func (s *authService) GetUserByEmail(ctx context.Context, email string) (*domain.User, *error.AuthError) {
 	s.log.Info("Fetching user by email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -62,7 +62,7 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain
 	}, nil
 }
 
-func (s *AuthService) GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError) {
+func (s *authService) GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError) {
 	s.log.Info("Fetching user by ID",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),

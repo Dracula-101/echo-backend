@@ -12,7 +12,7 @@ import (
 )
 
 // AuthServiceInterface defines the contract for authentication service operations
-type AuthServiceInterface interface {
+type AuthService interface {
 	// Email validation
 	IsEmailTaken(ctx context.Context, email string) (*domain.User, *error.AuthError)
 	// User operations
@@ -20,7 +20,9 @@ type AuthServiceInterface interface {
 	GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError)
 	RegisterUser(ctx context.Context, input domain.RegisterUserInput) (*domain.RegisterUserOutput, *error.AuthError)
 	Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError)
-	RefreshToken(ctx context.Context, refreshToken string) (*domain.LoginResult, *error.AuthError)
+	RecordFailedLogin(ctx context.Context, input domain.FailedLoginAttemptInput) *error.AuthError
+	RecordSuccessfulLogin(ctx context.Context, userID string, sessionId string, device request.DeviceInfo, location request.IpAddressInfo) *error.AuthError
+	RefreshToken(ctx context.Context, refreshToken string, deviceID string) (*domain.RefreshTokenResult, *error.AuthError)
 
 	// Session management
 	Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *error.AuthError
@@ -54,4 +56,4 @@ type AuthServiceInterface interface {
 }
 
 // Compile-time interface compliance checks
-var _ AuthServiceInterface = (*AuthService)(nil)
+var _ AuthService = (*authService)(nil)

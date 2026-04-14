@@ -15,7 +15,7 @@ import (
 // Email Validation
 // ============================================================================
 
-func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (*domain.User, *error.AuthError) {
+func (s *authService) IsEmailTaken(ctx context.Context, email string) (*domain.User, *error.AuthError) {
 	s.log.Info("Checking if email is taken", logger.String("email", email))
 	email = utils.NormalizeEmail(email)
 
@@ -32,7 +32,7 @@ func (s *AuthService) IsEmailTaken(ctx context.Context, email string) (*domain.U
 	return user, nil
 }
 
-func (s *AuthService) SendEmailVerification(ctx context.Context, userID string, email string, ipAddress string, userAgent string) *error.AuthError {
+func (s *authService) SendEmailVerification(ctx context.Context, userID string, email string, ipAddress string, userAgent string) *error.AuthError {
 	s.log.Info("Sending email verification", logger.String("user_id", userID), logger.String("email", email))
 
 	token := s.tokenService.GenerateVerificationToken()

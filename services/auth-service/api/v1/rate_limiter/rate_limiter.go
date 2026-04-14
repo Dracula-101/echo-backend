@@ -31,7 +31,9 @@ type RateLimiter interface {
 	Increment2FA(ctx context.Context, userID string) (count int64, error pkgErrors.AppError)
 
 	AcquireLoginLock(ctx context.Context, userID string) (allowed bool, error pkgErrors.AppError)
+	ReleaseLoginLock(ctx context.Context, userID string) pkgErrors.AppError
 	AcquireRegisterLock(ctx context.Context, email string) (allowed bool, error pkgErrors.AppError)
+	ReleaseRegisterLock(ctx context.Context, email string) pkgErrors.AppError
 
 	IsIPBlocked(ctx context.Context, ip string) (blocked bool, error pkgErrors.AppError)
 	BlockIP(ctx context.Context, ip string) (error pkgErrors.AppError)
@@ -178,12 +180,28 @@ func (r *rateLimiter) AcquireLoginLock(ctx context.Context, userID string) (bool
 	return ok, nil
 }
 
+func (r *rateLimiter) ReleaseLoginLock(ctx context.Context, userID string) pkgErrors.AppError {
+	err := r.cache.ReleaseLock(ctx, LockLoginPrefix+userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to release login lock")
+	}
+	return nil
+}
+
 func (r *rateLimiter) AcquireRegisterLock(ctx context.Context, email string) (bool, pkgErrors.AppError) {
 	ok, err := r.cache.AcquireLock(ctx, LockRegisterPrefix+email, TTLLockRegister)
 	if err != nil {
 		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to acquire register lock")
 	}
 	return ok, nil
+}
+
+func (r *rateLimiter) ReleaseRegisterLock(ctx context.Context, email string) pkgErrors.AppError {
+	err := r.cache.ReleaseLock(ctx, LockRegisterPrefix+email)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to release register lock")
+	}
+	return nil
 }
 
 // ---------------- IP block ----------------

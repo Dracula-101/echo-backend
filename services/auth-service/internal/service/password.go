@@ -12,7 +12,7 @@ import (
 	"shared/pkg/utils"
 )
 
-func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddress string, userAgent string) *authErrors.AuthError {
+func (s *authService) ForgotPassword(ctx context.Context, email string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing forgot password request",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
@@ -82,7 +82,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string, ipAddres
 	return nil
 }
 
-func (s *AuthService) ResetPassword(ctx context.Context, token string, newPassword string, ipAddress string, userAgent string) *authErrors.AuthError {
+func (s *authService) ResetPassword(ctx context.Context, token string, newPassword string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing password reset",
 		logger.String("service", authErrors.ServiceName),
 	)
@@ -169,7 +169,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token string, newPasswo
 	return nil
 }
 
-func (s *AuthService) ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string, ipAddress string, userAgent string) *authErrors.AuthError {
+func (s *authService) ChangePassword(ctx context.Context, userID string, currentPassword string, newPassword string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing password change",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),

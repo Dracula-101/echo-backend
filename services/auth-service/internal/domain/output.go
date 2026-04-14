@@ -20,6 +20,14 @@ type RegisterUserOutput struct {
 	VerificationEmailSentTo *string
 }
 
+type RefreshTokenResult struct {
+	User
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	ExpiresAt    time.Time
+}
+
 // PasswordHashResult contains the result of password hashing
 type PasswordHashResult struct {
 	Hash      string

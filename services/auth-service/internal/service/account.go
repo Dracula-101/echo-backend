@@ -16,6 +16,7 @@ import (
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 	"shared/server/common/token"
+	"shared/server/request"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 // User Registration
 // ============================================================================
 
-func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUserInput) (*domain.RegisterUserOutput, *error.AuthError) {
+func (s *authService) RegisterUser(ctx context.Context, input domain.RegisterUserInput) (*domain.RegisterUserOutput, *error.AuthError) {
 	s.log.Info("Registering new user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", input.Email),
@@ -92,7 +93,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, input domain.RegisterUse
 // User Authentication
 // ============================================================================
 
-func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError) {
+func (s *authService) Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError) {
 	email := utils.NormalizeEmail(input.Email)
 	s.log.Info("User login",
 		logger.String("service", authErrors.ServiceName),
@@ -162,13 +163,6 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
 		)
-		if err := s.recordFailedLoginAttempt(ctx, domain.FailedLoginAttemptInput{
-			UserID:   user.ID,
-			Device:   input.DeviceInfo,
-			Location: input.LocationInfo,
-		}); err != nil {
-			return nil, err
-		}
 		return nil, &error.AuthError{
 			Message: "Wrong email or password",
 			Code:    authErrors.CodeInvalidCredentials,
@@ -226,30 +220,6 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		logger.String("user_id", user.ID),
 	)
 
-	isNewLocation, locationErr := s.repo.IsNewLocation(ctx, user.ID, input.LocationInfo.City)
-	if locationErr != nil {
-		s.log.Error("Failed to determine login location",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("email", email),
-			logger.String("user_id", user.ID),
-			logger.String("city", input.LocationInfo.City),
-		)
-		isNewLocation = false
-	}
-	s.loginHistoryRepo.CreateLoginHistory(ctx, repoModels.CreateLoginHistoryInput{
-		UserID:        user.ID,
-		DeviceInfo:    input.DeviceInfo,
-		IPInfo:        *input.LocationInfo,
-		SessionID:     nil,
-		LoginMethod:   utils.PtrString("password"),
-		Status:        utils.PtrString("success"),
-		IsNewDevice:   utils.PtrBool(false),
-		IsNewLocation: utils.PtrBool(isNewLocation),
-		FailureReason: nil,
-
-		UserAgent: utils.PtrString(input.DeviceInfo.UserAgent),
-	})
-
 	return &domain.LoginResult{
 		User: &domain.User{
 			ID:                     user.ID,
@@ -279,7 +249,7 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (*doma
 	}, nil
 }
 
-func (s *AuthService) recordFailedLoginAttempt(ctx context.Context, input domain.FailedLoginAttemptInput) *error.AuthError {
+func (s *authService) RecordFailedLogin(ctx context.Context, input domain.FailedLoginAttemptInput) *error.AuthError {
 	s.loginHistoryRepo.CreateLoginHistory(ctx, repoModels.CreateLoginHistoryInput{
 		UserID:        input.UserID,
 		DeviceInfo:    input.Device,
@@ -328,7 +298,36 @@ func (s *AuthService) recordFailedLoginAttempt(ctx context.Context, input domain
 	return nil
 }
 
-func (s *AuthService) Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *authErrors.AuthError {
+func (s *authService) RecordSuccessfulLogin(ctx context.Context, userID string, sessionId string, device request.DeviceInfo, location request.IpAddressInfo) *error.AuthError {
+	err := s.loginHistoryRepo.CreateLoginHistory(ctx, repoModels.CreateLoginHistoryInput{
+		UserID:        userID,
+		DeviceInfo:    device,
+		IPInfo:        location,
+		SessionID:     utils.PtrString(sessionId),
+		LoginMethod:   utils.PtrString("password"),
+		Status:        utils.PtrString("success"),
+		IsNewDevice:   utils.PtrBool(false),
+		IsNewLocation: utils.PtrBool(false),
+		UserAgent:     utils.PtrString(device.UserAgent),
+	})
+	if err != nil {
+		s.log.Error("Failed to record successful login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return &error.AuthError{
+			Message: "Failed to record login history",
+			Code:    authErrors.CodeDatabaseError,
+			Error: pkgErrors.FromError(err, authErrors.CodeDatabaseError, "failed to record successful login").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", userID),
+		}
+	}
+	return nil
+}
+
+func (s *authService) Logout(ctx context.Context, sessionID string, userID string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing logout",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -346,10 +345,6 @@ func (s *AuthService) Logout(ctx context.Context, sessionID string, userID strin
 		}
 	}
 
-	if s.cache != nil {
-		_ = s.cache.Delete(ctx, "session_token:"+sessionID)
-	}
-
 	s.log.Info("Logout successful",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("session_id", sessionID),
@@ -358,7 +353,7 @@ func (s *AuthService) Logout(ctx context.Context, sessionID string, userID strin
 	return nil
 }
 
-func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password string, ipAddress string, userAgent string) *authErrors.AuthError {
+func (s *authService) DeleteAccount(ctx context.Context, userID string, password string, ipAddress string, userAgent string) *authErrors.AuthError {
 	s.log.Info("Processing account deletion",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -438,7 +433,7 @@ func (s *AuthService) DeleteAccount(ctx context.Context, userID string, password
 // Device Trust
 // ============================================================================
 
-func (s *AuthService) IsDeviceTrusted(ctx context.Context, userID string, deviceID string) (bool, *authErrors.AuthError) {
+func (s *authService) IsDeviceTrusted(ctx context.Context, userID string, deviceID string) (bool, *authErrors.AuthError) {
 	trusted, err := s.repo.IsDeviceTrusted(ctx, userID, deviceID)
 	if err != nil {
 		return false, &authErrors.AuthError{
@@ -450,7 +445,7 @@ func (s *AuthService) IsDeviceTrusted(ctx context.Context, userID string, device
 	return trusted, nil
 }
 
-func (s *AuthService) IsNewLocation(ctx context.Context, userID string, city string) (bool, *authErrors.AuthError) {
+func (s *authService) IsNewLocation(ctx context.Context, userID string, city string) (bool, *authErrors.AuthError) {
 	isNew, err := s.repo.IsNewLocation(ctx, userID, city)
 	if err != nil {
 		return false, &authErrors.AuthError{

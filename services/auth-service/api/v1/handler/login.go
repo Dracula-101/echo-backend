@@ -67,6 +67,11 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 
 	// Prevent race conditions in session-limit enforcement from concurrent logins for the same user.
 	acquired, lockErr := h.rateLimiter.AcquireLoginLock(ctx, user.ID)
+	defer func() {
+		if acquired {
+			h.rateLimiter.ReleaseLoginLock(ctx, user.ID)
+		}
+	}()
 	if lockErr != nil {
 		h.log.Error("Failed to acquire login lock",
 			logger.String("service", authErrors.ServiceName),
@@ -111,7 +116,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		)
 		isTrustedDevice = false
 	}
-	_, locationTrustErr := h.authService.IsNewLocation(ctx, userResult.User.ID, locationInfo.City)
+	isNewLocation, locationTrustErr := h.authService.IsNewLocation(ctx, userResult.User.ID, locationInfo.City)
 	if locationTrustErr != nil {
 		h.log.Error("Failed to determine if login location is new",
 			logger.String("service", authErrors.ServiceName),
@@ -136,7 +141,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	// TODO: Check for 2FA requirement based on user settings and context
+	// TODO: Check for 2FA requirement based on user settings and context before creating session
 
 	if activeSession == nil {
 		isMobile := deviceInfo.IsMobile()
@@ -196,6 +201,17 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("session_id", session.SessionId),
 	)
 
+	authErr = h.authService.RecordSuccessfulLogin(ctx, userResult.User.ID, session.SessionId, deviceInfo, locationInfo)
+	if authErr != nil {
+		h.log.Error("Failed to record successful login",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userResult.User.ID),
+			logger.Error(authErr.Error),
+		)
+		// TODO:
+		// auth.outbox: auth.session.created event, and if is_new_device = true: auth.new_device_login event.
+	}
+
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Login successful",
 		dto.NewLoginResponse(
 			*userResult.User,
@@ -203,6 +219,8 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			session.SessionToken,
 			userResult.AccessToken,
 			userResult.RefreshToken,
+			isNewLocation,
+			isTrustedDevice,
 			userResult.ExpiresAt,
 		),
 	)

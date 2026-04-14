@@ -91,16 +91,18 @@ type LoginUser struct {
 
 // LoginSession captures the issued tokens after authentication.
 type LoginSession struct {
-	SessionId    string    `json:"session_id"`
-	SessionToken string    `json:"session_token"`
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token,omitempty"`
-	TokenType    string    `json:"token_type"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	SessionId       string    `json:"session_id"`
+	SessionToken    string    `json:"session_token"`
+	AccessToken     string    `json:"access_token"`
+	RefreshToken    string    `json:"refresh_token,omitempty"`
+	TokenType       string    `json:"token_type"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	IsNewLocation   bool      `json:"is_new_location"`
+	IsTrustedDevice bool      `json:"is_trusted_device"`
 }
 
 // NewLoginResponse builds a login response from the persisted model state.
-func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, expiresAt time.Time) *LoginResponse {
+func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, isNewLocation bool, isTrustedDevice bool, expiresAt time.Time) *LoginResponse {
 	return &LoginResponse{
 		User: LoginUser{
 			ID:               user.ID,
@@ -115,12 +117,14 @@ func NewLoginResponse(user domain.User, sessionId string, sessionToken string, a
 			UpdatedAt:        user.UpdatedAt,
 		},
 		Session: LoginSession{
-			SessionId:    sessionId,
-			SessionToken: sessionToken,
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
-			TokenType:    string("Bearer"),
-			ExpiresAt:    expiresAt,
+			SessionId:       sessionId,
+			SessionToken:    sessionToken,
+			AccessToken:     accessToken,
+			RefreshToken:    refreshToken,
+			TokenType:       string("Bearer"),
+			ExpiresAt:       expiresAt,
+			IsNewLocation:   isNewLocation,
+			IsTrustedDevice: isTrustedDevice,
 		},
 	}
 }

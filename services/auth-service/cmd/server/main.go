@@ -210,7 +210,6 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 				10,
 			),
 		)
-
 		r.Post(
 			"/refresh-token",
 			req.Adapt(h.RefreshToken),
@@ -232,11 +231,9 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 			"/logout",
 			req.Adapt(h.Logout),
 		)
-
 		r.Post("/forgot-password", req.Adapt(h.ForgotPassword))
 		r.Post("/reset-password", req.Adapt(h.ResetPassword))
 		r.Post("/change-password", req.Adapt(h.ChangePassword))
-
 		r.Post("/verify-email", req.Adapt(h.VerifyEmail))
 		r.Post(
 			"/resend-verification",
@@ -469,6 +466,7 @@ func main() {
 	}
 
 	authCache := authCache.NewAuthCache(cacheClient, log)
+	sessionCache := sessionSvc.NewSessionCache(cacheClient, log)
 	rateLimiter := createRateLimiter(cacheClient, windowStore, log)
 
 	emailService := setupEmailService(*cfg, log)
@@ -478,7 +476,7 @@ func main() {
 
 	loginHistoryRepo := login_history.NewLoginHistoryRepo(dbClient, log)
 	sessionRepo := session.NewSessionRepo(dbClient, log)
-	sessionService := sessionSvc.NewSessionService(sessionRepo, cacheClient, *tokenService, log, cfg.Cache)
+	sessionService := sessionSvc.NewSessionService(sessionRepo, sessionCache, *tokenService, log, cfg.Cache)
 	emailVerificationRepo := email_verification.NewEmailVerificationTokenRepo(dbClient, log)
 	resetTokenRepo := password_reset.NewPasswordResetTokenRepo(dbClient, log)
 
@@ -489,16 +487,17 @@ func main() {
 		WithEmailVerificationRepo(emailVerificationRepo).
 		WithPasswordResetRepo(resetTokenRepo).
 		WithSessionRepo(sessionRepo).
+		WithAuthCache(authCache).
+		WithSessionCache(sessionCache).
 		WithRateLimiter(*rateLimiter).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
 		WithEmailService(*emailService).
-		WithCache(cacheClient).
 		WithConfig(&cfg.Auth).
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(*authService, *sessionService, *locationService, authCache, *rateLimiter, log)
+	authHandler := handler.NewAuthHandler(authService, sessionService, *locationService, authCache, *rateLimiter, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

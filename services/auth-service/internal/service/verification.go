@@ -19,7 +19,7 @@ const (
 	maxResendTokensPerWindow = 5
 )
 
-func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) (email *string, authErr *error.AuthError) {
+func (s *authService) VerifyEmail(ctx context.Context, rawToken string, deviceInfo request.DeviceInfo, location request.IpAddressInfo) (email *string, authErr *error.AuthError) {
 	s.log.Info("Processing email verification",
 		logger.String("service", error.ServiceName),
 		logger.String("ip_address", location.IP),
@@ -182,7 +182,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, rawToken string, deviceIn
 	return &user.Email, nil
 }
 
-func (s *AuthService) ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError) {
+func (s *authService) ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError) {
 	s.log.Info("Processing resend verification email",
 		logger.String("service", error.ServiceName),
 		logger.String("email", email),
