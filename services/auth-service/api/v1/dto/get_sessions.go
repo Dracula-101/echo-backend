@@ -9,7 +9,8 @@ import (
 
 // GetSessionsRequest represents the payload required to list active sessions.
 type GetSessionsRequest struct {
-	UserID string `json:"user_id" validate:"required"`
+	Limit  int `json:"limit" validate:"omitempty,min=1,max=100"`
+	Offset int `json:"offset" validate:"omitempty,min=0"`
 }
 
 // NewGetSessionsRequest constructs a get sessions request with zero values.
@@ -27,9 +28,14 @@ func (r *GetSessionsRequest) ValidateErrors(ve validator.ValidationErrors) ([]re
 	var errs []request.ValidationErrorDetail
 	for _, err := range ve {
 		switch err.Field() {
-		case "UserID":
+		case "Limit":
 			errs = append(errs, request.ValidationErrorDetail{
-				Msg:  "User ID is required",
+				Msg:  "Limit is required",
+				Code: request.REQUIRED_FIELD,
+			})
+		case "Offset":
+			errs = append(errs, request.ValidationErrorDetail{
+				Msg:  "Offset is required",
 				Code: request.REQUIRED_FIELD,
 			})
 		}

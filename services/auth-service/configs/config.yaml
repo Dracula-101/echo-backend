@@ -57,7 +57,7 @@ location_service:
 auth:
   jwt:
     access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
-    refresh_token_ttl: ${JWT_REFRESH_TOKEN_TTL:168h}
+    refresh_token_ttl: ${JWT_REFRESH_TOKEN_TTL:256h}
     secret_key: ${JWT_SECRET_KEY}
     issuer: ${JWT_ISSUER:auth-service}
     audience: ${JWT_AUDIENCE:api}

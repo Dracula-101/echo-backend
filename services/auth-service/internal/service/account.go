@@ -194,7 +194,7 @@ func (s *authService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		}
 	}
 
-	expiresAt := accessToken.Claims.IssuedAt.Add(s.cfg.JWT.AccessTokenTTL)
+	expiresAt := accessToken.Claims.IssuedAt.Add(s.cfg.JWT.RefreshTokenTTL)
 	refreshToken, refreshErr := s.tokenService.IssueRefreshToken(ctx, user.ID, token.IssueOptions{
 		ExpiresIn: s.cfg.JWT.RefreshTokenTTL,
 		Metadata: map[string]interface{}{

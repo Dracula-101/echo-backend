@@ -23,7 +23,7 @@ type SessionService interface {
 	UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError)
 	CheckAndHandleRefreshTokenReplay(ctx context.Context, refreshToken string) (bool, *authErrors.AuthError)
 	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError)
-	GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError)
+	GetAllSessions(ctx context.Context, userID string, limit int, offset int) ([]*domain.Session, pkgErrors.AppError)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
 }
@@ -364,13 +364,13 @@ func (s *sessionService) DeleteSessionByID(ctx context.Context, sessionID string
 	return nil
 }
 
-func (s *sessionService) GetAllSessions(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
+func (s *sessionService) GetAllSessions(ctx context.Context, userID string, limit int, offset int) ([]*domain.Session, pkgErrors.AppError) {
 	s.log.Debug("Fetching all sessions for user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 	)
 
-	sessions, err := s.repo.GetAllSessionsByUserId(ctx, userID)
+	sessions, err := s.repo.GetAllSessionsByUserId(ctx, userID, limit, offset)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get all sessions").
 			WithService(authErrors.ServiceName).

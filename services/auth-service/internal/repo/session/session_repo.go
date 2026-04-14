@@ -18,7 +18,7 @@ type SessionRepository interface {
 	CreateSession(ctx context.Context, session *domain.Session) pkgErrors.AppError
 	GetSessionByUserId(ctx context.Context, userID string, deviceID *string) (*domain.Session, pkgErrors.AppError)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*domain.Session, pkgErrors.AppError)
-	GetAllSessionsByUserId(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError)
+	GetAllSessionsByUserId(ctx context.Context, userID string, limit int, offset int) ([]*domain.Session, pkgErrors.AppError)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
@@ -54,13 +54,13 @@ func (r *sessionRepository) CreateSession(ctx context.Context, session *domain.S
 	return nil
 }
 
-func (r *sessionRepository) GetAllSessionsByUserId(ctx context.Context, userID string) ([]*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) GetAllSessionsByUserId(ctx context.Context, userID string, limit int, offset int) ([]*domain.Session, pkgErrors.AppError) {
 	r.log.Debug("Fetching all sessions by user ID",
 		logger.String("user_id", userID),
 	)
 	var sessions []*models.AuthSession
-	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW() ORDER BY created_at DESC"
-	rows, err := r.db.Query(ctx, query, userID)
+	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW() ORDER BY last_activity_at DESC LIMIT $2 OFFSET $3"
+	rows, err := r.db.Query(ctx, query, userID, limit, offset)
 
 	for rows.Next() {
 		var session models.AuthSession
