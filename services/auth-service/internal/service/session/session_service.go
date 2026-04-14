@@ -18,6 +18,7 @@ import (
 // SessionServiceInterface defines the contract for session service operations
 type SessionServiceInterface interface {
 	// Session management
+	PrepareSessionSlot(ctx context.Context, userID, deviceID string) pkgErrors.AppError
 	CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError)
 	GetSessionByUserId(ctx context.Context, userID string, deviceID string) (*domain.SessionRecord, pkgErrors.AppError)
@@ -50,64 +51,6 @@ func (s *SessionService) generateSessionToken(userID string) (string, pkgErrors.
 
 const maxActiveSessions = 10
 
-// enforceSessionLimit evicts the oldest active session when the user is at
-// the session cap, then purges its Redis key and queues an outbox event so
-// ws-service can send a SESSION_REVOKED frame to that device.
-func (s *SessionService) enforceSessionLimit(ctx context.Context, userID string) pkgErrors.AppError {
-	count, err := s.repo.CountActiveSessions(ctx, userID)
-	if err != nil {
-		s.log.Error("Failed to count active sessions",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		return err
-	}
-	if count < maxActiveSessions {
-		return nil
-	}
-
-	evicted, err := s.repo.EvictOldestSession(ctx, userID)
-	if err != nil {
-		s.log.Error("Failed to evict oldest session",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", userID),
-			logger.Error(err),
-		)
-		return err
-	}
-	if evicted == nil {
-		return nil
-	}
-
-	s.log.Info("Session limit reached — oldest session evicted",
-		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
-		logger.String("evicted_session_id", evicted.ID),
-		logger.Int64("active_count", count),
-	)
-
-	// Non-fatal: session is already revoked in DB.
-	if cacheErr := s.sessionCache.DeleteSession(ctx, evicted.ID); cacheErr != nil {
-		s.log.Warn("Failed to delete evicted session from cache",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("session_id", evicted.ID),
-			logger.Error(cacheErr),
-		)
-	}
-	// Non-fatal: outbox has its own retry path.
-	_, jsonErr := json.Marshal(map[string]any{
-		"scope":       "single",
-		"session_ids": []string{evicted.ID},
-		"reason":      "session_limit_exceeded",
-	})
-	if jsonErr == nil {
-		// TODO: emit outbox event for session revocation so ws-service can notify the device
-	}
-
-	return nil
-}
-
 func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateSessionInput) (*domain.CreateSessionOutput, pkgErrors.AppError) {
 	s.log.Info("Creating session",
 		logger.String("service", authErrors.ServiceName),
@@ -116,39 +59,6 @@ func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateS
 		logger.String("ip_address", input.IP.IP),
 		logger.Bool("is_mobile", input.IsMobile),
 	)
-
-	// Same-device deduplication: revoke any existing active session on this device
-	if input.Device.ID != "" {
-		revokedID, dedupeErr := s.repo.RevokeActiveDeviceSession(ctx, input.UserID, input.Device.ID, "new_login_same_device")
-		if dedupeErr != nil {
-			return nil, pkgErrors.FromError(dedupeErr, authErrors.CodeSessionCreationFailed, "failed to deduplicate device session").
-				WithService(authErrors.ServiceName).
-				WithDetail("user_id", input.UserID).
-				WithDetail("device_id", input.Device.ID)
-		}
-		if revokedID != "" {
-			s.log.Info("Existing session on same device revoked",
-				logger.String("service", authErrors.ServiceName),
-				logger.String("user_id", input.UserID),
-				logger.String("device_id", input.Device.ID),
-				logger.String("revoked_session_id", revokedID),
-			)
-			// Non-fatal: session is already revoked in DB.
-			if cacheErr := s.sessionCache.DeleteSession(ctx, revokedID); cacheErr != nil {
-				s.log.Warn("Failed to delete replaced device session from cache",
-					logger.String("service", authErrors.ServiceName),
-					logger.String("session_id", revokedID),
-					logger.Error(cacheErr),
-				)
-			}
-		}
-	}
-
-	if err := s.enforceSessionLimit(ctx, input.UserID); err != nil {
-		return nil, pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to enforce session limit").
-			WithService(authErrors.ServiceName).
-			WithDetail("user_id", input.UserID)
-	}
 
 	sessionToken, err := s.generateSessionToken(input.UserID)
 	if err != nil {
@@ -242,6 +152,80 @@ func (s *SessionService) CreateSession(ctx context.Context, input domain.CreateS
 		SessionId:    sessionID,
 		SessionToken: sessionToken,
 	}, nil
+}
+
+// PrepareSessionSlot handles same-device deduplication and session cap enforcement
+// before a new session is created. Call this before CreateSession.
+func (s *SessionService) PrepareSessionSlot(ctx context.Context, userID, deviceID string) pkgErrors.AppError {
+	if deviceID != "" {
+		revokedID, err := s.repo.RevokeActiveDeviceSession(ctx, userID, deviceID, "new_login_same_device")
+		if err != nil {
+			return pkgErrors.FromError(err, authErrors.CodeSessionCreationFailed, "failed to deduplicate device session").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", userID).
+				WithDetail("device_id", deviceID)
+		}
+		if revokedID != "" {
+			s.log.Info("Existing session on same device revoked",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("device_id", deviceID),
+				logger.String("revoked_session_id", revokedID),
+			)
+			if cacheErr := s.sessionCache.DeleteSession(ctx, revokedID); cacheErr != nil {
+				s.log.Warn("Failed to delete replaced device session from cache",
+					logger.String("service", authErrors.ServiceName),
+					logger.String("session_id", revokedID),
+					logger.Error(cacheErr),
+				)
+			}
+		}
+	}
+
+	count, err := s.repo.CountActiveSessions(ctx, userID)
+	if err != nil {
+		s.log.Error("Failed to count active sessions",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return err
+	}
+	if count < maxActiveSessions {
+		return nil
+	}
+
+	evicted, err := s.repo.EvictOldestSession(ctx, userID)
+	if err != nil {
+		s.log.Error("Failed to evict oldest session",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return err
+	}
+	if evicted == nil {
+		return nil
+	}
+
+	s.log.Info("Session limit reached — oldest session evicted",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.String("evicted_session_id", evicted.ID),
+		logger.Int64("active_count", count),
+	)
+
+	if cacheErr := s.sessionCache.DeleteSession(ctx, evicted.ID); cacheErr != nil {
+		s.log.Warn("Failed to delete evicted session from cache",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("session_id", evicted.ID),
+			logger.Error(cacheErr),
+		)
+	}
+	// TODO: emit outbox event for session revocation so ws-service can notify the device
+	//       payload: { scope: "single", session_ids: [evicted.ID], reason: "session_limit_exceeded" }
+
+	return nil
 }
 
 func (s *SessionService) UpdateSession(ctx context.Context, userID string, sessionID string, updates domain.UpdateSession) (*domain.Session, pkgErrors.AppError) {

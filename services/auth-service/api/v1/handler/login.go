@@ -85,7 +85,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	}
 
 	if statusErr := user.CanLogin(); statusErr != nil {
-		h.handleAccountStatusError(ctx, handler, requestID, user, statusErr)
+		h.handleAccountStatusError(ctx, handler, user, statusErr)
 		return
 	}
 
@@ -100,6 +100,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
+	// Check Trusted Device and New Location
 	isTrustedDevice, trustErr := h.authService.IsDeviceTrusted(ctx, userResult.User.ID, deviceInfo.ID)
 	if trustErr != nil {
 		h.log.Error("Failed to determine device trust",
@@ -110,6 +111,22 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		)
 		isTrustedDevice = false
 	}
+	_, locationTrustErr := h.authService.IsNewLocation(ctx, userResult.User.ID, locationInfo.City)
+	if locationTrustErr != nil {
+		h.log.Error("Failed to determine if login location is new",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userResult.User.ID),
+			logger.String("location", locationInfo.City),
+			logger.Error(locationTrustErr.Error),
+		)
+	}
+
+	sessionErr := h.sessionService.PrepareSessionSlot(ctx, userResult.User.ID, deviceInfo.ID)
+	if sessionErr != nil {
+		h.log.Error("Failed to prepare session slot during login", logger.Error(sessionErr))
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessionErr)
+		return
+	}
 
 	session := &domain.CreateSessionOutput{}
 	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID, deviceInfo.ID)
@@ -118,6 +135,8 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessErr)
 		return
 	}
+
+	// TODO: Check for 2FA requirement based on user settings and context
 
 	if activeSession == nil {
 		isMobile := deviceInfo.IsMobile()
@@ -189,7 +208,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	)
 }
 
-func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req.RequestHandler, requestID string, user *domain.User, statusErr error) {
+func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req.RequestHandler, user *domain.User, statusErr error) {
 	switch statusErr {
 	case authErrors.ErrAccountDeactivated:
 		response.ForbiddenError(ctx, handler.Request(), handler.Writer(), "Account is deactivated. Please contact support.", statusErr)

@@ -20,7 +20,6 @@ type AuthServiceInterface interface {
 	GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError)
 	RegisterUser(ctx context.Context, input domain.RegisterUserInput) (*domain.RegisterUserOutput, *error.AuthError)
 	Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError)
-	RecordFailedLoginAttempt(ctx context.Context, input domain.FailedLoginAttemptInput) *error.AuthError
 	RefreshToken(ctx context.Context, refreshToken string) (*domain.LoginResult, *error.AuthError)
 
 	// Session management
