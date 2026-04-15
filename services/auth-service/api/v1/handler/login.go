@@ -222,6 +222,8 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			isNewLocation,
 			isTrustedDevice,
 			userResult.ExpiresAt,
+			userResult.ExpiresIn,
+			locationInfo,
 		),
 	)
 }

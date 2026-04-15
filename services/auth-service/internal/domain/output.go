@@ -8,6 +8,7 @@ type LoginResult struct {
 	AccessToken  string
 	RefreshToken string
 	ExpiresAt    time.Time
+	ExpiresIn    int64
 }
 
 type RegisterUserOutput struct {

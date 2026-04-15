@@ -13,9 +13,12 @@ type GetSessionsRequest struct {
 	Offset int `json:"offset" validate:"omitempty,min=0"`
 }
 
-// NewGetSessionsRequest constructs a get sessions request with zero values.
+// NewGetSessionsRequest constructs a get sessions request with default values.
 func NewGetSessionsRequest() *GetSessionsRequest {
-	return &GetSessionsRequest{}
+	return &GetSessionsRequest{
+		Limit:  20,
+		Offset: 0,
+	}
 }
 
 // GetValue exposes the request for validation helpers.

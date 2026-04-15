@@ -60,8 +60,9 @@ func (lr *LoginRequest) ValidateErrors(ve validator.ValidationErrors) ([]request
 
 // LoginResponse bundles the authenticated user and issued session tokens.
 type LoginResponse struct {
-	User    LoginUser    `json:"user"`
-	Session LoginSession `json:"session"`
+	User     LoginUser     `json:"user"`
+	Session  LoginSession  `json:"session"`
+	Location LoginLocation `json:"location,omitempty"`
 }
 
 type AccountStatus string
@@ -97,12 +98,19 @@ type LoginSession struct {
 	RefreshToken    string    `json:"refresh_token,omitempty"`
 	TokenType       string    `json:"token_type"`
 	ExpiresAt       time.Time `json:"expires_at"`
+	ExpiresIn       int64     `json:"expires_in"`
 	IsNewLocation   bool      `json:"is_new_location"`
 	IsTrustedDevice bool      `json:"is_trusted_device"`
 }
 
+type LoginLocation struct {
+	City    string `json:"city,omitempty"`
+	Region  string `json:"region,omitempty"`
+	Country string `json:"country,omitempty"`
+}
+
 // NewLoginResponse builds a login response from the persisted model state.
-func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, isNewLocation bool, isTrustedDevice bool, expiresAt time.Time) *LoginResponse {
+func NewLoginResponse(user domain.User, sessionId string, sessionToken string, accessToken string, refreshToken string, isNewLocation bool, isTrustedDevice bool, expiresAt time.Time, expiresIn int64, location request.IpAddressInfo) *LoginResponse {
 	return &LoginResponse{
 		User: LoginUser{
 			ID:               user.ID,
@@ -125,6 +133,12 @@ func NewLoginResponse(user domain.User, sessionId string, sessionToken string, a
 			ExpiresAt:       expiresAt,
 			IsNewLocation:   isNewLocation,
 			IsTrustedDevice: isTrustedDevice,
+			ExpiresIn:       expiresIn,
+		},
+		Location: LoginLocation{
+			City:    location.City,
+			Region:  location.State,
+			Country: location.Country,
 		},
 	}
 }

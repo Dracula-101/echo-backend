@@ -246,6 +246,7 @@ func (s *authService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		AccessToken:  accessToken.Token,
 		RefreshToken: refreshToken.Token,
 		ExpiresAt:    expiresAt,
+		ExpiresIn:    int64(s.cfg.JWT.AccessTokenTTL.Seconds()),
 	}, nil
 }
 
@@ -353,9 +354,9 @@ func (s *authService) Logout(ctx context.Context, userID string, sessionID strin
 			s.sessionCache.DeleteSession(ctx, token)
 		}
 		s.sessionRepo.ClearNotificationsForAllSessions(ctx, userID)
-		// TODO: Insert into auth.outbox for auth.session.revoked event for each 
+		// TODO: Insert into auth.outbox for auth.session.revoked event for each
 		// revoked session to invalidate tokens in cache and trigger any other necessary cleanup
-		
+
 	} else {
 		//UPDATE auth.sessions SET revoked_at = NOW(), revoked_reason = $1 WHERE id = $2 AND revoked_at IS NULL
 		err := s.sessionRepo.RevokeSession(ctx, sessionID, "user_logout")

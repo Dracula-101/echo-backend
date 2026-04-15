@@ -2,6 +2,7 @@ package handler
 
 import (
 	"auth-service/api/v1/dto"
+	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -47,7 +48,7 @@ func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 		return
 	}
 
-	sessions, err := h.sessionService.GetAllSessions(ctx, userId, dto.Limit, dto.Offset)
+	sessions, limit, offset, total, err := h.sessionService.GetAllSessions(ctx, userId, dto.Limit, dto.Offset)
 	if err != nil {
 		h.log.Warn("Get sessions failed",
 			logger.String("service", authErrors.ServiceName),
@@ -58,5 +59,14 @@ func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Sessions retrieved successfully", sessions)
+	sessionValues := make([]domain.Session, len(sessions))
+	for i, s := range sessions {
+		sessionValues[i] = *s
+	}
+	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Sessions retrieved successfully", map[string]interface{}{
+		"sessions": sessionValues,
+		"limit":    limit,
+		"offset":   offset,
+		"total":    total,
+	})
 }

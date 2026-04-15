@@ -18,7 +18,7 @@ type SessionRepository interface {
 	CreateSession(ctx context.Context, session *domain.Session) pkgErrors.AppError
 	GetSessionByUserId(ctx context.Context, userID string, deviceID *string) (*domain.Session, pkgErrors.AppError)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*domain.Session, pkgErrors.AppError)
-	GetAllSessionsByUserId(ctx context.Context, userID string, limit int, offset int) ([]*domain.Session, pkgErrors.AppError)
+	GetAllSessionsByUserId(ctx context.Context, userID string, limit int, offset int) (sessions []*domain.Session, total int, err pkgErrors.AppError)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.Session, pkgErrors.AppError)
 	UpdateSession(ctx context.Context, session *domain.UpdateAuthSession) (*domain.Session, pkgErrors.AppError)
 	DeleteSessionByID(ctx context.Context, sessionID string) pkgErrors.AppError
@@ -54,41 +54,66 @@ func (r *sessionRepository) CreateSession(ctx context.Context, session *domain.S
 	return nil
 }
 
-func (r *sessionRepository) GetAllSessionsByUserId(ctx context.Context, userID string, limit int, offset int) ([]*domain.Session, pkgErrors.AppError) {
+func (r *sessionRepository) GetAllSessionsByUserId(ctx context.Context, userID string, limit int, offset int) (sessions []*domain.Session, total int, err pkgErrors.AppError) {
 	r.log.Debug("Fetching all sessions by user ID",
 		logger.String("user_id", userID),
 	)
-	var sessions []*models.AuthSession
-	query := "SELECT * FROM auth.sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW() ORDER BY last_activity_at DESC LIMIT $2 OFFSET $3"
-	rows, err := r.db.Query(ctx, query, userID, limit, offset)
 
+	query := `
+		WITH session_count AS (
+			SELECT COUNT(*) as total FROM auth.sessions 
+			WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
+		)
+		SELECT s.*, sc.total
+		FROM auth.sessions s
+		CROSS JOIN session_count sc
+		WHERE s.user_id = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+		ORDER BY s.last_activity_at DESC
+		LIMIT $2 OFFSET $3`
+
+	rows, dbErr := r.db.Query(ctx, query, userID, limit, offset)
+	if dbErr != nil {
+		return nil, 0, pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to query sessions").
+			WithDetail("user_id", userID)
+	}
+	defer rows.Close()
+
+	var results []*models.AuthSession
+	var totalCount int
 	for rows.Next() {
-		var session models.AuthSession
-		err := rows.ScanModel(&session)
+		var r models.AuthSession
+		err := rows.ScanModelAndAppend(&r, &totalCount) // Scan session fields into r and total count into r.Total
 		if err != nil {
-			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan session row").
+			return nil, 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan session row").
 				WithDetail("user_id", userID)
 		}
-		sessions = append(sessions, &session)
+		results = append(results, &r)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "error iterating session rows").
+	if rows.Err() != nil {
+		err = pkgErrors.FromError(rows.Err(), pkgErrors.CodeDatabaseError, "error iterating session rows").
 			WithDetail("user_id", userID)
+		return nil, 0, err
+	}
+
+	if len(results) == 0 {
+		return nil, 0, nil
 	}
 
 	r.log.Debug("Sessions fetched successfully",
 		logger.String("user_id", userID),
-		logger.Int("session_count", len(sessions)),
+		logger.Int("session_count", len(results)),
 	)
+
 	var result []*domain.Session
-	for _, session := range sessions {
+	for _, res := range results {
 		metaData := make(map[string]interface{})
-		utils.UnmarshalRawMessageSafe(*session.Metadata, &metaData)
-		s := domain.FromSessionModel(session)
+		utils.UnmarshalRawMessageSafe(*res.Metadata, &metaData)
+		s := domain.FromSessionModel(res)
+		s.Metadata = metaData
 		result = append(result, &s)
 	}
-	return result, nil
+	return result, totalCount, nil
 }
 
 func (r *sessionRepository) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*domain.Session, pkgErrors.AppError) {
@@ -420,7 +445,6 @@ func (r *sessionRepository) RevokeActiveDeviceSession(ctx context.Context, userI
 		logger.String("user_id", userID),
 		logger.String("device_id", deviceID),
 	)
-	// Hits idx_auth_sessions_device (user_id, device_id) index.
 	// Returns the revoked session ID so the caller can purge it from Redis.
 	query := `
 		UPDATE auth.sessions

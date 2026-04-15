@@ -69,5 +69,13 @@ func (h *AuthHandler) Logout(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Logged out successfully", nil)
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK,
+		func() string {
+			if logoutRequest.RevokeAllDevices {
+				return "Successfully logged out from all devices"
+			}
+			return "Successfully logged out"
+		}(),
+		nil,
+	)
 }

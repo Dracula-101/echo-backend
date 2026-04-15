@@ -38,7 +38,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string, dev
 		return nil, &error.AuthError{
 			Message: "Invalid or expired refresh token",
 			Code:    authErrors.CodeInvalidToken,
-			Error: pkgErrors.New(authErrors.CodeInvalidToken, "invalid or expired refresh token").
+			Error: pkgErrors.New(authErrors.CodeInvalidToken, "invalid or expired refresh token - session not found").
 				WithService(authErrors.ServiceName),
 		}
 	}
@@ -50,7 +50,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string, dev
 		return nil, &error.AuthError{
 			Message: "Invalid or expired refresh token",
 			Code:    authErrors.CodeExpiredSessionToken,
-			Error: pkgErrors.New(authErrors.CodeExpiredSessionToken, "invalid or expired refresh token").
+			Error: pkgErrors.New(authErrors.CodeExpiredSessionToken, "invalid or expired refresh token - session expired").
 				WithService(authErrors.ServiceName).
 				WithDetail("session_id", session.ID),
 		}
@@ -63,7 +63,7 @@ func (s *authService) RefreshToken(ctx context.Context, refreshToken string, dev
 		return nil, &error.AuthError{
 			Message: "Invalid or expired refresh token",
 			Code:    authErrors.CodeSessionRevoked,
-			Error: pkgErrors.New(authErrors.CodeSessionRevoked, "invalid or expired refresh token").
+			Error: pkgErrors.New(authErrors.CodeSessionRevoked, "invalid or expired refresh token - session revoked").
 				WithService(authErrors.ServiceName).
 				WithDetail("reason", session.RevokedReason).
 				WithDetail("session_id", session.ID),

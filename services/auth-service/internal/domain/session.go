@@ -27,8 +27,8 @@ type Session struct {
 	Region             string                 `json:"region"`
 	Country            string                 `json:"country"`
 	Timezone           string                 `json:"timezone"`
-	Latitude           *float64               `json:"latitude,omitempty"`
-	Longitude          *float64               `json:"longitude,omitempty"`
+	Latitude           *float64               `json:"latitude"`
+	Longitude          *float64               `json:"longitude"`
 	IsTrustedDevice    bool                   `json:"is_trusted_device"`
 	IsMobile           bool                   `json:"is_mobile"`
 	SessionType        models.SessionType     `json:"session_type"`
@@ -36,12 +36,12 @@ type Session struct {
 	APNSToken          string                 `json:"apns_token"`
 	PushEnabled        bool                   `json:"push_enabled"`
 	UserAgent          string                 `json:"user_agent"`
-	RevokedAt          *time.Time             `json:"revoked_at,omitempty"`
-	RevokedReason      *string                `json:"revoked_reason,omitempty"`
+	RevokedAt          *time.Time             `json:"revoked_at"`
+	RevokedReason      *string                `json:"revoked_reason"`
 	LastActivityAt     time.Time              `json:"last_activity_at"`
 	ExpiresAt          time.Time              `json:"expires_at"`
 	CreatedAt          time.Time              `json:"created_at"`
-	Metadata           map[string]interface{} `json:"metadata,omitempty"`
+	Metadata           map[string]interface{} `json:"metadata"`
 }
 
 func FromSessionModel(m *models.AuthSession) Session {
@@ -161,4 +161,76 @@ type UpdateAuthSession struct {
 	RevokedAt     *time.Time
 	RevokedReason *string
 	PushEnabled   *bool
+}
+
+type SessionData struct {
+	ID                 string                 `json:"id"`
+	UserID             string                 `json:"user_id"`
+	DeviceID           string                 `json:"device_id"`
+	DeviceType         string                 `json:"device_type"`
+	DeviceName         string                 `json:"device_name"`
+	DeviceOS           string                 `json:"device_os"`
+	DeviceOSVersion    string                 `json:"device_os_version"`
+	DeviceModel        string                 `json:"device_model"`
+	DeviceManufacturer string                 `json:"device_manufacturer"`
+	IPISP              string                 `json:"ip_isp"`
+	BrowserName        string                 `json:"browser_name,omitempty"`
+	BrowserVersion     string                 `json:"browser_version,omitempty"`
+	IPAddress          string                 `json:"ip_address"`
+	City               string                 `json:"city"`
+	Region             string                 `json:"region"`
+	Country            string                 `json:"country"`
+	Timezone           string                 `json:"timezone"`
+	IsTrustedDevice    bool                   `json:"is_trusted_device"`
+	IsMobile           bool                   `json:"is_mobile"`
+	SessionType        models.SessionType     `json:"session_type"`
+	PushEnabled        bool                   `json:"push_enabled"`
+	UserAgent          string                 `json:"user_agent"`
+	RevokedAt          *time.Time             `json:"revoked_at,omitempty"`
+	RevokedReason      *string                `json:"revoked_reason,omitempty"`
+	LastActivityAt     time.Time              `json:"last_activity_at"`
+	ExpiresAt          time.Time              `json:"expires_at"`
+	CreatedAt          time.Time              `json:"created_at"`
+	Metadata           map[string]interface{} `json:"metadata"`
+}
+
+func NewSessionData(session *Session) SessionData {
+	return SessionData{
+		ID:                 session.ID,
+		UserID:             session.UserID,
+		DeviceID:           session.DeviceID,
+		DeviceType:         session.DeviceType,
+		DeviceName:         session.DeviceName,
+		DeviceOS:           session.DeviceOS,
+		DeviceOSVersion:    session.DeviceOSVersion,
+		DeviceModel:        session.DeviceModel,
+		DeviceManufacturer: session.DeviceManufacturer,
+		IPISP:              session.IPISP,
+		BrowserName:        session.BrowserName,
+		BrowserVersion:     session.BrowserVersion,
+		IPAddress:          session.IPAddress,
+		City:               session.City,
+		Region:             session.Region,
+		Country:            session.Country,
+		Timezone:           session.Timezone,
+		IsTrustedDevice:    session.IsTrustedDevice,
+		IsMobile:           session.IsMobile,
+		SessionType:        session.SessionType,
+		PushEnabled:        session.PushEnabled,
+		UserAgent:          session.UserAgent,
+		RevokedAt:          session.RevokedAt,
+		RevokedReason:      session.RevokedReason,
+		LastActivityAt:     session.LastActivityAt,
+		ExpiresAt:          session.ExpiresAt,
+		CreatedAt:          session.CreatedAt,
+		Metadata:           session.Metadata,
+	}
+}
+
+func NewSessionsData(sessions []Session) []SessionData {
+	data := make([]SessionData, len(sessions))
+	for i, session := range sessions {
+		data[i] = NewSessionData(&session)
+	}
+	return data
 }
