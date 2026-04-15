@@ -148,6 +148,27 @@ func (s *authService) ResetPassword(ctx context.Context, token string, newPasswo
 		}
 	}
 
+	// check previous passwords
+	previousCheck, checkErr := s.repo.CheckPreviousPasswords(ctx, resetToken.UserID, *tokenHash)
+	if checkErr != nil {
+		return &authErrors.AuthError{
+			Message: "Failed to check previous passwords",
+			Code:    authErrors.CodeDatabaseError,
+			Error: pkgErrors.FromError(checkErr, pkgErrors.CodeDatabaseError, "failed to check previous passwords").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", resetToken.UserID),
+		}
+	}
+	if previousCheck {
+		return &authErrors.AuthError{
+			Message: "New password cannot be the same as any of the previous passwords",
+			Code:    authErrors.CodePasswordReuseNotAllowed,
+			Error: pkgErrors.New(authErrors.CodePasswordReuseNotAllowed, "password reuse not allowed").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", resetToken.UserID),
+		}
+	}
+
 	result, pHashErr := s.hashingService.HashPassword(ctx, newPassword)
 	if pHashErr != nil {
 		return &authErrors.AuthError{
@@ -226,6 +247,26 @@ func (s *authService) ChangePassword(ctx context.Context, userID string, current
 			Message: "Current password is incorrect",
 			Code:    authErrors.CodeInvalidCredentials,
 			Error: pkgErrors.New(authErrors.CodeInvalidCredentials, "invalid current password").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", userID),
+		}
+	}
+
+	previousCheck, checkErr := s.repo.CheckPreviousPasswords(ctx, userID, newPassword)
+	if checkErr != nil {
+		return &authErrors.AuthError{
+			Message: "Failed to check previous passwords",
+			Code:    authErrors.CodeDatabaseError,
+			Error: pkgErrors.FromError(checkErr, pkgErrors.CodeDatabaseError, "failed to check previous passwords").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", userID),
+		}
+	}
+	if previousCheck {
+		return &authErrors.AuthError{
+			Message: "New password cannot be the same as any of the previous passwords",
+			Code:    authErrors.CodePasswordReuseNotAllowed,
+			Error: pkgErrors.New(authErrors.CodePasswordReuseNotAllowed, "password reuse not allowed").
 				WithService(authErrors.ServiceName).
 				WithDetail("user_id", userID),
 		}

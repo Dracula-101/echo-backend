@@ -60,6 +60,7 @@ const (
 	CodePasswordResetTokenExpired = "AUTH_PASSWORD_RESET_TOKEN_EXPIRED"
 	CodePasswordResetTokenUsed    = "AUTH_PASSWORD_RESET_TOKEN_USED"
 	CodeSamePassword              = "AUTH_SAME_PASSWORD"
+	CodePasswordReuseNotAllowed   = "AUTH_PASSWORD_REUSE_NOT_ALLOWED"
 
 	// Email Verification Errors
 	CodeEmailAlreadyVerified     = "AUTH_EMAIL_ALREADY_VERIFIED"
