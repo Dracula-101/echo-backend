@@ -36,7 +36,7 @@ func NewHandler(req *http.Request, writer http.ResponseWriter) *RequestHandler {
 			MaxBodySize:        DefaultMaxBodySize,
 			DisallowUnknown:    true,
 			RequireContentType: true,
-			AllowEmptyBody:     false,
+			AllowEmptyBody:     true,
 		},
 		validator: validator.New(),
 		request:   req,

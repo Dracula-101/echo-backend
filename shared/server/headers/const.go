@@ -98,6 +98,7 @@ const (
 
 	// ------------ Connection Headers ------------
 	Connection       = "Connection"
+	ProxyConnection  = "Proxy-Connection"
 	KeepAlive        = "Keep-Alive"
 	TE               = "TE"
 	Trailer          = "Trailer"

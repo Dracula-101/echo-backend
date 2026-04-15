@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"shared/pkg/logger"
 	contextx "shared/server/context"
+	"shared/server/headers"
 	"shared/server/response"
 	"strconv"
 	"strings"
@@ -31,15 +32,15 @@ type contextKey string
 const isWebSocketKey contextKey = "isWebSocket"
 
 var hopByHopHeaders = []string{
-	"Connection",
-	"Proxy-Connection",
-	"Keep-Alive",
-	"Proxy-Authenticate",
-	"Proxy-Authorization",
-	"TE",
-	"Trailer",
-	"Transfer-Encoding",
-	"Upgrade",
+	headers.Connection,
+	headers.ProxyConnection,
+	headers.KeepAlive,
+	headers.ProxyAuthenticate,
+	headers.ProxyAuthorization,
+	headers.TE,
+	headers.Trailer,
+	headers.TransferEncoding,
+	headers.Upgrade,
 }
 
 // ============================================================================
@@ -60,7 +61,7 @@ func removeHopByHop(h http.Header) {
 	for _, hn := range hopByHopHeaders {
 		h.Del(hn)
 	}
-	if conns, ok := h["Connection"]; ok {
+	if conns, ok := h[headers.Connection]; ok {
 		for _, c := range conns {
 			for _, token := range strings.Split(c, ",") {
 				token = strings.TrimSpace(token)
@@ -69,7 +70,7 @@ func removeHopByHop(h http.Header) {
 				}
 			}
 		}
-		h.Del("Connection")
+		h.Del(headers.Connection)
 	}
 }
 
@@ -209,8 +210,8 @@ func newSingleHostReverseProxy(target *url.URL, serviceName string, l mlog) *htt
 			l.Debug("Preserving WebSocket upgrade headers",
 				logger.String("service", gwErrors.ServiceName),
 				logger.String("target_service", serviceName),
-				logger.String("upgrade", req.Header.Get("Upgrade")),
-				logger.String("connection", req.Header.Get("Connection")),
+				logger.String("upgrade", req.Header.Get(headers.Upgrade)),
+				logger.String("connection", req.Header.Get(headers.Connection)),
 			)
 		}
 	}
@@ -220,11 +221,11 @@ func newSingleHostReverseProxy(target *url.URL, serviceName string, l mlog) *htt
 			logger.String("service", gwErrors.ServiceName),
 			logger.String("target_service", serviceName),
 			logger.Int("status", resp.StatusCode),
-			logger.String("content_type", resp.Header.Get("Content-Type")),
+			logger.String("content_type", resp.Header.Get(headers.ContentType)),
 		)
 
 		// Only modify JSON responses that might contain our response structure
-		contentType := resp.Header.Get("Content-Type")
+		contentType := resp.Header.Get(headers.ContentType)
 		if !strings.Contains(contentType, "application/json") {
 			return nil
 		}
@@ -337,8 +338,8 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check for WebSocket upgrade headers at the entry point
-		upgradeHeader := r.Header.Get("Upgrade")
-		connectionHeader := r.Header.Get("Connection")
+		upgradeHeader := r.Header.Get(headers.Upgrade)
+		connectionHeader := r.Header.Get(headers.Connection)
 		isWebSocketRequest := strings.ToLower(upgradeHeader) == "websocket" &&
 			strings.Contains(strings.ToLower(connectionHeader), "upgrade")
 
@@ -413,10 +414,10 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 			logger.String("remaining_path", remainingPath),
 			logger.Bool("transform", transform),
 			logger.String("query", r.URL.RawQuery),
-			logger.Bool("has_auth", r.Header.Get("Authorization") != ""),
-			logger.String("x_user_id", r.Header.Get("X-User-ID")),
-			logger.String("x_session_id", r.Header.Get("X-Session-ID")),
-			logger.String("content_type", r.Header.Get("Content-Type")),
+			logger.Bool("has_auth", r.Header.Get(headers.Authorization) != ""),
+			logger.String("x_user_id", r.Header.Get(headers.XUserID)),
+			logger.String("x_session_id", r.Header.Get(headers.XSessionID)),
+			logger.String("content_type", r.Header.Get(headers.ContentType)),
 		)
 
 		if serviceConfig.Timeout > 0 {
@@ -440,9 +441,9 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 		req.Header = cloneHeaders(r.Header)
 		removeHopByHop(req.Header)
 
-		clientIP := r.Header.Get("X-Real-IP")
+		clientIP := r.Header.Get(headers.XRealIP)
 		if clientIP == "" {
-			clientIP = r.Header.Get("X-Forwarded-For")
+			clientIP = r.Header.Get(headers.XForwardedFor)
 			if clientIP == "" {
 				if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 					clientIP = host
@@ -451,10 +452,10 @@ func (m *Manager) ProxyHandler(serviceName string, transform bool) http.HandlerF
 				}
 			}
 		}
-		if prior := req.Header.Get("X-Forwarded-For"); prior != "" {
-			req.Header.Set("X-Forwarded-For", prior+", "+clientIP)
+		if prior := req.Header.Get(headers.XForwardedFor); prior != "" {
+			req.Header.Set(headers.XForwardedFor, prior+", "+clientIP)
 		} else {
-			req.Header.Set("X-Forwarded-For", clientIP)
+			req.Header.Set(headers.XForwardedFor, clientIP)
 		}
 
 		m.logger.Debug("Client IP extracted",
@@ -509,15 +510,15 @@ func (m *Manager) handleWebSocketProxy(w http.ResponseWriter, r *http.Request, t
 			req.Host = target.Host
 
 			// Preserve WebSocket upgrade headers
-			req.Header.Set("X-Forwarded-For", r.RemoteAddr)
-			req.Header.Set("X-Forwarded-Proto", "http")
+			req.Header.Set(headers.XForwardedFor, r.RemoteAddr)
+			req.Header.Set(headers.XForwardedProto, "http")
 
 			m.logger.Debug("WebSocket director",
 				logger.String("service", gwErrors.ServiceName),
 				logger.String("target_service", serviceName),
 				logger.String("target_url", req.URL.String()),
-				logger.String("upgrade", req.Header.Get("Upgrade")),
-				logger.String("connection", req.Header.Get("Connection")),
+				logger.String("upgrade", req.Header.Get(headers.Upgrade)),
+				logger.String("connection", req.Header.Get(headers.Connection)),
 			)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {

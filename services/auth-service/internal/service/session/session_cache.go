@@ -42,7 +42,7 @@ type SessionCache interface {
 	SetOAuthJWK(context context.Context, provider string, jwkSetJSON string) pkgErrors.AppError
 	SetUserStatus(context context.Context, userID string, accountStatus string, twoFactorEnabled bool) pkgErrors.AppError
 
-	GetSession(sessionToken string) (*SessionData, pkgErrors.AppError)
+	GetSession(sessionId string) (*SessionData, pkgErrors.AppError)
 	GetPre2FA_Auth(token string) (*Pre2FAData, pkgErrors.AppError)
 	Get2FA_Setup(userID string) (*Setup2FAData, pkgErrors.AppError)
 	GetRefreshUsed(refreshToken string) (bool, pkgErrors.AppError)
@@ -54,8 +54,8 @@ type SessionCache interface {
 	DeleteRefreshUsed(ctx context.Context, refreshToken string) pkgErrors.AppError
 }
 
-func (c *sessionCache) GetSession(sessionToken string) (*SessionData, pkgErrors.AppError) {
-	key := "session:" + sessionToken
+func (c *sessionCache) GetSession(sessionId string) (*SessionData, pkgErrors.AppError) {
+	key := "session:" + sessionId
 	dataBytes, err := c.cache.Get(context.Background(), key)
 	if err != nil {
 		if err == cache.ErrNotFound {
@@ -77,13 +77,13 @@ func (c *sessionCache) DeleteSession(ctx context.Context, sessionToken string) p
 }
 
 func (c *sessionCache) SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time) pkgErrors.AppError {
-	key := "session:" + sessionToken
+	key := "session:" + sessionId
 	value := SessionData{
-		UserID:        userID,
-		SessionID:     sessionId,
-		SessionToken:  sessionToken,
-		DeviceID:      deviceID,
-		ExpiresAt:     expiresAt.Unix(),
+		UserID:       userID,
+		SessionID:    sessionId,
+		SessionToken: sessionToken,
+		DeviceID:     deviceID,
+		ExpiresAt:    expiresAt.Unix(),
 	}
 	return c.cache.Set(context, key, value.Bytes(), time.Until(expiresAt))
 }

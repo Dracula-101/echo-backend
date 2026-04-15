@@ -350,7 +350,7 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
-			router.Middleware(middleware.SessionAuth(sessionService, sessionCache, skipAuthPaths...)),
+			router.Middleware(middleware.SessionAuth(sessionService, sessionCache, log, skipAuthPaths...)),
 			router.Middleware(middleware.LocationFromIP(locationService, memCache)),
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),

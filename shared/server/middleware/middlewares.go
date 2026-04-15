@@ -983,7 +983,6 @@ func Auth(config AuthConfig) Handler {
 			ctx := SetUserID(r.Context(), userID)
 			newReq := r.WithContext(ctx)
 			newReq.Header.Set(headers.XUserID, userID)
-			newReq.Header.Set(headers.XSessionID, userID)
 			next.ServeHTTP(w, newReq)
 		})
 	}
