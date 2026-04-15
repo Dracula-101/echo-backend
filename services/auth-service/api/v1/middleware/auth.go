@@ -31,11 +31,11 @@ func SessionAuth(service session.SessionService, sessionCache session.SessionCac
 			// validate session with auth service
 			sessionData, _ := service.GetSessionByID(ctx, sessionID)
 			if sessionData == nil {
-				response.UnauthorizedError(ctx, r, w, "Invalid session", nil)
+				response.UnauthorizedError(ctx, r, w, "Invalid session - session not found", nil)
 				return
 			}
 			if sessionData.IsExpired() {
-				response.UnauthorizedError(ctx, r, w, "Session expired", nil)
+				response.UnauthorizedError(ctx, r, w, "Session expired - session not found", nil)
 				return
 			}
 
