@@ -168,10 +168,7 @@ func NotFoundError(ctx context.Context, r *http.Request, w http.ResponseWriter, 
 	err := errors.New(errors.CodeNotFound, message)
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The requested resource could not be found."
-	errorDetails.Context = map[string]interface{}{
-		"resource": resource,
-		"path":     r.URL.Path,
-	}
+	errorDetails.Context = &ErrorContext{Resource: resource, Path: r.URL.Path}
 
 	return Error().
 		WithContext(ctx).
@@ -235,9 +232,7 @@ func LockedError(ctx context.Context, r *http.Request, w http.ResponseWriter, re
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The requested resource is currently locked and cannot be accessed."
 	errorDetails.Type = ErrorTypeLocked
-	errorDetails.Context = map[string]interface{}{
-		"resource": resource,
-	}
+	errorDetails.Context = &ErrorContext{Resource: resource}
 
 	return Error().
 		WithContext(ctx).
@@ -304,9 +299,7 @@ func ServiceUnavailableError(ctx context.Context, r *http.Request, w http.Respon
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Type = ErrorTypeServiceUnavailable
 	errorDetails.Description = "The service is temporarily unavailable. Please try again later."
-	errorDetails.Context = map[string]interface{}{
-		"service": service,
-	}
+	errorDetails.Context = &ErrorContext{Service: service}
 
 	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 
@@ -325,9 +318,7 @@ func GatewayTimeoutError(ctx context.Context, r *http.Request, w http.ResponseWr
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The upstream service did not respond in time."
 	errorDetails.Type = ErrorTypeGatewayTimeout
-	errorDetails.Context = map[string]interface{}{
-		"service": service,
-	}
+	errorDetails.Context = &ErrorContext{Service: service}
 
 	return Error().
 		WithContext(ctx).
@@ -376,9 +367,7 @@ func ConflictResourceError(ctx context.Context, r *http.Request, w http.Response
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = reason
 	errorDetails.Type = ErrorTypeConflictResource
-	errorDetails.Context = map[string]interface{}{
-		"resource": resource,
-	}
+	errorDetails.Context = &ErrorContext{Resource: resource}
 
 	return Error().
 		WithContext(ctx).
@@ -394,9 +383,7 @@ func ServiceDependencyError(ctx context.Context, r *http.Request, w http.Respons
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = reason
 	errorDetails.Type = ErrorTypeServiceDependency
-	errorDetails.Context = map[string]interface{}{
-		"service": service,
-	}
+	errorDetails.Context = &ErrorContext{Service: service}
 	// Return the error response
 	return Error().
 		WithContext(ctx).
@@ -425,10 +412,7 @@ func RouteNotFoundError(ctx context.Context, r *http.Request, w http.ResponseWri
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The requested route does not exist."
 	errorDetails.Type = ErrorTypeNotFound
-	errorDetails.Context = map[string]interface{}{
-		"path":   r.URL.Path,
-		"method": r.Method,
-	}
+	errorDetails.Context = &ErrorContext{Path: r.URL.Path, Method: r.Method}
 	log.Warn("Route not found",
 		logger.String("path", r.URL.Path),
 		logger.String("method", r.Method),
@@ -447,10 +431,7 @@ func MethodNotAllowedError(ctx context.Context, r *http.Request, w http.Response
 	errorDetails := ErrorDetailsFromError(err, false)
 	errorDetails.Description = "The HTTP method used is not allowed for this route."
 	errorDetails.Type = ErrorTypeMethodNotAllowed
-	errorDetails.Context = map[string]interface{}{
-		"path":   r.URL.Path,
-		"method": r.Method,
-	}
+	errorDetails.Context = &ErrorContext{Path: r.URL.Path, Method: r.Method}
 	return Error().
 		WithContext(ctx).
 		WithRequest(r).

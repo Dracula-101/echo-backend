@@ -20,10 +20,11 @@ func ErrorDetailsFromError(err error, includeStackTrace bool) *ErrorDetails {
 		details.Message = appErr.Message()
 
 		if appErr.Details() != nil && len(appErr.Details()) > 0 {
-			details.Context = make(map[string]interface{})
+			extra := make(map[string]interface{}, len(appErr.Details()))
 			for k, v := range appErr.Details() {
-				details.Context[k] = v
+				extra[k] = v
 			}
+			details.Context = &ErrorContext{Extra: extra}
 		}
 
 		if includeStackTrace && appErr.StackTrace() != nil {

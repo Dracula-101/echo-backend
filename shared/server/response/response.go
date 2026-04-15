@@ -40,17 +40,26 @@ type Metadata struct {
 	Extra         map[string]string `json:"extra,omitempty"`
 }
 
+// ErrorContext provides typed contextual information for an error response.
+type ErrorContext struct {
+	Resource string                 `json:"resource,omitempty"`
+	Path     string                 `json:"path,omitempty"`
+	Method   string                 `json:"method,omitempty"`
+	Service  string                 `json:"service,omitempty"`
+	Extra    map[string]interface{} `json:"extra,omitempty"`
+}
+
 // ErrorDetails provides comprehensive error information
 type ErrorDetails struct {
-	Code        string                 `json:"code"`
-	Type        ErrorType              `json:"type"`
-	Message     string                 `json:"message"`
-	Description string                 `json:"description,omitempty"`
-	Fields      []FieldError           `json:"fields,omitempty"`
-	StackTrace  []string               `json:"stack_trace,omitempty"`
-	InnerError  string                 `json:"inner_error,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Context     map[string]interface{} `json:"context,omitempty"`
+	Code        string        `json:"code"`
+	Type        ErrorType     `json:"type"`
+	Message     string        `json:"message"`
+	Description string        `json:"description,omitempty"`
+	Fields      []FieldError  `json:"fields,omitempty"`
+	StackTrace  []string      `json:"stack_trace,omitempty"`
+	InnerError  string        `json:"inner_error,omitempty"`
+	Timestamp   time.Time     `json:"timestamp"`
+	Context     *ErrorContext `json:"context,omitempty"`
 }
 
 // ErrorType categorizes errors for client handling

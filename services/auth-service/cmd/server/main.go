@@ -335,7 +335,7 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 }
 
 func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService location.LocationService, sessionService sessionSvc.SessionService, sessionCache sessionSvc.SessionCache, rateLimiter ratelimiter.RateLimiter, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
-	skipAuthPaths := []string{"/login", "/register", "/verify-email", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification"}
+	skipAuthPaths := []string{"/login", "/register", "/verify-email", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification", "/health", "/live", "/ready", "/health/liveness", "/health/readiness", "/metrics"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh req.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
