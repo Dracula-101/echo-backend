@@ -10,6 +10,27 @@ const (
 	StatusUnhealthy Status = "unhealthy"
 )
 
+// ProbeStatus is the typed shape for liveness/readiness probe results.
+type ProbeStatus struct {
+	Status Status `json:"status"`
+	OK     bool   `json:"ok"`
+}
+
+// HealthHandlerResponse is the typed shape returned by the /health endpoint.
+// Using a struct (instead of map[string]interface{}) ensures JSON keys are
+// serialized in declaration order, not alphabetically.
+type HealthHandlerResponse struct {
+	Status      Status                  `json:"status"`
+	Timestamp   time.Time               `json:"timestamp"`
+	Service     string                  `json:"service"`
+	Version     string                  `json:"version"`
+	Uptime      string                  `json:"uptime"`
+	Liveness    ProbeStatus             `json:"liveness"`
+	Readiness   ProbeStatus             `json:"readiness"`
+	Checks      map[string]CheckResult  `json:"checks,omitempty"`
+	Environment string                  `json:"environment"`
+}
+
 type Response struct {
 	Status    Status                 `json:"status"`
 	Timestamp time.Time              `json:"timestamp"`

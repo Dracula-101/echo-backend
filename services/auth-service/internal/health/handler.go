@@ -28,39 +28,26 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		health = h.sanitizeResponse(health)
 	}
 
-	resp := map[string]interface{}{
-		"status":    health.Status,
-		"timestamp": health.Timestamp,
-		"service":   health.Service,
-		"version":   health.Version,
-		"uptime":    health.Uptime,
-		"liveness": map[string]interface{}{
-			"status": liveness.Status,
-			"ok":     liveness.Status == StatusHealthy,
+	resp := HealthHandlerResponse{
+		Status:    health.Status,
+		Timestamp: health.Timestamp,
+		Service:   health.Service,
+		Version:   health.Version,
+		Uptime:    health.Uptime,
+		Liveness: ProbeStatus{
+			Status: liveness.Status,
+			OK:     liveness.Status == StatusHealthy,
 		},
-		"readiness": map[string]interface{}{
-			"status": readiness.Status,
-			"ok":     readiness.Status == StatusHealthy,
+		Readiness: ProbeStatus{
+			Status: readiness.Status,
+			OK:     readiness.Status == StatusHealthy,
 		},
+		Environment: getEnvironment(),
 	}
 
 	if len(health.Checks) > 0 {
-		if isDev {
-			resp["checks"] = health.Checks
-		} else {
-			sanitizedChecks := make(map[string]interface{})
-			for name, check := range health.Checks {
-				sanitizedChecks[name] = map[string]interface{}{
-					"status":        check.Status,
-					"message":       check.Message,
-					"response_time": check.ResponseTime,
-				}
-			}
-			resp["checks"] = sanitizedChecks
-		}
+		resp.Checks = health.Checks
 	}
-
-	resp["environment"] = getEnvironment()
 
 	status := h.manager.HTTPStatus(health.Status)
 	response.JSONWithMessage(ctx, r, w, status, "Health status", resp)
@@ -68,29 +55,20 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Liveness(w http.ResponseWriter, r *http.Request) {
 	liveness := h.manager.Liveness(r.Context())
-
-	resp := map[string]interface{}{
-		"status": liveness.Status,
-		"ok":     liveness.Status == StatusHealthy,
+	resp := ProbeStatus{
+		Status: liveness.Status,
+		OK:     liveness.Status == StatusHealthy,
 	}
-
 	status := h.manager.HTTPStatus(liveness.Status)
 	response.JSONWithMessage(r.Context(), r, w, status, "Liveness probe", resp)
 }
 
 func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	readiness := h.manager.Readiness(r.Context())
-
-	resp := map[string]interface{}{
-		"status": readiness.Status,
-		"ok":     readiness.Status == StatusHealthy,
+	resp := ProbeStatus{
+		Status: readiness.Status,
+		OK:     readiness.Status == StatusHealthy,
 	}
-
-	// Add checks in development mode
-	if env.IsDevelopment() && len(readiness.Checks) > 0 {
-		resp["checks"] = readiness.Checks
-	}
-
 	status := h.manager.HTTPStatus(readiness.Status)
 	response.JSONWithMessage(r.Context(), r, w, status, "Readiness probe", resp)
 }
