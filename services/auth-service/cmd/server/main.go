@@ -264,15 +264,15 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 			),
 		)
 		r.Post(
-			"/reset-password", 
+			"/reset-password",
 			req.Adapt(h.ResetPassword),
 			middleware.RateLimit(
 				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
 					return rateLimiter.AllowPwdResetIP(ctx, key, limit)
-				}, 
+				},
 				func(req req.RequestHandler) string {
 					return req.GetClientIP()
-				}, 
+				},
 				10,
 			),
 		)
@@ -304,7 +304,7 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 	return builder
 }
 
-func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService location.LocationService, rateLimiter ratelimiter.RateLimiter, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService location.LocationService, sessionService sessionSvc.SessionService, sessionCache sessionSvc.SessionCache, rateLimiter ratelimiter.RateLimiter, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
 	skipAuthPaths := []string{"/login", "/register", "/verify-email", "/refresh-token", "/forgot-password", "/reset-password", "/resend-verification"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh req.RequestHandler) {
@@ -320,6 +320,7 @@ func createRouter(h *handler.AuthHandler, memCache cache.Cache, locationService 
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
+			router.Middleware(middleware.SessionAuth(sessionService, sessionCache, skipAuthPaths...)),
 			router.Middleware(middleware.LocationFromIP(locationService, memCache)),
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
@@ -545,7 +546,7 @@ func main() {
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(authHandler, memCache, *locationService, *rateLimiter, healthHandler, log)
+	routerInstance, err := createRouter(authHandler, memCache, *locationService, sessionService, sessionCache, *rateLimiter, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

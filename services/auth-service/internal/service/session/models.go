@@ -6,12 +6,11 @@ import (
 )
 
 type SessionData struct {
-	UserID        string
-	SessionID     string
-	SessionToken  string
-	DeviceID      string
-	ExpiresAt     int64
-	AccountStatus string
+	UserID       string
+	SessionID    string
+	SessionToken string
+	DeviceID     string
+	ExpiresAt    int64
 }
 
 func (s *SessionData) Bytes() []byte {

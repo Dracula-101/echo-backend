@@ -34,7 +34,7 @@ func NewSessionCache(cache cache.Cache, log logger.Logger) SessionCache {
 }
 
 type SessionCache interface {
-	SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError
+	SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time) pkgErrors.AppError
 	SetPre2FA_Auth(context context.Context, token string, userID string, deviceInfo request.DeviceInfo, ip string) pkgErrors.AppError
 	Set2FA_Setup(context context.Context, userID string, secretBase32 string, backupCodesPlainJSON string) pkgErrors.AppError
 	SetRefreshUsed(context context.Context, refreshToken string) pkgErrors.AppError
@@ -76,7 +76,7 @@ func (c *sessionCache) DeleteSession(ctx context.Context, sessionToken string) p
 	return c.cache.Delete(ctx, key)
 }
 
-func (c *sessionCache) SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time, accountStatus string) pkgErrors.AppError {
+func (c *sessionCache) SetSession(context context.Context, userID string, sessionId string, sessionToken string, deviceID string, expiresAt time.Time) pkgErrors.AppError {
 	key := "session:" + sessionToken
 	value := SessionData{
 		UserID:        userID,
@@ -84,7 +84,6 @@ func (c *sessionCache) SetSession(context context.Context, userID string, sessio
 		SessionToken:  sessionToken,
 		DeviceID:      deviceID,
 		ExpiresAt:     expiresAt.Unix(),
-		AccountStatus: accountStatus,
 	}
 	return c.cache.Set(context, key, value.Bytes(), time.Until(expiresAt))
 }
