@@ -364,5 +364,8 @@ func (s *authService) ResendVerification(ctx context.Context, email string, ipAd
 		logger.String("user_id", user.ID),
 	)
 
+	// TODO:
+	// add into auth.outbox for auth.password.reset_requested.
+
 	return &rawToken, nil
 }

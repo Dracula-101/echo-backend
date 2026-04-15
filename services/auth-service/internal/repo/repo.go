@@ -387,11 +387,53 @@ func (r *authRepository) GetUserActiveDevice(ctx context.Context, userID string)
 // Password Management
 // ============================================================================
 
-func (r *authRepository) UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError {
+func (r *authRepository) CheckPreviousPasswords(ctx context.Context, userID string, newHash string) (bool, pkgErrors.AppError) {
+	r.log.Debug("Checking new password against previous passwords",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+	query := `SELECT password_history FROM auth.users WHERE id = $1 LIMIT 1`
+	row := r.db.QueryRow(ctx, query, userID)
+	var passwordHistoryJson []byte
+	err := row.Scan(&passwordHistoryJson)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("User not found when checking previous passwords",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return false, nil
+		}
+		return false, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get password history for user").
+			WithDetail("user_id", userID)
+	}
+	var passwordHistory []domain.PasswordHistoryEntry
+	if err := json.Unmarshal(passwordHistoryJson, &passwordHistory); err != nil {
+		return false, pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to parse password history JSON").
+			WithDetail("user_id", userID)
+	}
+	for _, entry := range passwordHistory {
+		if entry.Hash == newHash {
+			r.log.Debug("New password matches a previous password",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return true, nil
+		}
+	}
+	r.log.Debug("New password does not match any previous passwords",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	return false, nil
+}
+
+func (r *authRepository) UpdatePassword(ctx context.Context, userID string, input domain.PasswordHistoryEntry) pkgErrors.AppError {
 	r.log.Info("Updating user password",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
-		logger.String("algorithm", algorithm),
+		logger.String("algorithm", input.Algorithm),
 	)
 
 	query := `UPDATE auth.users
@@ -400,9 +442,15 @@ func (r *authRepository) UpdatePassword(ctx context.Context, userID string, hash
 		    password_algorithm = $3,
 		    password_last_changed_at = NOW(),
 		    requires_password_change = FALSE,
+			password_history = password_history || jsonb_build_array(jsonb_build_object(
+				"hash", $1,
+				"salt", $2,
+				"algorithm", $3,
+				"changed_at", NOW()
+			)),
 		    updated_at = NOW()
 		WHERE id = $4`
-	result, err := r.db.Exec(ctx, query, hash, salt, algorithm, userID)
+	result, err := r.db.Exec(ctx, query, input.Hash, input.Salt, input.Algorithm, userID)
 	if err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update password").
 			WithDetail("user_id", userID)

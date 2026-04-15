@@ -9,6 +9,7 @@ const (
 	RLLoginUserPrefix      = "rl:login:user:"
 	RLRegisterIPPrefix     = "rl:register:ip:"
 	RLPwdForgotEmailPrefix = "rl:pwd_forgot:email:"
+	RLPwdForgotIPPrefix    = "rl:pwd_forgot:ip:"
 	RLPwdResetIPPrefix     = "rl:pwd_reset:ip:"
 	RLResendVerifyPrefix   = "rl:resend_verify:user:"
 	RLOtpSendPhonePrefix   = "rl:otp_send:phone:"
@@ -29,6 +30,7 @@ var (
 	TTLLoginWindow    = 15 * time.Minute
 	TTLRegisterIP     = 1 * time.Hour
 	TTLPwdForgotEmail = 1 * time.Hour
+	TTLPwdForgotIP    = 1 * time.Hour
 	TTLPwdResetIP     = 1 * time.Hour
 	TTLResendVerify   = 1 * time.Hour
 	TTLOtpSendPhone   = 10 * time.Minute

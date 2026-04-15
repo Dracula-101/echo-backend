@@ -31,7 +31,8 @@ type AuthRepository interface {
 	IsNewLocation(ctx context.Context, userID string, city string) (bool, pkgErrors.AppError)
 
 	// Password management
-	UpdatePassword(ctx context.Context, userID string, hash string, salt string, algorithm string) pkgErrors.AppError
+	CheckPreviousPasswords(ctx context.Context, userID string, newHash string) (bool, pkgErrors.AppError)
+	UpdatePassword(ctx context.Context, userID string, input domain.PasswordHistoryEntry) pkgErrors.AppError
 
 	// Email verification
 	MarkEmailVerified(ctx context.Context, userID string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) pkgErrors.AppError

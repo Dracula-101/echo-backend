@@ -17,8 +17,10 @@ type RateLimiter interface {
 	IncrementLoginUser(ctx context.Context, userID string) (count int64, error pkgErrors.AppError)
 	AllowRegisterIP(ctx context.Context, ip string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
 	IncrementRegisterIP(ctx context.Context, ip string) (count int64, error pkgErrors.AppError)
-	AllowPwdForgot(ctx context.Context, email string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
-	IncrementPwdForgot(ctx context.Context, email string) (count int64, error pkgErrors.AppError)
+	AllowPwdForgotIP(ctx context.Context, ip string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementPwdForgotIP(ctx context.Context, ip string) (count int64, error pkgErrors.AppError)
+	AllowPwdForgotEmail(ctx context.Context, email string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
+	IncrementPwdForgotEmail(ctx context.Context, email string) (count int64, error pkgErrors.AppError)
 	AllowPwdResetIP(ctx context.Context, ip string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
 	IncrementPwdResetIP(ctx context.Context, ip string) (count int64, error pkgErrors.AppError)
 	AllowResendVerify(ctx context.Context, userID string, limit int64) (allowed bool, count int64, error pkgErrors.AppError)
@@ -122,12 +124,20 @@ func (r *rateLimiter) IncrementRegisterIP(ctx context.Context, ip string) (int64
 	return r.incrementWindow(ctx, RLRegisterIPPrefix+ip, TTLRegisterIP)
 }
 
-func (r *rateLimiter) AllowPwdForgot(ctx context.Context, email string, limit int64) (bool, int64, pkgErrors.AppError) {
+func (r *rateLimiter) AllowPwdForgotEmail(ctx context.Context, email string, limit int64) (bool, int64, pkgErrors.AppError) {
 	return r.allowWindow(ctx, RLPwdForgotEmailPrefix+email, TTLPwdForgotEmail, limit)
 }
 
-func (r *rateLimiter) IncrementPwdForgot(ctx context.Context, email string) (int64, pkgErrors.AppError) {
+func (r *rateLimiter) IncrementPwdForgotEmail(ctx context.Context, email string) (int64, pkgErrors.AppError) {
 	return r.incrementWindow(ctx, RLPwdForgotEmailPrefix+email, TTLPwdForgotEmail)
+}
+
+func (r *rateLimiter) AllowPwdForgotIP(ctx context.Context, ip string, limit int64) (bool, int64, pkgErrors.AppError) {
+	return r.allowWindow(ctx, RLPwdForgotIPPrefix+ip, TTLPwdForgotIP, limit)
+}
+
+func (r *rateLimiter) IncrementPwdForgotIP(ctx context.Context, ip string) (int64, pkgErrors.AppError) {
+	return r.incrementWindow(ctx, RLPwdForgotIPPrefix+ip, TTLPwdForgotIP)
 }
 
 func (r *rateLimiter) AllowPwdResetIP(ctx context.Context, ip string, limit int64) (bool, int64, pkgErrors.AppError) {

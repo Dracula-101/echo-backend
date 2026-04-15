@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"time"
 
+	"auth-service/internal/domain"
 	authErrors "auth-service/internal/error"
 
+	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -31,6 +33,15 @@ func (s *authService) ForgotPassword(ctx context.Context, email string, ipAddres
 		s.log.Debug("Forgot password for non-existent user",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("email", email),
+		)
+		return nil
+	}
+
+	if user.AccountStatus != models.AccountStatusActive {
+		s.log.Debug("Forgot password for non-active account",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("email", email),
+			logger.String("account_status", string(user.AccountStatus)),
 		)
 		return nil
 	}
@@ -148,7 +159,12 @@ func (s *authService) ResetPassword(ctx context.Context, token string, newPasswo
 	}
 
 	salt := base64.StdEncoding.EncodeToString(result.Salt)
-	updateErr := s.repo.UpdatePassword(ctx, resetToken.UserID, result.Encoded, salt, string(result.Algorithm))
+	updateErr := s.repo.UpdatePassword(ctx, resetToken.UserID, domain.PasswordHistoryEntry{
+		Hash:      result.Encoded,
+		Salt:      salt,
+		Algorithm: string(result.Algorithm),
+		ChangedAt: time.Now(),
+	})
 	if updateErr != nil {
 		return &authErrors.AuthError{
 			Message: "Failed to update password",
@@ -241,7 +257,12 @@ func (s *authService) ChangePassword(ctx context.Context, userID string, current
 	if result.Salt != nil {
 		salt = string(result.Salt)
 	}
-	updateErr := s.repo.UpdatePassword(ctx, userID, result.Encoded, salt, string(result.Algorithm))
+	updateErr := s.repo.UpdatePassword(ctx, userID, domain.PasswordHistoryEntry{
+		Hash:      result.Encoded,
+		Salt:      salt,
+		Algorithm: string(result.Algorithm),
+		ChangedAt: time.Now(),
+	})
 	if updateErr != nil {
 		return &authErrors.AuthError{
 			Message: "Failed to update password",

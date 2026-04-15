@@ -231,8 +231,51 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 			"/logout",
 			req.Adapt(h.Logout),
 		)
-		r.Post("/forgot-password", req.Adapt(h.ForgotPassword))
-		r.Post("/reset-password", req.Adapt(h.ResetPassword))
+		r.Post(
+			"/forgot-password",
+			req.Adapt(h.ForgotPassword),
+			middleware.RateLimitMulti(
+				rateLimiter,
+				middleware.RateLimitCheck{
+					Allow: func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+						return rateLimiter.AllowPwdForgotIP(ctx, key, limit)
+					},
+					Key: func(req req.RequestHandler) string {
+						return req.GetClientIP()
+					},
+					Limit: 5,
+				},
+				middleware.RateLimitCheck{
+					Allow: func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+						if key == "" {
+							return true, 0, nil
+						}
+						return rateLimiter.AllowPwdForgotEmail(ctx, key, limit)
+					},
+					Key: func(req req.RequestHandler) string {
+						ok, email := req.GetBodyValue("email")
+						if !ok {
+							return ""
+						}
+						return email
+					},
+					Limit: 5,
+				},
+			),
+		)
+		r.Post(
+			"/reset-password", 
+			req.Adapt(h.ResetPassword),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return rateLimiter.AllowPwdResetIP(ctx, key, limit)
+				}, 
+				func(req req.RequestHandler) string {
+					return req.GetClientIP()
+				}, 
+				10,
+			),
+		)
 		r.Post("/change-password", req.Adapt(h.ChangePassword))
 		r.Post("/verify-email", req.Adapt(h.VerifyEmail))
 		r.Post(
@@ -248,7 +291,6 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 				5,
 			),
 		)
-
 		r.Get("/sessions", req.Adapt(h.GetSessions))
 		r.Delete("/sessions/{id}", req.Adapt(h.DeleteSession))
 

@@ -8,7 +8,7 @@ import (
 
 // ResetPasswordRequest represents the payload required to reset a user's password.
 type ResetPasswordRequest struct {
-	Token       string `json:"token" validate:"required"`
+	Token       string `json:"token" validate:"required,min=8,max=128"`
 	NewPassword string `json:"new_password" validate:"required,min=8,max=128"`
 }
 
