@@ -37,17 +37,28 @@ database:
   log_queries: ${DB_LOG_QUERIES:false}
 
 kafka:
-  brokers:
-    - ${KAFKA_BROKERS}
-  topic: ${KAFKA_TOPIC:chat-messages}
-  client_id: ${KAKFA_CLIENT_ID:message-service}
-  group_id: ${KAFKA_GROUP_ID:database-writers}
-  compression: ${KAFKA_COMPRESSION_TYPE:snappy}
-  batch_size: ${KAFKA_BATCH_SIZE:16384}
-  linger_ms: ${KAFKA_LINGER_MS:10}
-  acks: ${KAFKA_ACKS:all}
-  enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
-  max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
+  producer:
+    brokers:
+      - ${KAFKA_BROKERS}
+    client_id: ${KAFKA_PRODUCER_CLIENT_ID:message-service-producer}
+    topic: ${KAFKA_TOPIC:chat-messages}
+    compression: ${KAFKA_COMPRESSION_TYPE:snappy}
+    batch_size: ${KAFKA_BATCH_SIZE:16384}
+    linger_ms: ${KAFKA_LINGER_MS:10}
+    acks: ${KAFKA_ACKS:all}
+    enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
+    max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
+    max_retries: ${KAFKA_MAX_RETRIES:5}
+    retry_backoff: ${KAFKA_RETRY_BACKOFF:100ms}
+    dial_timeout: ${KAFKA_DIAL_TIMEOUT:10s}
+  consumer:
+    brokers:
+      - ${KAFKA_BROKERS}
+    client_id: ${KAFKA_CONSUMER_CLIENT_ID:message-service-consumer}
+    topic: ${KAFKA_TOPIC:chat-messages}
+    group_id: ${KAFKA_GROUP_ID:database-writers}
+    session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
+    heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 
 cache:
   enabled: ${CACHE_ENABLED:true}

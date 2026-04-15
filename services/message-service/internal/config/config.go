@@ -53,17 +53,37 @@ type DatabaseConfig struct {
 	LogQueries      bool          `yaml:"log_queries" mapstructure:"log_queries"`
 }
 
+// KafkaConfig groups producer and consumer configuration for the message-service.
+// Message-service is both a producer (chat messages) and a consumer (chat messages + delivery events).
 type KafkaConfig struct {
-	Brokers           []string `yaml:"brokers" mapstructure:"brokers"`
-	Topic             string   `yaml:"topic" mapstructure:"topic"`
-	ClientID          string   `yaml:"client_id" mapstructure:"client_id"`
-	GroupID           string   `yaml:"group_id" mapstructure:"group_id"`
-	Compression       string   `yaml:"compression" mapstructure:"compression"`
-	BatchSize         int      `yaml:"batch_size" mapstructure:"batch_size"`
-	LingerMs          int      `yaml:"linger_ms" mapstructure:"linger_ms"`
-	Acks              string   `yaml:"acks" mapstructure:"acks"`
-	EnableIdempotence bool     `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`
-	MaxInFlight       int      `yaml:"max_in_flight" mapstructure:"max_in_flight"`
+	Producer KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
+	Consumer KafkaConsumerConfig `yaml:"consumer" mapstructure:"consumer"`
+}
+
+// KafkaProducerConfig holds producer-specific Kafka settings.
+type KafkaProducerConfig struct {
+	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
+	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
+	Compression       string        `yaml:"compression" mapstructure:"compression"`
+	BatchSize         int           `yaml:"batch_size" mapstructure:"batch_size"`
+	LingerMs          int           `yaml:"linger_ms" mapstructure:"linger_ms"`
+	Acks              string        `yaml:"acks" mapstructure:"acks"`
+	EnableIdempotence bool          `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`
+	MaxInFlight       int           `yaml:"max_in_flight" mapstructure:"max_in_flight"`
+	MaxRetries        int           `yaml:"max_retries" mapstructure:"max_retries"`
+	RetryBackoff      time.Duration `yaml:"retry_backoff" mapstructure:"retry_backoff"`
+	DialTimeout       time.Duration `yaml:"dial_timeout" mapstructure:"dial_timeout"`
+}
+
+// KafkaConsumerConfig holds consumer-specific Kafka settings.
+type KafkaConsumerConfig struct {
+	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
+	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
+	GroupID           string        `yaml:"group_id" mapstructure:"group_id"`
+	SessionTimeout    time.Duration `yaml:"session_timeout" mapstructure:"session_timeout"`
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval" mapstructure:"heartbeat_interval"`
 }
 
 type CacheConfig struct {

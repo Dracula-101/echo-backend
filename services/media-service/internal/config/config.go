@@ -95,16 +95,24 @@ type StorageConfig struct {
 	UploadTimeout   time.Duration `yaml:"upload_timeout" mapstructure:"upload_timeout"`
 }
 
-// KafkaConfig contains Kafka configuration
+// KafkaConfig groups producer configuration for the media-service.
+// Media-service is a producer only — it publishes media processing events.
 type KafkaConfig struct {
+	Producer KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
+}
+
+// KafkaProducerConfig holds producer-specific Kafka settings.
+type KafkaProducerConfig struct {
 	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
-	Topic             string        `yaml:"topic" mapstructure:"topic"`
 	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
-	GroupID           string        `yaml:"group_id" mapstructure:"group_id"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
 	MaxRetries        int           `yaml:"max_retries" mapstructure:"max_retries"`
 	RetryBackoff      time.Duration `yaml:"retry_backoff" mapstructure:"retry_backoff"`
-	SessionTimeout    time.Duration `yaml:"session_timeout" mapstructure:"session_timeout"`
-	HeartbeatInterval time.Duration `yaml:"heartbeat_interval" mapstructure:"heartbeat_interval"`
+	Compression       string        `yaml:"compression" mapstructure:"compression"`
+	Acks              string        `yaml:"acks" mapstructure:"acks"`
+	EnableIdempotence bool          `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`
+	MaxInFlight       int           `yaml:"max_in_flight" mapstructure:"max_in_flight"`
+	DialTimeout       time.Duration `yaml:"dial_timeout" mapstructure:"dial_timeout"`
 }
 
 // SecurityConfig contains security configuration

@@ -102,6 +102,14 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	})
 	if authErr != nil {
 		h.handleFailedLogin(ctx, user.ID, handler, *authErr)
+		h.authService.RecordFailedLogin(ctx, domain.FailedLoginAttemptInput{
+			UserID:      user.ID,
+			Device:      deviceInfo,
+			Location:    &locationInfo,
+			UserAgent:   userAgent,
+			Reason:      fmt.Sprintf("[%s] - %s", authErr.Code, authErr.Message),
+			LoginMethod: "password",
+		})
 		return
 	}
 

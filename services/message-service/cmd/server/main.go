@@ -111,18 +111,23 @@ func createCacheClient(cfg config.CacheConfig, log logger.Logger) (cache.Cache, 
 	return cacheClient, nil
 }
 
-func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.Producer, error) {
+func createKafkaProducer(cfg config.KafkaProducerConfig, log logger.Logger) (messaging.Producer, error) {
 	log.Debug("Creating Kafka producer",
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("topic", cfg.Topic),
 	)
-	producer, err := kafka.NewProducer(messaging.Config{
+	producer, err := kafka.NewProducer(messaging.ProducerConfig{
 		Brokers:           cfg.Brokers,
 		ClientID:          cfg.ClientID,
-		GroupID:           cfg.GroupID,
-		RetryBackoff:      100,
-		SessionTimeout:    30000,
-		HeartbeatInterval: 10000,
-		MaxRetries:        5,
+		Compression:       cfg.Compression,
+		BatchSize:         cfg.BatchSize,
+		LingerMs:          cfg.LingerMs,
+		Acks:              cfg.Acks,
+		EnableIdempotence: cfg.EnableIdempotence,
+		MaxInFlight:       cfg.MaxInFlight,
+		MaxRetries:        cfg.MaxRetries,
+		RetryBackoff:      cfg.RetryBackoff,
+		DialTimeout:       cfg.DialTimeout,
 	})
 	if err != nil {
 		log.Error("Failed to create Kafka producer", logger.Error(err))
@@ -130,23 +135,22 @@ func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.P
 	}
 	log.Info("Kafka producer created successfully",
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("topic", cfg.Topic),
 	)
 	return producer, nil
 }
 
-func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.Consumer, error) {
+func createKafkaConsumer(cfg config.KafkaConsumerConfig, log logger.Logger) (messaging.Consumer, error) {
 	log.Debug("Creating Kafka consumer",
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
 		logger.String("group_id", cfg.GroupID),
 	)
-	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+	kafkaConsumer, err := kafka.NewConsumer(messaging.ConsumerConfig{
 		Brokers:           cfg.Brokers,
 		ClientID:          cfg.ClientID,
 		GroupID:           cfg.GroupID,
-		RetryBackoff:      100,
-		SessionTimeout:    30000,
-		HeartbeatInterval: 10000,
-		MaxRetries:        5,
+		SessionTimeout:    cfg.SessionTimeout,
+		HeartbeatInterval: cfg.HeartbeatInterval,
 	})
 	if err != nil {
 		log.Error("Failed to create Kafka consumer", logger.Error(err))
@@ -194,20 +198,18 @@ func startDeliveryEventConsumer(
 	}
 }
 
-func createDeliveryKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.Consumer, error) {
+func createDeliveryKafkaConsumer(cfg config.KafkaConsumerConfig, log logger.Logger) (messaging.Consumer, error) {
 	deliveryGroupID := cfg.GroupID + "-delivery"
 	log.Debug("Creating Kafka consumer for delivery events",
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
 		logger.String("group_id", deliveryGroupID),
 	)
-	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+	kafkaConsumer, err := kafka.NewConsumer(messaging.ConsumerConfig{
 		Brokers:           cfg.Brokers,
 		ClientID:          cfg.ClientID + "-delivery",
 		GroupID:           deliveryGroupID,
-		RetryBackoff:      100,
-		SessionTimeout:    30000,
-		HeartbeatInterval: 10000,
-		MaxRetries:        5,
+		SessionTimeout:    cfg.SessionTimeout,
+		HeartbeatInterval: cfg.HeartbeatInterval,
 	})
 	if err != nil {
 		log.Error("Failed to create delivery Kafka consumer", logger.Error(err))
@@ -448,7 +450,7 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
-	kafkaProducer, err := createKafkaProducer(cfg.Kafka, log)
+	kafkaProducer, err := createKafkaProducer(cfg.Kafka.Producer, log)
 	if err != nil {
 		log.Fatal("Failed to create Kafka producer", logger.Error(err))
 	}
@@ -462,7 +464,7 @@ func main() {
 	}()
 
 	// Create Kafka consumer for chat messages
-	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
+	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka.Consumer, log)
 	if err != nil {
 		log.Fatal("Failed to create Kafka consumer", logger.Error(err))
 	}
@@ -476,7 +478,7 @@ func main() {
 	}()
 
 	// Create Kafka consumer for delivery events (separate consumer group)
-	deliveryKafkaConsumer, err := createDeliveryKafkaConsumer(cfg.Kafka, log)
+	deliveryKafkaConsumer, err := createDeliveryKafkaConsumer(cfg.Kafka.Consumer, log)
 	if err != nil {
 		log.Fatal("Failed to create delivery Kafka consumer", logger.Error(err))
 	}
@@ -555,7 +557,7 @@ func main() {
 	}
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Consumer.Topic, log)
 	go startDeliveryEventConsumer(consumerCtx, deliveryKafkaConsumer, deliveryEventConsumer, "delivery-events", log)
 
 	shutdownMgr := setupShutdownManager(srv, kafkaConsumer, deliveryKafkaConsumer, consumerCancel, cfg, log)

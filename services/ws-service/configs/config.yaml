@@ -67,11 +67,25 @@ websocket:
   allowed_origins: ${WS_ALLOWED_ORIGINS:}
 
 kafka:
-  brokers:
-    - ${KAFKA_BROKERS:localhost:9092}
-  topic: ${KAFKA_TOPIC:chat-messages}
-  client_id: ${KAFKA_CLIENT_ID:ws-service}
-  group_id: ${KAFKA_GROUP_ID:ws-delivery-group}
+  producer:
+    brokers:
+      - ${KAFKA_BROKERS:localhost:9092}
+    client_id: ${KAFKA_PRODUCER_CLIENT_ID:ws-service-producer}
+    compression: ${KAFKA_COMPRESSION:snappy}
+    acks: ${KAFKA_ACKS:all}
+    enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
+    max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
+    max_retries: ${KAFKA_MAX_RETRIES:3}
+    retry_backoff: ${KAFKA_RETRY_BACKOFF:100ms}
+    dial_timeout: ${KAFKA_DIAL_TIMEOUT:10s}
+  consumer:
+    brokers:
+      - ${KAFKA_BROKERS:localhost:9092}
+    client_id: ${KAFKA_CONSUMER_CLIENT_ID:ws-service}
+    topic: ${KAFKA_TOPIC:chat-messages}
+    group_id: ${KAFKA_GROUP_ID:ws-delivery-group}
+    session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
+    heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 
 logging:
   level: ${LOG_LEVEL:info}

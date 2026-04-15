@@ -54,6 +54,20 @@ location_service:
   enabled: ${LOCATION_SERVICE_ENABLED:true}
   endpoint: ${LOCATION_SERVICE_ENDPOINT:http://localhost:8090/lookup}
 
+kafka:
+  producer:
+    brokers:
+      - ${KAFKA_BROKERS:localhost:9092}
+    client_id: ${KAFKA_CLIENT_ID:auth-service}
+    topic: ${KAFKA_TOPIC:auth-events}
+    max_retries: ${KAFKA_MAX_RETRIES:5}
+    retry_backoff: ${KAFKA_RETRY_BACKOFF:500ms}
+    compression: ${KAFKA_COMPRESSION:snappy}
+    acks: ${KAFKA_ACKS:all}
+    enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
+    max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
+    dial_timeout: ${KAFKA_DIAL_TIMEOUT:10s}
+
 auth:
   jwt:
     access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}

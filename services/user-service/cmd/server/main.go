@@ -120,25 +120,24 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 }
 
 func createConsumer(cfg *config.Config, userRepo repository.UserRepository, log logger.Logger) (*consumer.MediaEventsConsumer, error) {
+	c := cfg.Kafka.Consumer
 	log.Debug("Creating messaging consumer - configuration",
-		logger.Any("brokers", cfg.Kafka.Brokers),
-		logger.String("topic", cfg.Kafka.Topic),
-		logger.String("groupID", cfg.Kafka.GroupID),
+		logger.Any("brokers", c.Brokers),
+		logger.String("topic", c.Topic),
+		logger.String("groupID", c.GroupID),
 	)
-	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
-		Brokers:           cfg.Kafka.Brokers,
-		GroupID:           cfg.Kafka.GroupID,
-		ClientID:          cfg.Kafka.ClientID,
-		MaxRetries:        cfg.Kafka.MaxRetries,
-		RetryBackoff:      cfg.Kafka.RetryBackoff,
-		SessionTimeout:    cfg.Kafka.SessionTimeout,
-		HeartbeatInterval: cfg.Kafka.HeartbeatInterval,
+	kafkaConsumer, err := kafka.NewConsumer(messaging.ConsumerConfig{
+		Brokers:           c.Brokers,
+		ClientID:          c.ClientID,
+		GroupID:           c.GroupID,
+		SessionTimeout:    c.SessionTimeout,
+		HeartbeatInterval: c.HeartbeatInterval,
 	})
 	if err != nil {
 		log.Error("Failed to create messaging consumer", logger.Error(err))
 		return nil, err
 	}
-	mediaConsumer := consumer.NewMediaEventConsumer(kafkaConsumer, cfg.Kafka, userRepo, log)
+	mediaConsumer := consumer.NewMediaEventConsumer(kafkaConsumer, c, userRepo, log)
 	log.Info("Messaging consumer created successfully")
 
 	// start the consumer

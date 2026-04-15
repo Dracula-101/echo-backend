@@ -20,14 +20,14 @@ type MediaEventsConsumer interface {
 
 type mediaEventConsumer struct {
 	consumer messaging.Consumer
-	cfg      config.KafkaConfig
+	cfg      config.KafkaConsumerConfig
 	userRepo repository.UserRepository
 	log      logger.Logger
 }
 
 func NewMediaEventConsumer(
 	consumer messaging.Consumer,
-	cfg config.KafkaConfig,
+	cfg config.KafkaConsumerConfig,
 	userRepo repository.UserRepository,
 	log logger.Logger,
 ) MediaEventsConsumer {

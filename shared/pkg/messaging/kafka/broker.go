@@ -17,16 +17,18 @@ type broker struct {
 	consumer sarama.ConsumerGroup
 }
 
-func NewBroker(cfg messaging.Config) (messaging.Broker, error) {
+func NewBroker(producerCfg messaging.ProducerConfig, consumerCfg messaging.ConsumerConfig) (messaging.Broker, error) {
 	config := sarama.NewConfig()
 	config.Version = sarama.V3_0_0_0
-	config.ClientID = cfg.ClientID
+	config.ClientID = producerCfg.ClientID
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
+	config.Producer.Compression = parseCompression(producerCfg.Compression)
+	config.Producer.RequiredAcks = parseAcks(producerCfg.Acks)
+	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 
-	client, err := sarama.NewClient(cfg.Brokers, config)
+	client, err := sarama.NewClient(producerCfg.Brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka client: %w", err)
 	}

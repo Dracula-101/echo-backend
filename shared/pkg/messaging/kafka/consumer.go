@@ -20,13 +20,27 @@ type consumer struct {
 	wg      sync.WaitGroup
 }
 
-func NewConsumer(cfg messaging.Config) (messaging.Consumer, error) {
+func NewConsumer(cfg messaging.ConsumerConfig) (messaging.Consumer, error) {
+	if len(cfg.Brokers) == 0 {
+		return nil, fmt.Errorf("kafka consumer: no brokers configured")
+	}
+	if cfg.GroupID == "" {
+		return nil, fmt.Errorf("kafka consumer: group_id is required")
+	}
+
 	config := sarama.NewConfig()
 	config.Version = sarama.V3_0_0_0
 	config.ClientID = cfg.ClientID
-	config.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategyRoundRobin()
+	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.Consumer.Return.Errors = true
+
+	if cfg.SessionTimeout > 0 {
+		config.Consumer.Group.Session.Timeout = cfg.SessionTimeout
+	}
+	if cfg.HeartbeatInterval > 0 {
+		config.Consumer.Group.Heartbeat.Interval = cfg.HeartbeatInterval
+	}
 
 	group, err := sarama.NewConsumerGroup(cfg.Brokers, cfg.GroupID, config)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -16,29 +17,49 @@ type producer struct {
 	producer sarama.SyncProducer
 }
 
-func NewProducer(cfg messaging.Config) (messaging.Producer, error) {
+func NewProducer(cfg messaging.ProducerConfig) (messaging.Producer, error) {
+	if len(cfg.Brokers) == 0 {
+		return nil, fmt.Errorf("kafka producer: no brokers configured")
+	}
+
 	config := sarama.NewConfig()
 	config.Version = sarama.V3_0_0_0
 	config.ClientID = cfg.ClientID
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = cfg.MaxRetries
-	config.Producer.Compression = sarama.CompressionSnappy
 
-	// Timeout guards — prevent hanging forever if broker is unreachable
-	config.Net.DialTimeout = 10 * time.Second
-	config.Net.ReadTimeout = 10 * time.Second
-	config.Net.WriteTimeout = 10 * time.Second
-	config.Producer.Timeout = 10 * time.Second
+	// Acks
+	config.Producer.RequiredAcks = parseAcks(cfg.Acks)
 
-	if len(cfg.Brokers) == 0 {
-		return nil, fmt.Errorf("kafka producer: no brokers configured")
+	// Compression
+	config.Producer.Compression = parseCompression(cfg.Compression)
+
+	// Batching
+	if cfg.BatchSize > 0 {
+		config.Producer.Flush.Bytes = cfg.BatchSize
 	}
+	if cfg.LingerMs > 0 {
+		config.Producer.Flush.Frequency = time.Duration(cfg.LingerMs) * time.Millisecond
+	}
+
+	// Idempotence requires Acks=all and MaxOpenRequests=1.
+	if cfg.EnableIdempotence {
+		config.Producer.Idempotent = true
+		config.Producer.RequiredAcks = sarama.WaitForAll
+		config.Net.MaxOpenRequests = 1
+	} else if cfg.MaxInFlight > 0 {
+		config.Net.MaxOpenRequests = cfg.MaxInFlight
+	}
+
+	// Network timeouts — fall back to 10s when not set.
+	config.Net.DialTimeout = durOr(cfg.DialTimeout, 10*time.Second)
+	config.Net.ReadTimeout = durOr(cfg.ReadTimeout, 10*time.Second)
+	config.Net.WriteTimeout = durOr(cfg.WriteTimeout, 10*time.Second)
+	config.Producer.Timeout = durOr(cfg.ProducerTimeout, 10*time.Second)
 
 	prod, err := sarama.NewSyncProducer(cfg.Brokers, config)
 	if err != nil {
-		// Surface the full sarama error — broker unreachable, auth failure, etc.
 		return nil, fmt.Errorf("failed to create kafka producer (brokers: %v): %w", cfg.Brokers, err)
 	}
 
@@ -46,7 +67,6 @@ func NewProducer(cfg messaging.Config) (messaging.Producer, error) {
 }
 
 func (p *producer) Send(ctx context.Context, topic string, message *messaging.Message) pkgErrors.AppError {
-	// Respect context cancellation before doing network I/O
 	if err := ctx.Err(); err != nil {
 		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "context cancelled before kafka send").
 			WithService("kafka-producer").
@@ -65,8 +85,8 @@ func (p *producer) Send(ctx context.Context, topic string, message *messaging.Me
 		return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to send kafka message").
 			WithService("kafka-producer").
 			WithDetail("topic", topic).
-			WithDetail("key", string(message.Key)). // Fix: was []byte, now readable string
-			WithDetail("cause", err.Error())        // Fix: surface the actual sarama error
+			WithDetail("key", string(message.Key)).
+			WithDetail("cause", err.Error())
 	}
 
 	return nil
@@ -94,8 +114,6 @@ func (p *producer) SendBatch(ctx context.Context, topic string, messages []*mess
 		return nil
 	}
 
-	// sarama.SendMessages returns ProducerErrors — a slice of per-message failures.
-	// Unwrap it to get individual causes instead of a useless aggregate string.
 	var prodErrs sarama.ProducerErrors
 	if errors.As(err, &prodErrs) {
 		causes := make([]string, 0, len(prodErrs))
@@ -107,10 +125,9 @@ func (p *producer) SendBatch(ctx context.Context, topic string, messages []*mess
 			WithDetail("topic", topic).
 			WithDetail("total_count", len(messages)).
 			WithDetail("failed_count", len(prodErrs)).
-			WithDetail("causes", causes) // each failed message's key + reason
+			WithDetail("causes", causes)
 	}
 
-	// Fallback for unexpected non-ProducerErrors error type
 	return pkgErrors.FromError(err, pkgErrors.CodeInternal, "failed to send kafka batch (unknown error type)").
 		WithService("kafka-producer").
 		WithDetail("topic", topic).
@@ -121,7 +138,6 @@ func (p *producer) Close() error {
 	return p.producer.Close()
 }
 
-// buildProducerMessage extracts the shared message-building logic to avoid duplication.
 func buildProducerMessage(topic string, message *messaging.Message) *sarama.ProducerMessage {
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
@@ -137,4 +153,38 @@ func buildProducerMessage(topic string, message *messaging.Message) *sarama.Prod
 	}
 
 	return msg
+}
+
+func parseAcks(acks string) sarama.RequiredAcks {
+	switch strings.ToLower(acks) {
+	case "all", "-1":
+		return sarama.WaitForAll
+	case "local", "1":
+		return sarama.WaitForLocal
+	default:
+		return sarama.WaitForAll // safe default
+	}
+}
+
+func parseCompression(codec string) sarama.CompressionCodec {
+	switch strings.ToLower(codec) {
+	case "gzip":
+		return sarama.CompressionGZIP
+	case "lz4":
+		return sarama.CompressionLZ4
+	case "zstd":
+		return sarama.CompressionZSTD
+	case "none", "":
+		return sarama.CompressionNone
+	default: // "snappy" and anything unrecognised
+		return sarama.CompressionSnappy
+	}
+}
+
+// durOr returns d if non-zero, otherwise fallback.
+func durOr(d, fallback time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return fallback
 }

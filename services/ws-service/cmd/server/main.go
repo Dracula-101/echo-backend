@@ -127,21 +127,19 @@ func createCacheClient(cfg config.RedisConfig, log logger.Logger) (cache.Cache, 
 	return cacheClient, nil
 }
 
-func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.Consumer, error) {
+func createKafkaConsumer(cfg config.KafkaConsumerConfig, log logger.Logger) (messaging.Consumer, error) {
 	log.Debug("Creating Kafka consumer",
 		logger.Strings("brokers", cfg.Brokers),
 		logger.String("group_id", cfg.GroupID),
 		logger.String("topic", cfg.Topic),
 	)
 
-	kafkaConsumer, err := kafka.NewConsumer(messaging.Config{
+	kafkaConsumer, err := kafka.NewConsumer(messaging.ConsumerConfig{
 		Brokers:           cfg.Brokers,
 		ClientID:          cfg.ClientID,
 		GroupID:           cfg.GroupID,
-		RetryBackoff:      100,
-		SessionTimeout:    30000,
-		HeartbeatInterval: 10000,
-		MaxRetries:        5,
+		SessionTimeout:    cfg.SessionTimeout,
+		HeartbeatInterval: cfg.HeartbeatInterval,
 	})
 	if err != nil {
 		log.Error("Failed to create Kafka consumer", logger.Error(err))
@@ -152,14 +150,21 @@ func createKafkaConsumer(cfg config.KafkaConfig, log logger.Logger) (messaging.C
 	return kafkaConsumer, nil
 }
 
-func createKafkaProducer(cfg config.KafkaConfig, log logger.Logger) (messaging.Producer, error) {
+func createKafkaProducer(cfg config.KafkaProducerConfig, log logger.Logger) (messaging.Producer, error) {
 	log.Debug("Creating Kafka producer",
 		logger.Strings("brokers", cfg.Brokers),
 	)
 
-	producer, err := kafka.NewProducer(messaging.Config{
-		Brokers:  cfg.Brokers,
-		ClientID: cfg.ClientID + "-producer",
+	producer, err := kafka.NewProducer(messaging.ProducerConfig{
+		Brokers:           cfg.Brokers,
+		ClientID:          cfg.ClientID,
+		Compression:       cfg.Compression,
+		Acks:              cfg.Acks,
+		EnableIdempotence: cfg.EnableIdempotence,
+		MaxInFlight:       cfg.MaxInFlight,
+		MaxRetries:        cfg.MaxRetries,
+		RetryBackoff:      cfg.RetryBackoff,
+		DialTimeout:       cfg.DialTimeout,
 	})
 	if err != nil {
 		log.Error("Failed to create Kafka producer", logger.Error(err))
@@ -499,13 +504,13 @@ func main() {
 	}
 	log.Info("WebSocket engine started")
 
-	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka, log)
+	kafkaConsumer, err := createKafkaConsumer(cfg.Kafka.Consumer, log)
 	if err != nil {
 		log.Fatal("Failed to create Kafka consumer", logger.Error(err))
 	}
 
 	// Create Kafka producer for delivery events
-	kafkaProducer, err := createKafkaProducer(cfg.Kafka, log)
+	kafkaProducer, err := createKafkaProducer(cfg.Kafka.Producer, log)
 	if err != nil {
 		log.Fatal("Failed to create Kafka producer", logger.Error(err))
 	}
@@ -518,7 +523,7 @@ func main() {
 	chatMessageConsumer := consumer.NewChatMessageConsumer(manager, log)
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Topic, log)
+	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Consumer.Topic, log)
 
 	userRepo := repo.NewUserRepository(dbClient, log)
 	wsService := service.NewWSService(userRepo, cacheClient, manager.GetHub(), log)

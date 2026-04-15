@@ -9,6 +9,7 @@ type Config struct {
 	Database        DatabaseConfig        `yaml:"database" mapstructure:"database"`
 	Cache           CacheConfig           `yaml:"cache" mapstructure:"cache"`
 	LocationService LocationServiceConfig `yaml:"location_service" mapstructure:"location_service"`
+	Kafka           KafkaConfig           `yaml:"kafka" mapstructure:"kafka"`
 	Auth            AuthConfig            `yaml:"auth" mapstructure:"auth"`
 	Security        SecurityConfig        `yaml:"security" mapstructure:"security"`
 	Logging         LoggingConfig         `yaml:"logging" mapstructure:"logging"`
@@ -16,6 +17,26 @@ type Config struct {
 	Observability   ObservabilityConfig   `yaml:"observability" mapstructure:"observability"`
 	Shutdown        ShutdownConfig        `yaml:"shutdown" mapstructure:"shutdown"`
 	Features        FeaturesConfig        `yaml:"features" mapstructure:"features"`
+}
+
+// KafkaConfig groups producer configuration for the auth-service.
+// Auth-service is a producer only — it publishes auth events via the outbox pattern.
+type KafkaConfig struct {
+	Producer KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
+}
+
+// KafkaProducerConfig holds producer-specific Kafka settings.
+type KafkaProducerConfig struct {
+	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
+	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
+	MaxRetries        int           `yaml:"max_retries" mapstructure:"max_retries"`
+	RetryBackoff      time.Duration `yaml:"retry_backoff" mapstructure:"retry_backoff"`
+	Compression       string        `yaml:"compression" mapstructure:"compression"`
+	Acks              string        `yaml:"acks" mapstructure:"acks"`
+	EnableIdempotence bool          `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`
+	MaxInFlight       int           `yaml:"max_in_flight" mapstructure:"max_in_flight"`
+	DialTimeout       time.Duration `yaml:"dial_timeout" mapstructure:"dial_timeout"`
 }
 
 // ServiceConfig contains service metadata

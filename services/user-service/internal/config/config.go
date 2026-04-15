@@ -79,14 +79,18 @@ type RedisConfig struct {
 	RedisPoolTimeout  time.Duration `yaml:"pool_timeout" mapstructure:"pool_timeout"`
 }
 
-// KafkaConfig contains Kafka configuration
+// KafkaConfig groups consumer configuration for the user-service.
+// User-service is a consumer only — it consumes media events.
 type KafkaConfig struct {
+	Consumer KafkaConsumerConfig `yaml:"consumer" mapstructure:"consumer"`
+}
+
+// KafkaConsumerConfig holds consumer-specific Kafka settings.
+type KafkaConsumerConfig struct {
 	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
-	Topic             string        `yaml:"topic" mapstructure:"topic"`
 	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	Topic             string        `yaml:"topic" mapstructure:"topic"`
 	GroupID           string        `yaml:"group_id" mapstructure:"group_id"`
-	MaxRetries        int           `yaml:"max_retries" mapstructure:"max_retries"`
-	RetryBackoff      time.Duration `yaml:"retry_backoff" mapstructure:"retry_backoff"`
 	SessionTimeout    time.Duration `yaml:"session_timeout" mapstructure:"session_timeout"`
 	HeartbeatInterval time.Duration `yaml:"heartbeat_interval" mapstructure:"heartbeat_interval"`
 }

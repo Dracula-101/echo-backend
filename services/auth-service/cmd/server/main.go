@@ -10,6 +10,7 @@ import (
 	repository "auth-service/internal/repo"
 	"auth-service/internal/repo/email_verification"
 	"auth-service/internal/repo/login_history"
+	"auth-service/internal/repo/outbox"
 	"auth-service/internal/repo/password_reset"
 	"auth-service/internal/repo/session"
 	"auth-service/internal/service"
@@ -27,6 +28,8 @@ import (
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
+	"shared/pkg/messaging"
+	"shared/pkg/messaging/kafka"
 	"shared/pkg/windowstore"
 	redisWindowStore "shared/pkg/windowstore/redis"
 	"shared/server/common/hashing"
@@ -170,6 +173,33 @@ func setupEmailService(cfg config.Config, log logger.Logger) *email.EmailService
 		log.Warn("No valid email provider configured, email functionality will be disabled")
 	}
 	return &emailService
+}
+
+func createKafkaProducer(cfg config.KafkaProducerConfig, log logger.Logger) (messaging.Producer, error) {
+	log.Debug("Creating Kafka producer",
+		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
+		logger.String("topic", cfg.Topic),
+	)
+	producer, err := kafka.NewProducer(messaging.ProducerConfig{
+		Brokers:           cfg.Brokers,
+		ClientID:          cfg.ClientID,
+		MaxRetries:        cfg.MaxRetries,
+		RetryBackoff:      cfg.RetryBackoff,
+		Compression:       cfg.Compression,
+		Acks:              cfg.Acks,
+		EnableIdempotence: cfg.EnableIdempotence,
+		MaxInFlight:       cfg.MaxInFlight,
+		DialTimeout:       cfg.DialTimeout,
+	})
+	if err != nil {
+		log.Error("Failed to create Kafka producer", logger.Error(err))
+		return nil, err
+	}
+	log.Info("Kafka producer created successfully",
+		logger.String("topic", cfg.Topic),
+		logger.Strings("brokers", cfg.Brokers),
+	)
+	return producer, nil
 }
 
 func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
@@ -509,6 +539,17 @@ func main() {
 		}()
 	}
 
+	kafkaProducer, err := createKafkaProducer(cfg.Kafka.Producer, log)
+	if err != nil {
+		log.Fatal("Failed to create Kafka producer", logger.Error(err))
+	}
+	defer func() {
+		log.Info("Closing Kafka producer")
+		if err := kafkaProducer.Close(); err != nil {
+			log.Error("Failed to close Kafka producer", logger.Error(err))
+		}
+	}()
+
 	authCache := authCache.NewAuthCache(cacheClient, log)
 	sessionCache := sessionSvc.NewSessionCache(cacheClient, log)
 	rateLimiter := createRateLimiter(cacheClient, windowStore, log)
@@ -518,13 +559,14 @@ func main() {
 	hashingService := createHashingService(*cfg, log)
 	locationService := location.NewLocationService(cfg.LocationService.Endpoint, log)
 
+	_ = outbox.NewOutboxRepository(dbClient, log)
 	loginHistoryRepo := login_history.NewLoginHistoryRepo(dbClient, log)
 	sessionRepo := session.NewSessionRepo(dbClient, log)
 	sessionService := sessionSvc.NewSessionService(sessionRepo, sessionCache, *tokenService, log, cfg.Cache)
 	emailVerificationRepo := email_verification.NewEmailVerificationTokenRepo(dbClient, log)
 	resetTokenRepo := password_reset.NewPasswordResetTokenRepo(dbClient, log)
-
 	authRepo := repository.NewAuthRepository(dbClient, log)
+
 	authService := service.NewAuthServiceBuilder().
 		WithRepo(authRepo).
 		WithLoginHistoryRepo(loginHistoryRepo).

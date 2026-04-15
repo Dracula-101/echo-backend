@@ -2,46 +2,54 @@ package messaging
 
 import "time"
 
-type Option func(*Config)
+type ProducerOption func(*ProducerConfig)
 
-func WithBrokers(brokers []string) Option {
-	return func(c *Config) {
-		c.Brokers = brokers
-	}
+func WithProducerBrokers(brokers []string) ProducerOption {
+	return func(c *ProducerConfig) { c.Brokers = brokers }
 }
 
-func WithClientID(clientID string) Option {
-	return func(c *Config) {
-		c.ClientID = clientID
-	}
+func WithProducerClientID(clientID string) ProducerOption {
+	return func(c *ProducerConfig) { c.ClientID = clientID }
 }
 
-func WithGroupID(groupID string) Option {
-	return func(c *Config) {
-		c.GroupID = groupID
-	}
+func WithProducerMaxRetries(n int) ProducerOption {
+	return func(c *ProducerConfig) { c.MaxRetries = n }
 }
 
-func WithMaxRetries(maxRetries int) Option {
-	return func(c *Config) {
-		c.MaxRetries = maxRetries
-	}
+func WithProducerRetryBackoff(d time.Duration) ProducerOption {
+	return func(c *ProducerConfig) { c.RetryBackoff = d }
 }
 
-func WithRetryBackoff(retryBackoff time.Duration) Option {
-	return func(c *Config) {
-		c.RetryBackoff = retryBackoff
-	}
+func WithCompression(codec string) ProducerOption {
+	return func(c *ProducerConfig) { c.Compression = codec }
 }
 
-func WithSessionTimeout(sessionTimeout time.Duration) Option {
-	return func(c *Config) {
-		c.SessionTimeout = sessionTimeout
-	}
+func WithAcks(acks string) ProducerOption {
+	return func(c *ProducerConfig) { c.Acks = acks }
 }
 
-func WithHeartbeatInterval(heartbeatInterval time.Duration) Option {
-	return func(c *Config) {
-		c.HeartbeatInterval = heartbeatInterval
-	}
+func WithIdempotence(enabled bool) ProducerOption {
+	return func(c *ProducerConfig) { c.EnableIdempotence = enabled }
+}
+
+type ConsumerOption func(*ConsumerConfig)
+
+func WithConsumerBrokers(brokers []string) ConsumerOption {
+	return func(c *ConsumerConfig) { c.Brokers = brokers }
+}
+
+func WithConsumerClientID(clientID string) ConsumerOption {
+	return func(c *ConsumerConfig) { c.ClientID = clientID }
+}
+
+func WithGroupID(groupID string) ConsumerOption {
+	return func(c *ConsumerConfig) { c.GroupID = groupID }
+}
+
+func WithSessionTimeout(d time.Duration) ConsumerOption {
+	return func(c *ConsumerConfig) { c.SessionTimeout = d }
+}
+
+func WithHeartbeatInterval(d time.Duration) ConsumerOption {
+	return func(c *ConsumerConfig) { c.HeartbeatInterval = d }
 }

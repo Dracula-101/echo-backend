@@ -44,15 +44,18 @@ cache:
     pool_timeout: ${REDIS_POOL_TIMEOUT:4s}
 
 kafka:
-  brokers:
-    - ${KAFKA_BROKERS:localhost:9092}
-  topic: ${KAFKA_TOPIC:media-events}
-  client_id: ${KAFKA_CLIENT_ID:media-service}
-  group_id: ${KAFKA_GROUP_ID:media-delivery-group}
-  max_retries: ${KAFKA_MAX_RETRIES:5}
-  retry_backoff: ${KAFKA_RETRY_BACKOFF:500ms}
-  session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
-  heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}    
+  producer:
+    brokers:
+      - ${KAFKA_BROKERS:localhost:9092}
+    client_id: ${KAFKA_CLIENT_ID:media-service}
+    topic: ${KAFKA_TOPIC:media-events}
+    max_retries: ${KAFKA_MAX_RETRIES:5}
+    retry_backoff: ${KAFKA_RETRY_BACKOFF:500ms}
+    compression: ${KAFKA_COMPRESSION:snappy}
+    acks: ${KAFKA_ACKS:all}
+    enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
+    max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
+    dial_timeout: ${KAFKA_DIAL_TIMEOUT:10s}
 
 storage:
   provider: ${STORAGE_PROVIDER:r2}

@@ -356,7 +356,7 @@ func (s *MediaService) ProcessImageFile(ctx context.Context, fileID string, proc
 		}
 
 		eventBytes := utils.MarshalJSONSafe(event)
-		if err := s.producer.Send(ctx, s.cfg.Kafka.Topic, &messaging.Message{
+		if err := s.producer.Send(ctx, s.cfg.Kafka.Producer.Topic, &messaging.Message{
 			Key:   utils.StringToBytes(fileID),
 			Value: eventBytes,
 		}); err != nil {

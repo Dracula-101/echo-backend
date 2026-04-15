@@ -119,19 +119,21 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
-func createKakfaProducer(kafkaConfig config.KafkaConfig, log logger.Logger) (messaging.Producer, error) {
+func createKakfaProducer(p config.KafkaProducerConfig, log logger.Logger) (messaging.Producer, error) {
 	log.Debug("Creating Kafka producer - configuration",
-		logger.String("brokers", fmt.Sprintf("%v", kafkaConfig.Brokers)),
-		logger.String("topic", kafkaConfig.Topic),
+		logger.String("brokers", fmt.Sprintf("%v", p.Brokers)),
+		logger.String("topic", p.Topic),
 	)
-	producer, err := kafka.NewProducer(messaging.Config{
-		Brokers:           kafkaConfig.Brokers,
-		ClientID:          kafkaConfig.ClientID,
-		GroupID:           kafkaConfig.GroupID,
-		MaxRetries:        kafkaConfig.MaxRetries,
-		RetryBackoff:      kafkaConfig.RetryBackoff,
-		SessionTimeout:    kafkaConfig.SessionTimeout,
-		HeartbeatInterval: kafkaConfig.HeartbeatInterval,
+	producer, err := kafka.NewProducer(messaging.ProducerConfig{
+		Brokers:           p.Brokers,
+		ClientID:          p.ClientID,
+		MaxRetries:        p.MaxRetries,
+		RetryBackoff:      p.RetryBackoff,
+		Compression:       p.Compression,
+		Acks:              p.Acks,
+		EnableIdempotence: p.EnableIdempotence,
+		MaxInFlight:       p.MaxInFlight,
+		DialTimeout:       p.DialTimeout,
 	})
 	if err != nil {
 		log.Error("Failed to create Kafka producer", logger.Error(err))
@@ -359,7 +361,7 @@ func main() {
 		log.Info("Cache is disabled in configuration")
 	}
 
-	producer, err := createKakfaProducer(cfg.Kafka, log)
+	producer, err := createKakfaProducer(cfg.Kafka.Producer, log)
 	if err != nil {
 		log.Fatal("Failed to create Kafka producer", logger.Error(err))
 	}

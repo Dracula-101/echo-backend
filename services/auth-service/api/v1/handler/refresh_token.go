@@ -53,6 +53,7 @@ func (h *AuthHandler) RefreshToken(handler *req.RequestHandler) {
 			logger.String("request_id", requestID),
 		)
 		// TODO: Insert into auth.outbox for further analysis and potential user notification
+		
 	}
 
 	result, authErr := h.authService.RefreshToken(ctx, refreshRequest.RefreshToken, deviceInfo.ID)

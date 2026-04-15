@@ -150,32 +150,46 @@ func validateDatabase(db *DatabaseConfig) error {
 }
 
 func validateKafka(kafka *KafkaConfig) error {
-	if len(kafka.Brokers) == 0 {
-		return fmt.Errorf("kafka brokers are required")
+	p := &kafka.Producer
+	c := &kafka.Consumer
+
+	if len(p.Brokers) == 0 && len(c.Brokers) == 0 {
+		return fmt.Errorf("kafka brokers are required (producer or consumer)")
 	}
 
-	if kafka.Topic == "" {
-		kafka.Topic = "messages"
+	// Producer defaults
+	if len(p.Brokers) > 0 {
+		if p.ClientID == "" {
+			p.ClientID = "message-service-producer"
+		}
+		if p.Topic == "" {
+			p.Topic = "chat-messages"
+		}
+		if p.Compression == "" {
+			p.Compression = "snappy"
+		}
+		if p.Acks == "" {
+			p.Acks = "all"
+		}
+		if p.MaxInFlight == 0 {
+			p.MaxInFlight = 5
+		}
+		if p.MaxRetries == 0 {
+			p.MaxRetries = 5
+		}
 	}
 
-	if kafka.ClientID == "" {
-		kafka.ClientID = "message-service"
-	}
-
-	if kafka.GroupID == "" {
-		kafka.GroupID = "message-service-group"
-	}
-
-	if kafka.Compression == "" {
-		kafka.Compression = "snappy"
-	}
-
-	if kafka.Acks == "" {
-		kafka.Acks = "all"
-	}
-
-	if kafka.MaxInFlight == 0 {
-		kafka.MaxInFlight = 5
+	// Consumer defaults
+	if len(c.Brokers) > 0 {
+		if c.ClientID == "" {
+			c.ClientID = "message-service-consumer"
+		}
+		if c.Topic == "" {
+			c.Topic = "chat-messages"
+		}
+		if c.GroupID == "" {
+			c.GroupID = "database-writers"
+		}
 	}
 
 	return nil
