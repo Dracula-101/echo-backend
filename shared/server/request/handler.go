@@ -125,7 +125,7 @@ func (h *RequestHandler) ParseAndValidate(req Validator) ([]response.FieldError,
 
 func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 	validationErr, err := h.ParseAndValidate(req)
-	if err != nil && len(validationErr) == 0 {
+	if err != nil {
 		response.Error().
 			WithRequest(h.request).
 			WithMessage("Invalid request").
@@ -168,14 +168,18 @@ func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {
 }
 
 func (h *RequestHandler) validateRequest() error {
-	if h.config.RequireContentType {
-		headers := strings.Split(h.request.Header.Get(headers.ContentType), ";")
-		if len(headers) == 0 || strings.TrimSpace(headers[0]) != "application/json" {
+	bodyAbsent := h.request.Body == nil
+
+	// Skip Content-Type check when there is no body and empty body is explicitly
+	// allowed — bodyless requests (GET, DELETE, etc.) carry no Content-Type header.
+	if h.config.RequireContentType && !(bodyAbsent && h.config.AllowEmptyBody) {
+		parts := strings.Split(h.request.Header.Get(headers.ContentType), ";")
+		if len(parts) == 0 || strings.TrimSpace(parts[0]) != "application/json" {
 			return fmt.Errorf("content-type must be application/json")
 		}
 	}
 
-	if h.request.Body == nil && !h.config.AllowEmptyBody {
+	if bodyAbsent && !h.config.AllowEmptyBody {
 		return fmt.Errorf("request body is required")
 	}
 

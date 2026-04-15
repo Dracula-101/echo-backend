@@ -27,16 +27,20 @@ func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	dto := dto.NewGetSessionsRequest()
-	if ok := handler.ParseValidateAndSend(dto); !ok {
-		h.log.Warn("Get sessions request validation failed",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("correlation_id", correlationID),
-		)
-		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Invalid request payload", nil)
+	params := dto.NewGetSessionsRequest()
+
+	limit, err := handler.QueryParamInt("limit", params.Limit)
+	if err != nil {
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Invalid limit parameter", err)
 		return
 	}
+	offset, err := handler.QueryParamInt("offset", params.Offset)
+	if err != nil {
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Invalid offset parameter", err)
+		return
+	}
+	params.Limit = limit
+	params.Offset = offset
 
 	userId, ok := req.GetUserIDFromContext(ctx)
 	if !ok {
@@ -48,14 +52,14 @@ func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 		return
 	}
 
-	sessions, limit, offset, total, err := h.sessionService.GetAllSessions(ctx, userId, dto.Limit, dto.Offset)
-	if err != nil {
+	sessions, retLimit, retOffset, total, svcErr := h.sessionService.GetAllSessions(ctx, userId, params.Limit, params.Offset)
+	if svcErr != nil {
 		h.log.Warn("Get sessions failed",
 			logger.String("service", authErrors.ServiceName),
 			logger.String("request_id", requestID),
-			logger.Error(err),
+			logger.Error(svcErr),
 		)
-		response.InternalServerError(handler.Context(), handler.Request(), handler.Writer(), "Failed to get sessions", err)
+		response.InternalServerError(handler.Context(), handler.Request(), handler.Writer(), "Failed to get sessions", svcErr)
 		return
 	}
 
@@ -63,10 +67,10 @@ func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 	for i, s := range sessions {
 		sessionValues[i] = *s
 	}
-	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Sessions retrieved successfully", map[string]interface{}{
-		"sessions": sessionValues,
-		"limit":    limit,
-		"offset":   offset,
-		"total":    total,
+	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Sessions retrieved successfully", getSessionsResponse{
+		Sessions: sessionValues,
+		Limit:    retLimit,
+		Offset:   retOffset,
+		Total:    total,
 	})
 }
