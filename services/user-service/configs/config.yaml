@@ -53,7 +53,7 @@ kafka:
       - ${KAFKA_BROKERS:localhost:9092}
     client_id: ${KAFKA_CLIENT_ID:user-service}
     topic: ${KAFKA_TOPIC:media-events}
-    group_id: ${KAFKA_GROUP_ID:media-delivery-group}
+    group_id: ${KAFKA_GROUP_ID:user-service-consumer-group}
     session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
     heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 

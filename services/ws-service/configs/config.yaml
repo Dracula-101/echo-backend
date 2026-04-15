@@ -83,7 +83,7 @@ kafka:
       - ${KAFKA_BROKERS:localhost:9092}
     client_id: ${KAFKA_CONSUMER_CLIENT_ID:ws-service}
     topic: ${KAFKA_TOPIC:chat-messages}
-    group_id: ${KAFKA_GROUP_ID:ws-delivery-group}
+    group_id: ${KAFKA_GROUP_ID:ws-service-delivery-group}
     session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
     heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 

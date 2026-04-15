@@ -199,15 +199,15 @@ func startDeliveryEventConsumer(
 }
 
 func createDeliveryKafkaConsumer(cfg config.KafkaConsumerConfig, log logger.Logger) (messaging.Consumer, error) {
-	deliveryGroupID := cfg.GroupID + "-delivery"
 	log.Debug("Creating Kafka consumer for delivery events",
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
-		logger.String("group_id", deliveryGroupID),
+		logger.String("topic", cfg.Topic),
+		logger.String("group_id", cfg.GroupID),
 	)
 	kafkaConsumer, err := kafka.NewConsumer(messaging.ConsumerConfig{
 		Brokers:           cfg.Brokers,
-		ClientID:          cfg.ClientID + "-delivery",
-		GroupID:           deliveryGroupID,
+		ClientID:          cfg.ClientID,
+		GroupID:           cfg.GroupID,
 		SessionTimeout:    cfg.SessionTimeout,
 		HeartbeatInterval: cfg.HeartbeatInterval,
 	})
@@ -217,7 +217,7 @@ func createDeliveryKafkaConsumer(cfg config.KafkaConsumerConfig, log logger.Logg
 	}
 	log.Info("Delivery Kafka consumer created successfully",
 		logger.String("brokers", fmt.Sprintf("%v", cfg.Brokers)),
-		logger.String("group_id", deliveryGroupID),
+		logger.String("group_id", cfg.GroupID),
 	)
 	return kafkaConsumer, nil
 }
@@ -478,7 +478,7 @@ func main() {
 	}()
 
 	// Create Kafka consumer for delivery events (separate consumer group)
-	deliveryKafkaConsumer, err := createDeliveryKafkaConsumer(cfg.Kafka.Consumer, log)
+	deliveryKafkaConsumer, err := createDeliveryKafkaConsumer(cfg.Kafka.DeliveryConsumer, log)
 	if err != nil {
 		log.Fatal("Failed to create delivery Kafka consumer", logger.Error(err))
 	}
@@ -558,7 +558,7 @@ func main() {
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go startChatMessageConsumer(consumerCtx, kafkaConsumer, chatMessageConsumer, cfg.Kafka.Consumer.Topic, log)
-	go startDeliveryEventConsumer(consumerCtx, deliveryKafkaConsumer, deliveryEventConsumer, "delivery-events", log)
+	go startDeliveryEventConsumer(consumerCtx, deliveryKafkaConsumer, deliveryEventConsumer, cfg.Kafka.DeliveryConsumer.Topic, log)
 
 	shutdownMgr := setupShutdownManager(srv, kafkaConsumer, deliveryKafkaConsumer, consumerCancel, cfg, log)
 

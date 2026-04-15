@@ -31,6 +31,19 @@ x-env-redis: &env-redis
 
 x-env-kafka: &env-kafka
   KAFKA_BROKERS: kafka:29092
+  # Shared producer settings
+  KAFKA_COMPRESSION: snappy
+  KAFKA_ACKS: all
+  KAFKA_ENABLE_IDEMPOTENCE: "true"
+  KAFKA_MAX_IN_FLIGHT: 5
+  KAFKA_MAX_RETRIES: 5
+  KAFKA_RETRY_BACKOFF: 100ms
+  KAFKA_DIAL_TIMEOUT: 10s
+  KAFKA_BATCH_SIZE: 16384
+  KAFKA_LINGER_MS: 10
+  # Shared consumer settings
+  KAFKA_SESSION_TIMEOUT: 10s
+  KAFKA_HEARTBEAT_INTERVAL: 3s
 
 x-env-ws: &env-ws
   WS_READ_BUFFER_SIZE: 1024
@@ -276,7 +289,7 @@ services:
     image: echo/auth-service:dev
     expose: [ "8081" ]
     environment:
-      <<: *env-full
+      <<: [ *env-full, *env-kafka ]
       SERVER_PORT: 8081
       CONFIG_PATH: /app/services/auth-service/configs/config.yaml
       REDIS_DB: 0
@@ -286,13 +299,16 @@ services:
       JWT_EXPIRY: 24h
       REFRESH_TOKEN_EXPIRY: 168h
       LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+      # Kafka producer (auth-events)
+      KAFKA_CLIENT_ID: auth-service
+      KAFKA_TOPIC: auth-events
     volumes:
       - ${PWD}/services/auth-service:/app/services/auth-service
       - ${PWD}/shared:/app/shared:ro
       - auth-service-cache:/app/tmp
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-    depends_on: *depends-db
+    depends_on: *depends-full
     healthcheck:
       <<: *healthcheck
       test: [ "CMD", "curl", "-f", "http://localhost:8081/health" ]
@@ -313,16 +329,17 @@ services:
       CONFIG_PATH: /app/services/user-service/configs/config.yaml
       REDIS_DB: 2
       LOCATION_SERVICE_ENDPOINT: http://location-service:8090/lookup
+      # Kafka consumer (media-events)
+      KAFKA_CLIENT_ID: user-service
       KAFKA_TOPIC: media-events
-      KAFKA_CLIENT_ID: media-service
-      KAFKA_GROUP_ID: media-service-group
+      KAFKA_GROUP_ID: user-service-consumer-group
     volumes:
       - ${PWD}/services/user-service:/app/services/user-service
       - ${PWD}/shared:/app/shared:ro
       - user-service-cache:/app/tmp
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
-    depends_on: *depends-db
+    depends_on: *depends-full
     healthcheck:
       <<: *healthcheck
       test: [ "CMD", "curl", "-f", "http://localhost:8082/health" ]
@@ -340,12 +357,16 @@ services:
     environment:
       <<: [ *env-full, *env-kafka ]
       SERVER_PORT: 8083
+      CONFIG_PATH: /app/services/message-service/configs/config.yaml
       REDIS_DB: 1
+      # Kafka producer + consumers
+      KAFKA_PRODUCER_CLIENT_ID: message-service-producer
       KAFKA_TOPIC: chat-messages
-      KAFKA_NOTIFICATION_TOPIC: notifications
-      KAFKA_CONSUMER_GROUP: message-service-dev
-      KAFKA_SESSION_TIMEOUT: 10s
-      KAFKA_HEARTBEAT_INTERVAL: 3s
+      KAFKA_CONSUMER_CLIENT_ID: message-service-consumer
+      KAFKA_GROUP_ID: message-service-consumer-group
+      KAFKA_DELIVERY_CLIENT_ID: message-service-delivery-consumer
+      KAFKA_DELIVERY_TOPIC: delivery-events
+      KAFKA_DELIVERY_GROUP_ID: message-service-delivery-group
     volumes:
       - ${PWD}/services/message-service:/app/services/message-service
       - ${PWD}/shared:/app/shared:ro
@@ -433,10 +454,9 @@ services:
       ALLOWED_MIME_TYPES: image/jpeg,image/png,image/gif,video/mp4,audio/mpeg
       FEATURE_DEDUPLICATION_ENABLED: "true"
       FEATURE_COMPRESSION_ENABLED: "true"
-      KAFKA_ENABLED: "true"
-      KAFKA_TOPIC: media-events
+      # Kafka producer (media-events)
       KAFKA_CLIENT_ID: media-service
-      KAFKA_GROUP_ID: media-service-group
+      KAFKA_TOPIC: media-events
     volumes:
       - ${PWD}/services/media-service:/app/services/media-service
       - ${PWD}/shared:/app/shared:ro
@@ -469,10 +489,11 @@ services:
       WS_PING_PERIOD: 54s
       WS_MAX_MESSAGE_SIZE: 10485760
       WS_CLIENT_BUFFER_SIZE: 256
-      KAFKA_ENABLED: "true"
+      # Kafka producer + consumer (chat-messages)
+      KAFKA_PRODUCER_CLIENT_ID: ws-service-producer
+      KAFKA_CONSUMER_CLIENT_ID: ws-service
       KAFKA_TOPIC: chat-messages
-      KAFKA_CLIENT_ID: ws-service
-      KAFKA_GROUP_ID: ws-delivery-group
+      KAFKA_GROUP_ID: ws-service-delivery-group
     volumes:
       - ${PWD}/services/ws-service:/app/services/ws-service
       - ${PWD}/shared:/app/shared:ro

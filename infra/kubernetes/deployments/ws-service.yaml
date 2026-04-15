@@ -86,7 +86,7 @@ spec:
         - name: KAFKA_CLIENT_ID
           value: "ws-service"
         - name: KAFKA_GROUP_ID
-          value: "ws-delivery-group"
+          value: "ws-service-delivery-group"
         - name: WS_ALLOWED_ORIGINS
           value: "https://echo.com,https://app.echo.com"
         resources:

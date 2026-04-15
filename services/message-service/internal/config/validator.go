@@ -179,7 +179,7 @@ func validateKafka(kafka *KafkaConfig) error {
 		}
 	}
 
-	// Consumer defaults
+	// Consumer defaults (chat messages)
 	if len(c.Brokers) > 0 {
 		if c.ClientID == "" {
 			c.ClientID = "message-service-consumer"
@@ -188,8 +188,29 @@ func validateKafka(kafka *KafkaConfig) error {
 			c.Topic = "chat-messages"
 		}
 		if c.GroupID == "" {
-			c.GroupID = "database-writers"
+			c.GroupID = "message-service-consumer-group"
 		}
+	}
+
+	// Delivery consumer defaults — inherits brokers from main consumer if not set
+	d := &kafka.DeliveryConsumer
+	if len(d.Brokers) == 0 {
+		d.Brokers = c.Brokers
+	}
+	if d.ClientID == "" {
+		d.ClientID = "message-service-delivery-consumer"
+	}
+	if d.Topic == "" {
+		d.Topic = "delivery-events"
+	}
+	if d.GroupID == "" {
+		d.GroupID = "message-service-delivery-group"
+	}
+	if d.SessionTimeout == 0 {
+		d.SessionTimeout = c.SessionTimeout
+	}
+	if d.HeartbeatInterval == 0 {
+		d.HeartbeatInterval = c.HeartbeatInterval
 	}
 
 	return nil

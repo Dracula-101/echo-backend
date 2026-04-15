@@ -42,7 +42,7 @@ kafka:
       - ${KAFKA_BROKERS}
     client_id: ${KAFKA_PRODUCER_CLIENT_ID:message-service-producer}
     topic: ${KAFKA_TOPIC:chat-messages}
-    compression: ${KAFKA_COMPRESSION_TYPE:snappy}
+    compression: ${KAFKA_COMPRESSION:snappy}
     batch_size: ${KAFKA_BATCH_SIZE:16384}
     linger_ms: ${KAFKA_LINGER_MS:10}
     acks: ${KAFKA_ACKS:all}
@@ -56,7 +56,15 @@ kafka:
       - ${KAFKA_BROKERS}
     client_id: ${KAFKA_CONSUMER_CLIENT_ID:message-service-consumer}
     topic: ${KAFKA_TOPIC:chat-messages}
-    group_id: ${KAFKA_GROUP_ID:database-writers}
+    group_id: ${KAFKA_GROUP_ID:message-service-consumer-group}
+    session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
+    heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
+  delivery_consumer:
+    brokers:
+      - ${KAFKA_BROKERS}
+    client_id: ${KAFKA_DELIVERY_CLIENT_ID:message-service-delivery-consumer}
+    topic: ${KAFKA_DELIVERY_TOPIC:delivery-events}
+    group_id: ${KAFKA_DELIVERY_GROUP_ID:message-service-delivery-group}
     session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
     heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 

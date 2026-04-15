@@ -56,8 +56,9 @@ type DatabaseConfig struct {
 // KafkaConfig groups producer and consumer configuration for the message-service.
 // Message-service is both a producer (chat messages) and a consumer (chat messages + delivery events).
 type KafkaConfig struct {
-	Producer KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
-	Consumer KafkaConsumerConfig `yaml:"consumer" mapstructure:"consumer"`
+	Producer        KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
+	Consumer        KafkaConsumerConfig `yaml:"consumer" mapstructure:"consumer"`
+	DeliveryConsumer KafkaConsumerConfig `yaml:"delivery_consumer" mapstructure:"delivery_consumer"`
 }
 
 // KafkaProducerConfig holds producer-specific Kafka settings.
