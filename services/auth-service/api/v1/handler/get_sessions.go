@@ -67,6 +67,11 @@ func (h *AuthHandler) GetSessions(handler *req.RequestHandler) {
 	for i, s := range sessions {
 		sessionValues[i] = *s
 	}
+	h.log.Info("Get sessions request successful",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("request_id", requestID),
+		logger.Int("sessions_count", len(sessionValues)),
+	)
 	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), response.StatusOK, "Sessions retrieved successfully", dto.GetSessionsResponse{
 		Sessions: sessionValues,
 		Limit:    retLimit,

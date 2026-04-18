@@ -188,7 +188,7 @@ func (r *sessionRepository) GetSessionByUserId(ctx context.Context, userID strin
 		logger.String("user_id", userID),
 	)
 	var session models.AuthSession
-	query := `SELECT * FROM auth.sessions WHERE user_id = $1 AND coalesce(device_id, '') = coalesce($2, '') LIMIT 1`
+	query := `SELECT * FROM auth.sessions WHERE user_id = $1 AND coalesce(device_id, '') = coalesce($2, '') AND revoked_at IS NULL AND expires_at > NOW() LIMIT 1`
 	err := r.db.QueryRow(ctx, query, userID, deviceID).ScanModel(&session)
 	if err != nil {
 		if postgres.IsNotFoundError(err) {
