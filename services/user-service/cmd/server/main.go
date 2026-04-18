@@ -10,6 +10,8 @@ import (
 	"user-service/internal/health/checkers"
 	repository "user-service/internal/repo"
 	"user-service/internal/service"
+	userCache "user-service/internal/service/cache"
+	"user-service/internal/service/search"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -23,6 +25,7 @@ import (
 	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	"shared/server/common/token"
 	env "shared/server/env"
+	"shared/server/headers"
 	coreMiddleware "shared/server/middleware"
 	"shared/server/request"
 	"shared/server/response"
@@ -193,6 +196,7 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 
 	// Profile routes
 	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/me", request.Adapt(h.GetMyProfile))
 		r.Post("/profile", request.Adapt(h.CreateProfile))
 		r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
 		r.Put("/profile", request.Adapt(h.UpdateProfile))
@@ -265,6 +269,7 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 }
 
 func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+	skipPaths := []string{"/profile", "/health", "/metrics", "/live", "/ready", "/health/liveness", "/health/readiness"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
@@ -280,8 +285,10 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 		}).
 		WithEarlyMiddleware(
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
-			router.Middleware(coreMiddleware.InterceptUserId("/profile")),
-			router.Middleware(coreMiddleware.InterceptSessionId("/profile")),
+			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
+			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
+			router.Middleware(coreMiddleware.InterceptUserId(skipPaths...)),
+			router.Middleware(coreMiddleware.InterceptSessionId(skipPaths...)),
 			router.Middleware(coreMiddleware.InterceptSessionToken()),
 		).
 		WithLateMiddleware(
@@ -423,11 +430,11 @@ func main() {
 	}
 
 	tokenService := createTokenService(cfg, log)
-
+	userCache := userCache.NewUserCache(cacheClient, log)
 	userRepo := repository.NewUserRepository(dbClient, log)
 	services, buildErr := service.NewServiceBuilder().
 		WithUserRepo(userRepo).
-		WithCache(cacheClient).
+		WithCache(userCache).
 		WithLogger(log).
 		WithLocationEndpoint(cfg.Server.LocationServiceEndpoint).
 		Build()
@@ -435,8 +442,7 @@ func main() {
 		log.Fatal("Failed to build services", logger.Error(buildErr))
 	}
 
-	var consumer *consumer.MediaEventsConsumer
-	consumer, err = createConsumer(cfg, *userRepo, log)
+	consumer, err := createConsumer(cfg, userRepo, log)
 	if err != nil {
 		log.Fatal("Failed to create messaging consumer", logger.Error(err))
 	}
@@ -444,8 +450,8 @@ func main() {
 		log.Fatal("Messaging consumer is nil after creation")
 	}
 
-	searchService := service.NewSearchService(userRepo, log)
-	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, tokenService, log)
+	searchService := search.NewSearchService(userRepo, log)
+	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, userCache, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

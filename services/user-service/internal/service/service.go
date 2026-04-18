@@ -3,20 +3,21 @@ package service
 import (
 	"fmt"
 
-	"shared/pkg/cache"
 	"shared/pkg/logger"
 
 	repository "user-service/internal/repo"
+	"user-service/internal/service/cache"
+	"user-service/internal/service/location"
 )
 
 type Services struct {
-	User     UserServiceInterface
-	Location LocationServiceInterface
+	User     UserService
+	Location location.LocationService
 }
 
 type ServiceBuilder struct {
-	userRepo         repository.UserRepositoryInterface
-	cache            cache.Cache
+	userRepo         repository.UserRepository
+	cache            cache.UserCache
 	log              logger.Logger
 	locationEndpoint string
 }
@@ -25,12 +26,12 @@ func NewServiceBuilder() *ServiceBuilder {
 	return &ServiceBuilder{}
 }
 
-func (b *ServiceBuilder) WithUserRepo(repo repository.UserRepositoryInterface) *ServiceBuilder {
+func (b *ServiceBuilder) WithUserRepo(repo repository.UserRepository) *ServiceBuilder {
 	b.userRepo = repo
 	return b
 }
 
-func (b *ServiceBuilder) WithCache(cache cache.Cache) *ServiceBuilder {
+func (b *ServiceBuilder) WithCache(cache cache.UserCache) *ServiceBuilder {
 	b.cache = cache
 	return b
 }
@@ -54,14 +55,8 @@ func (b *ServiceBuilder) Build() (*Services, error) {
 	}
 
 	userSvc := newUserService(b.userRepo, b.cache, b.log)
-
-	var locationSvc LocationServiceInterface
-	if b.locationEndpoint != "" {
-		locationSvc = NewLocationService(b.locationEndpoint, b.log)
-	}
-
 	return &Services{
 		User:     userSvc,
-		Location: locationSvc,
+		Location: location.NewLocationService(b.locationEndpoint, b.log),
 	}, nil
 }

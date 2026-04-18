@@ -25,12 +25,12 @@ import (
 // Repository Definition
 // ============================================================================
 
-type UserRepository struct {
+type userRepository struct {
 	db  database.Database
 	log logger.Logger
 }
 
-func NewUserRepository(db database.Database, log logger.Logger) *UserRepository {
+func NewUserRepository(db database.Database, log logger.Logger) UserRepository {
 	if db == nil {
 		panic("Database is required for UserRepository")
 	}
@@ -42,7 +42,7 @@ func NewUserRepository(db database.Database, log logger.Logger) *UserRepository 
 		logger.String("service", userErrors.ServiceName),
 	)
 
-	return &UserRepository{
+	return &userRepository{
 		db:  db,
 		log: log,
 	}
@@ -53,7 +53,7 @@ func NewUserRepository(db database.Database, log logger.Logger) *UserRepository 
 // ============================================================================
 
 // Generate Unique Username
-func (r *UserRepository) GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, error) {
+func (r *userRepository) GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, error) {
 	r.log.Debug("Generating unique username",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("base_username", baseUsername),
@@ -138,14 +138,14 @@ func randAlphaNum(n int) string {
 }
 
 // GetProfileByUserID retrieves a user profile by user ID
-func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, error) {
+func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, error) {
 	r.log.Debug("Fetching profile by user ID",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
 	)
 
 	// user_id has UNIQUE constraint, so LIMIT 1 is unnecessary
-	query := `SELECT * FROM users.profiles WHERE user_id = $1 AND deactivated_at IS NULL`
+	query := `SELECT * FROM users.profiles WHERE user_id = $1`
 	row := r.db.QueryRow(ctx, query, userID)
 
 	var profile dbModels.Profile
@@ -166,6 +166,22 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 		return nil, err
 	}
 
+	// Also load auth.users partial: SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1.
+	query = `SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1`
+	authRow := r.db.QueryRow(ctx, query, userID)
+	var emailVerified, phoneVerified, twoFactorEnabled bool
+	var accountStatus string
+	err = authRow.Scan(&emailVerified, &phoneVerified, &twoFactorEnabled, &accountStatus)
+	if err != nil {
+		r.log.Error("Failed to get auth details for profile",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+			logger.String("query", query),
+		)
+		return nil, err
+	}
+
 	r.log.Debug("Profile fetched successfully",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -173,25 +189,33 @@ func (r *UserRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	)
 
 	return &domain.Profile{
-		ID:           profile.ID,
-		UserID:       profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
-		CreatedAt:    profile.CreatedAt,
-		UpdatedAt:    profile.UpdatedAt,
+		UserID:             profile.UserID,
+		Username:           profile.Username,
+		DisplayName:        profile.DisplayName,
+		FirstName:          profile.FirstName,
+		LastName:           profile.LastName,
+		Bio:                profile.Bio,
+		AvatarURL:          profile.AvatarURL,
+		AvatarThumbnailURL: profile.AvatarThumbnailURL,
+		LanguageCode:       profile.LanguageCode,
+		Timezone:           profile.Timezone,
+		CountryCode:        profile.CountryCode,
+		PhoneVisible:       profile.PhoneVisible,
+		EmailVisible:       profile.EmailVisible,
+		OnlineStatus:       domain.OnlineStatus(profile.OnlineStatus),
+		LastSeenAt:         profile.LastSeenAt,
+		ProfileVisibility:  string(profile.ProfileVisibility),
+		SearchVisibility:   profile.SearchVisibility,
+		IsVerified:         profile.IsVerified,
+		PhoneVerified:      phoneVerified,
+		EmailVerified:      emailVerified,
+		TwoFactorEnabled:   twoFactorEnabled,
+		AccountStatus:      domain.AccountStatus(accountStatus),
 	}, nil
 }
 
 // GetProfileByUsername retrieves a user profile by username
-func (r *UserRepository) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error) {
+func (r *userRepository) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error) {
 	r.log.Debug("Fetching profile by username",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("username", username),
@@ -219,6 +243,22 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 		return nil, err
 	}
 
+	// Also load auth.users partial: SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1.
+	query = `SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1`
+	authRow := r.db.QueryRow(ctx, query, profile.UserID)
+	var emailVerified, phoneVerified, twoFactorEnabled bool
+	var accountStatus string
+	err = authRow.Scan(&emailVerified, &phoneVerified, &twoFactorEnabled, &accountStatus)
+	if err != nil {
+		r.log.Error("Failed to get auth details for profile",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+			logger.String("query", query),
+		)
+		return nil, err
+	}
+
 	r.log.Debug("Profile fetched successfully by username",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("username", username),
@@ -226,31 +266,6 @@ func (r *UserRepository) GetProfileByUsername(ctx context.Context, username stri
 	)
 
 	return &domain.Profile{
-		ID:           profile.ID,
-		UserID:       profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
-		CreatedAt:    profile.CreatedAt,
-		UpdatedAt:    profile.UpdatedAt,
-	}, nil
-}
-
-// CreateProfile creates a new user profile
-func (r *UserRepository) CreateProfile(ctx context.Context, profile domain.Profile) (*domain.Profile, error) {
-	r.log.Info("Creating new profile",
-		logger.String("service", userErrors.ServiceName),
-		logger.String("user_id", profile.UserID),
-	)
-
-	var profileModel = dbModels.Profile{
 		UserID:            profile.UserID,
 		Username:          profile.Username,
 		DisplayName:       profile.DisplayName,
@@ -259,14 +274,48 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile domain.Profi
 		Bio:               profile.Bio,
 		AvatarURL:         profile.AvatarURL,
 		LanguageCode:      profile.LanguageCode,
-		OnlineStatus:      dbModels.OnlineStatusOffline,
-		ProfileVisibility: dbModels.ProfileVisibilityPublic,
-		SearchVisibility:  profile.SearchVisibility,
 		Timezone:          profile.Timezone,
 		CountryCode:       profile.CountryCode,
+		PhoneVisible:      profile.PhoneVisible,
+		EmailVisible:      profile.EmailVisible,
+		OnlineStatus:      domain.OnlineStatus(profile.OnlineStatus),
+		LastSeenAt:        profile.LastSeenAt,
+		ProfileVisibility: string(profile.ProfileVisibility),
+		SearchVisibility:  profile.SearchVisibility,
 		IsVerified:        profile.IsVerified,
-		CreatedAt:         utils.Ptr(time.Now()),
-		UpdatedAt:         utils.Ptr(time.Now()),
+		PhoneVerified:     phoneVerified,
+		EmailVerified:     emailVerified,
+		TwoFactorEnabled:  twoFactorEnabled,
+		AccountStatus:     domain.AccountStatus(accountStatus),
+	}, nil
+}
+
+// CreateProfile creates a new user profile
+func (r *userRepository) CreateProfile(ctx context.Context, profile domain.Profile) (*domain.Profile, error) {
+	r.log.Info("Creating new profile",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", profile.UserID),
+	)
+
+	var profileModel = dbModels.Profile{
+		UserID:             profile.UserID,
+		Username:           profile.Username,
+		DisplayName:        profile.DisplayName,
+		FirstName:          profile.FirstName,
+		LastName:           profile.LastName,
+		AvatarThumbnailURL: profile.AvatarThumbnailURL,
+		Bio:                profile.Bio,
+		AvatarURL:          profile.AvatarURL,
+		LanguageCode:       profile.LanguageCode,
+		OnlineStatus:       dbModels.OnlineStatusOffline,
+		ProfileVisibility:  dbModels.ProfileVisibilityPublic,
+		SearchVisibility:   profile.SearchVisibility,
+		Timezone:           profile.Timezone,
+		CountryCode:        profile.CountryCode,
+		IsVerified:         profile.IsVerified,
+		PhoneVisible:       profile.PhoneVisible,
+		EmailVisible:       profile.EmailVisible,
+		LastSeenAt:         profile.LastSeenAt,
 	}
 	id, err := r.db.Insert(ctx, &profileModel)
 	if err != nil {
@@ -299,7 +348,7 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile domain.Profi
 	r.log.Info("Profile created successfully",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", profile.UserID),
-		logger.String("profile_id", createdProfile.ID),
+		logger.String("profile_id", createdProfile.UserID),
 	)
 	return createdProfile, nil
 }
@@ -320,7 +369,7 @@ type UpdateProfileParams struct {
 	CountryCode        *string
 }
 
-func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfileParams) (*domain.Profile, error) {
+func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfileParams) (*domain.Profile, error) {
 	r.log.Info("Updating profile",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", params.UserID),
@@ -427,24 +476,28 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 	)
 
 	return &domain.Profile{
-		ID:           profile.ID,
-		UserID:       profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
-		CreatedAt:    profile.CreatedAt,
-		UpdatedAt:    profile.UpdatedAt,
+		UserID:             profile.UserID,
+		Username:           profile.Username,
+		DisplayName:        profile.DisplayName,
+		FirstName:          profile.FirstName,
+		LastName:           profile.LastName,
+		Bio:                profile.Bio,
+		AvatarURL:          profile.AvatarURL,
+		AvatarThumbnailURL: profile.AvatarThumbnailURL,
+		LanguageCode:       profile.LanguageCode,
+		Timezone:           profile.Timezone,
+		CountryCode:        profile.CountryCode,
+		IsVerified:         profile.IsVerified,
+		PhoneVisible:       profile.PhoneVisible,
+		EmailVisible:       profile.EmailVisible,
+		OnlineStatus:       domain.OnlineStatus(profile.OnlineStatus),
+		LastSeenAt:         profile.LastSeenAt,
+		ProfileVisibility:  string(profile.ProfileVisibility),
+		SearchVisibility:   profile.SearchVisibility,
 	}, nil
 }
 
-func (r *UserRepository) AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) error {
+func (r *userRepository) AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) error {
 	r.log.Info("Adding user device",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", input.UserID),
@@ -491,7 +544,7 @@ func (r *UserRepository) AddUserDevice(ctx context.Context, input *domain.UserDe
 	return nil
 }
 
-func (r *UserRepository) GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, error) {
+func (r *userRepository) GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, error) {
 	r.log.Debug("Fetching user devices",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -532,7 +585,7 @@ func (r *UserRepository) GetUserDevices(ctx context.Context, userID string) ([]*
 	return devices, nil
 }
 
-func (r *UserRepository) UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) error {
+func (r *userRepository) UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) error {
 	r.log.Info("Updating user device",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -606,7 +659,7 @@ func (r *UserRepository) UpdateUserDevice(ctx context.Context, input *domain.Upd
 }
 
 // SearchProfiles searches for profiles by query
-func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error) {
+func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error) {
 	r.log.Debug("Searching profiles",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("query", query),
@@ -659,20 +712,24 @@ func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit
 			continue
 		}
 		profiles = append(profiles, &domain.Profile{
-			ID:           profile.ID,
-			UserID:       profile.UserID,
-			Username:     profile.Username,
-			DisplayName:  profile.DisplayName,
-			FirstName:    profile.FirstName,
-			LastName:     profile.LastName,
-			Bio:          profile.Bio,
-			AvatarURL:    profile.AvatarURL,
-			LanguageCode: profile.LanguageCode,
-			Timezone:     profile.Timezone,
-			CountryCode:  profile.CountryCode,
-			IsVerified:   profile.IsVerified,
-			CreatedAt:    profile.CreatedAt,
-			UpdatedAt:    profile.UpdatedAt,
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        profile.DisplayName,
+			FirstName:          profile.FirstName,
+			LastName:           profile.LastName,
+			Bio:                profile.Bio,
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			LanguageCode:       profile.LanguageCode,
+			Timezone:           profile.Timezone,
+			PhoneVisible:       profile.PhoneVisible,
+			EmailVisible:       profile.EmailVisible,
+			OnlineStatus:       domain.OnlineStatus(profile.OnlineStatus),
+			LastSeenAt:         profile.LastSeenAt,
+			ProfileVisibility:  string(profile.ProfileVisibility),
+			SearchVisibility:   profile.SearchVisibility,
+			IsVerified:         profile.IsVerified,
+			CountryCode:        profile.CountryCode,
 		})
 	}
 
@@ -710,7 +767,7 @@ func (r *UserRepository) SearchProfiles(ctx context.Context, query string, limit
 }
 
 // UsernameExists checks if a username is already taken
-func (r *UserRepository) UsernameExists(ctx context.Context, username string) (bool, error) {
+func (r *userRepository) UsernameExists(ctx context.Context, username string) (bool, error) {
 	r.log.Debug("Checking if username exists",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("username", username),

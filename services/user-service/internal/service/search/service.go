@@ -1,4 +1,4 @@
-package service
+package search
 
 import (
 	"context"
@@ -7,23 +7,23 @@ import (
 	repo "user-service/internal/repo"
 )
 
-type SearchServiceInterface interface {
+type SearchService interface {
 	SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error)
 }
 
 // Compile-time interface compliance check
-var _ SearchServiceInterface = (*SearchService)(nil)
+var _ SearchService = (*searchService)(nil)
 
-type SearchService struct {
-	userRepo repo.UserRepositoryInterface
+type searchService struct {
+	userRepo repo.UserRepository
 	log      logger.Logger
 }
 
-func NewSearchService(userRepo repo.UserRepositoryInterface, log logger.Logger) *SearchService {
-	return &SearchService{userRepo: userRepo, log: log}
+func NewSearchService(userRepo repo.UserRepository, log logger.Logger) SearchService {
+	return &searchService{userRepo: userRepo, log: log}
 }
 
-func (s *SearchService) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error) {
+func (s *searchService) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error) {
 	s.log.Info("Searching user profiles",
 		logger.String("query", query),
 		logger.Int("limit", limit),

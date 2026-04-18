@@ -1,4 +1,4 @@
-package service
+package location
 
 import (
 	"encoding/json"
@@ -13,18 +13,18 @@ import (
 	"time"
 )
 
-type LocationService struct {
+type locationService struct {
 	Endpoint string
 	client   *http.Client
 	log      logger.Logger
 }
 
-type LocationServiceInterface interface {
+type LocationService interface {
 	Lookup(ip string) (*request.IpAddressInfo, error)
 }
 
-func NewLocationService(endpoint string, log logger.Logger) *LocationService {
-	return &LocationService{
+func NewLocationService(endpoint string, log logger.Logger) LocationService {
+	return &locationService{
 		Endpoint: endpoint,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -38,7 +38,7 @@ func NewLocationService(endpoint string, log logger.Logger) *LocationService {
 	}
 }
 
-func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
+func (s *locationService) Lookup(ip string) (*request.IpAddressInfo, error) {
 	if ip == "" {
 		return nil, pkgErrors.New(pkgErrors.CodeInvalidArgument, "ip address is required")
 	}
@@ -90,7 +90,7 @@ func (s *LocationService) Lookup(ip string) (*request.IpAddressInfo, error) {
 	}, nil
 }
 
-var _ LocationServiceInterface = (*LocationService)(nil)
+var _ LocationService = (*locationService)(nil)
 
 type LocationData struct {
 	Latitude      float64 `json:"latitude"`

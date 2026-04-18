@@ -49,19 +49,22 @@ func (h *UserHandler) GetProfile(handler *req.RequestHandler) {
 	}
 
 	resp := &dto.GetProfileResponse{
-		ID:           user.ID,
-		Username:     user.Username,
-		DisplayName:  user.DisplayName,
-		FirstName:    user.FirstName,
-		LastName:     user.LastName,
-		Bio:          user.Bio,
-		AvatarURL:    user.AvatarURL,
-		LanguageCode: user.LanguageCode,
-		Timezone:     user.Timezone,
-		CountryCode:  user.CountryCode,
-		IsVerified:   user.IsVerified,
-		CreatedAt:    user.CreatedAt,
-		UpdatedAt:    user.UpdatedAt,
+		ID:                 user.UserID,
+		Username:           user.Username,
+		DisplayName:        user.DisplayName,
+		FirstName:          user.FirstName,
+		LastName:           user.LastName,
+		Bio:                user.Bio,
+		AvatarURL:          user.AvatarURL,
+		LanguageCode:       user.LanguageCode,
+		Timezone:           user.Timezone,
+		CountryCode:        user.CountryCode,
+		IsVerified:         user.IsVerified,
+		AvatarThumbnailURL: user.AvatarThumbnailURL,
+		PhoneVerified:      user.PhoneVerified,
+		EmailVerified:      user.EmailVerified,
+		TwoFactorEnabled:   user.TwoFactorEnabled,
+		AccountStatus:      user.AccountStatus.String(),
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Profile retrieved successfully", resp)

@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 	req "shared/server/request"
 	"shared/server/response"
 	"user-service/api/v1/dto"
@@ -75,18 +76,21 @@ func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
 	}
 
 	response.JSONWithMessage(ctx, r, w, http.StatusCreated, "Profile created successfully", dto.CreateProfileResponse{
-		ID:           profile.ID,
-		Username:     profile.Username,
-		DisplayName:  *profile.DisplayName,
-		FirstName:    *profile.FirstName,
-		LastName:     *profile.LastName,
-		Bio:          *profile.Bio,
-		AvatarURL:    *profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
-		Timezone:     location.Timezone,
-		CountryCode:  location.CountryCode,
-		IsVerified:   profile.IsVerified,
-		CreatedAt:    profile.CreatedAt,
-		UpdatedAt:    profile.UpdatedAt,
+		ID:                 profile.UserID,
+		Username:           profile.Username,
+		DisplayName:        utils.SafeString(profile.DisplayName),
+		FirstName:          utils.SafeString(profile.FirstName),
+		LastName:           utils.SafeString(profile.LastName),
+		Bio:                utils.SafeString(profile.Bio),
+		AvatarURL:          utils.SafeString(profile.AvatarURL),
+		LanguageCode:       profile.LanguageCode,
+		Timezone:           utils.SafeString(profile.Timezone),
+		CountryCode:        utils.SafeString(profile.CountryCode),
+		AvatarThumbnailURL: utils.SafeString(profile.AvatarThumbnailURL),
+		IsVerified:         profile.IsVerified,
+		PhoneVerified:      profile.PhoneVerified,
+		EmailVerified:      profile.EmailVerified,
+		TwoFactorEnabled:   profile.TwoFactorEnabled,
+		AccountStatus:      profile.AccountStatus.String(),
 	})
 }

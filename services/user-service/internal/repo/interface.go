@@ -11,7 +11,7 @@ import (
 // ============================================================================
 
 // UserRepositoryInterface defines the contract for user repository operations
-type UserRepositoryInterface interface {
+type UserRepository interface {
 	// Profile retrieval
 	GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, error)
 	GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error)
@@ -31,4 +31,4 @@ type UserRepositoryInterface interface {
 }
 
 // Compile-time interface compliance check
-var _ UserRepositoryInterface = (*UserRepository)(nil)
+var _ UserRepository = (*userRepository)(nil)

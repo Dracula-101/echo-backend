@@ -2,30 +2,28 @@ package service
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"user-service/internal/domain"
 	repository "user-service/internal/repo"
+	"user-service/internal/service/cache"
 
-	"shared/pkg/cache"
 	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 )
 
-type UserService struct {
-	repo  repository.UserRepositoryInterface
-	cache cache.Cache
+type userService struct {
+	repo  repository.UserRepository
+	cache cache.UserCache
 	log   logger.Logger
 }
 
-func newUserService(repo repository.UserRepositoryInterface, cache cache.Cache, log logger.Logger) *UserService {
-	return &UserService{repo: repo, cache: cache, log: log}
+func newUserService(repo repository.UserRepository, cache cache.UserCache, log logger.Logger) *userService {
+	return &userService{repo: repo, cache: cache, log: log}
 }
 
-func (s *UserService) GenerateUsername(ctx context.Context, displayName string) (string, error) {
+func (s *userService) GenerateUsername(ctx context.Context, displayName string) (string, error) {
 	s.log.Info("Generating username",
 		logger.String("display_name", displayName),
 	)
@@ -42,22 +40,19 @@ func (s *UserService) GenerateUsername(ctx context.Context, displayName string) 
 	return *username, nil
 }
 
-func (s *UserService) GetProfile(ctx context.Context, userID string) (*domain.User, error) {
+func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Profile, error) {
 	s.log.Info("Getting user profile",
 		logger.String("user_id", userID),
 	)
-	if s.cache != nil {
-		cacheKey := fmt.Sprintf("user:profile:%s", userID)
-		cachedData, err := s.cache.Get(ctx, cacheKey)
-		if err == nil && cachedData != nil {
-			var cachedProfile domain.User
-			if err := json.Unmarshal(cachedData, &cachedProfile); err == nil {
-				s.log.Debug("Profile found in cache",
-					logger.String("user_id", userID),
-				)
-				return &cachedProfile, nil
-			}
-		}
+	cachedProfile, cacheErr := s.cache.GetProfile(ctx, userID)
+	if cacheErr != nil {
+		s.log.Error("Failed to get cached profile",
+			logger.String("user_id", userID),
+			logger.Error(cacheErr),
+		)
+	}
+	if cachedProfile != nil {
+		return cachedProfile, nil
 	}
 
 	profile, err := s.repo.GetProfileByUserID(ctx, userID)
@@ -73,33 +68,43 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*domain.Us
 		return nil, nil
 	}
 
-	user := &domain.User{
-		ID:           profile.UserID,
-		Username:     profile.Username,
-		DisplayName:  profile.DisplayName,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Bio:          profile.Bio,
-		AvatarURL:    profile.AvatarURL,
-		LanguageCode: profile.LanguageCode,
-		Timezone:     profile.Timezone,
-		CountryCode:  profile.CountryCode,
-		IsVerified:   profile.IsVerified,
-		CreatedAt:    *profile.CreatedAt,
-		UpdatedAt:    *profile.UpdatedAt,
+	// Cache the profile for future requests
+	err = s.cache.SetProfile(ctx, profile.UserID, &domain.Profile{
+		UserID:             profile.UserID,
+		Username:           profile.Username,
+		DisplayName:        profile.DisplayName,
+		FirstName:          profile.FirstName,
+		LastName:           profile.LastName,
+		Bio:                profile.Bio,
+		AvatarURL:          profile.AvatarURL,
+		AvatarThumbnailURL: profile.AvatarThumbnailURL,
+		LanguageCode:       profile.LanguageCode,
+		Timezone:           profile.Timezone,
+		CountryCode:        profile.CountryCode,
+		IsVerified:         profile.IsVerified,
+		PhoneVisible:       profile.PhoneVisible,
+		EmailVisible:       profile.EmailVisible,
+		LastSeenAt:         profile.LastSeenAt,
+		OnlineStatus:       profile.OnlineStatus,
+		ProfileVisibility:  profile.ProfileVisibility,
+		SearchVisibility:   profile.SearchVisibility,
+		TwoFactorEnabled:   profile.TwoFactorEnabled,
+		AccountStatus:      profile.AccountStatus,
+		PhoneVerified:      profile.PhoneVerified,
+		EmailVerified:      profile.EmailVerified,
+	})
+
+	if err != nil {
+		s.log.Error("Failed to cache profile",
+			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+		)
 	}
 
-	if s.cache != nil {
-		cacheKey := fmt.Sprintf("user:profile:%s", userID)
-		if data, err := json.Marshal(user); err == nil {
-			_ = s.cache.Set(ctx, cacheKey, data, 5*time.Minute)
-		}
-	}
-
-	return user, nil
+	return profile, nil
 }
 
-func (s *UserService) CreateProfile(ctx context.Context, input *domain.CreateProfileInput) (*domain.User, error) {
+func (s *userService) CreateProfile(ctx context.Context, input *domain.CreateProfileInput) (*domain.Profile, error) {
 	s.log.Info("Creating user profile",
 		logger.String("user_id", input.UserID),
 	)
@@ -136,20 +141,29 @@ func (s *UserService) CreateProfile(ctx context.Context, input *domain.CreatePro
 			)
 			return nil, err
 		}
-		return &domain.User{
-			ID:           result.UserID,
-			Username:     result.Username,
-			DisplayName:  result.DisplayName,
-			FirstName:    result.FirstName,
-			LastName:     result.LastName,
-			Bio:          result.Bio,
-			AvatarURL:    result.AvatarURL,
-			LanguageCode: result.LanguageCode,
-			Timezone:     result.Timezone,
-			CountryCode:  result.CountryCode,
-			IsVerified:   result.IsVerified,
-			CreatedAt:    *result.CreatedAt,
-			UpdatedAt:    *result.UpdatedAt,
+		return &domain.Profile{
+			UserID:             result.UserID,
+			Username:           result.Username,
+			DisplayName:        result.DisplayName,
+			FirstName:          result.FirstName,
+			LastName:           result.LastName,
+			Bio:                result.Bio,
+			AvatarURL:          result.AvatarURL,
+			LanguageCode:       result.LanguageCode,
+			Timezone:           result.Timezone,
+			CountryCode:        result.CountryCode,
+			IsVerified:         result.IsVerified,
+			AvatarThumbnailURL: result.AvatarThumbnailURL,
+			PhoneVisible:       result.PhoneVisible,
+			EmailVisible:       result.EmailVisible,
+			OnlineStatus:       result.OnlineStatus,
+			LastSeenAt:         result.LastSeenAt,
+			ProfileVisibility:  result.ProfileVisibility,
+			SearchVisibility:   result.SearchVisibility,
+			PhoneVerified:      result.PhoneVerified,
+			EmailVerified:      result.EmailVerified,
+			TwoFactorEnabled:   result.TwoFactorEnabled,
+			AccountStatus:      result.AccountStatus,
 		}, nil
 	}
 
@@ -177,8 +191,10 @@ func (s *UserService) CreateProfile(ctx context.Context, input *domain.CreatePro
 		ProfileVisibility: "private",
 		SearchVisibility:  false,
 		IsVerified:        input.IsVerified,
-		CreatedAt:         &now,
-		UpdatedAt:         &now,
+		PhoneVerified:     false,
+		EmailVerified:     false,
+		TwoFactorEnabled:  false,
+		AccountStatus:     domain.AccountStatusActive,
 	}
 
 	result, err := s.repo.CreateProfile(ctx, newProfile)
@@ -190,24 +206,33 @@ func (s *UserService) CreateProfile(ctx context.Context, input *domain.CreatePro
 		return nil, err
 	}
 
-	return &domain.User{
-		ID:           result.UserID,
-		Username:     result.Username,
-		DisplayName:  result.DisplayName,
-		FirstName:    result.FirstName,
-		LastName:     result.LastName,
-		Bio:          result.Bio,
-		AvatarURL:    result.AvatarURL,
-		LanguageCode: result.LanguageCode,
-		Timezone:     result.Timezone,
-		CountryCode:  result.CountryCode,
-		IsVerified:   result.IsVerified,
-		CreatedAt:    *result.CreatedAt,
-		UpdatedAt:    *result.UpdatedAt,
+	return &domain.Profile{
+		UserID:             result.UserID,
+		Username:           result.Username,
+		DisplayName:        result.DisplayName,
+		FirstName:          result.FirstName,
+		LastName:           result.LastName,
+		Bio:                result.Bio,
+		AvatarURL:          result.AvatarURL,
+		LanguageCode:       result.LanguageCode,
+		Timezone:           result.Timezone,
+		CountryCode:        result.CountryCode,
+		IsVerified:         result.IsVerified,
+		AvatarThumbnailURL: result.AvatarThumbnailURL,
+		PhoneVisible:       result.PhoneVisible,
+		EmailVisible:       result.EmailVisible,
+		LastSeenAt:         result.LastSeenAt,
+		OnlineStatus:       result.OnlineStatus,
+		ProfileVisibility:  result.ProfileVisibility,
+		SearchVisibility:   result.SearchVisibility,
+		AccountStatus:      result.AccountStatus,
+		PhoneVerified:      result.PhoneVerified,
+		EmailVerified:      result.EmailVerified,
+		TwoFactorEnabled:   result.TwoFactorEnabled,
 	}, nil
 }
 
-func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevice) error {
+func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevice) error {
 	s.log.Info("Adding user device",
 		logger.String("user_id", input.UserID),
 		logger.String("device_id", input.DeviceID),
@@ -261,7 +286,7 @@ func (s *UserService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 	return nil
 }
 
-func (s *UserService) AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) error {
+func (s *userService) AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) error {
 	s.log.Info("Adding profile thumbnail",
 		logger.String("user_id", userID),
 		logger.String("thumbnail_url", thumbnailURL),
