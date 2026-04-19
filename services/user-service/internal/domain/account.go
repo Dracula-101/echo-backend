@@ -27,3 +27,14 @@ const (
 func (s OnlineStatus) String() string {
 	return string(s)
 }
+
+type ProfileVisibility string
+
+const (
+	ProfileVisibilityPublic  ProfileVisibility = "public"
+	ProfileVisibilityPrivate ProfileVisibility = "private"
+)
+
+func (s ProfileVisibility) String() string {
+	return string(s)
+}

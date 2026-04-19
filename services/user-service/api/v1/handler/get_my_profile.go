@@ -5,6 +5,7 @@ import (
 	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
+	"user-service/api/v1/dto"
 )
 
 func (h *UserHandler) GetMyProfile(handler *req.RequestHandler) {
@@ -29,5 +30,5 @@ func (h *UserHandler) GetMyProfile(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithMessage(ctx, r, w, 200, "User profile retrieved successfully", profile)
+	response.JSONWithMessage(ctx, r, w, 200, "User profile retrieved successfully", dto.NewGetMyProfileResponse(profile))
 }

@@ -8,9 +8,10 @@ import req "shared/server/request"
 
 type UserHandlerInterface interface {
 	// Profile endpoints
-	GetProfile(handler *req.RequestHandler)
-	CreateProfile(handler *req.RequestHandler)
-	UpdateProfile(handler *req.RequestHandler)
+
+	GetMyProfile(handler *req.RequestHandler)
+	CreateMyProfile(handler *req.RequestHandler)
+	UpdateMyProfile(handler *req.RequestHandler)
 	DeleteProfile(handler *req.RequestHandler)
 	SearchProfiles(handler *req.RequestHandler)
 

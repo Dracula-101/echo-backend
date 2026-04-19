@@ -19,7 +19,7 @@ import (
 //	[5] Response helper — return 201 JSON body.
 //
 // Failures short-circuit immediately with structured error payloads.
-func (h *UserHandler) CreateProfile(handler *req.RequestHandler) {
+func (h *UserHandler) CreateMyProfile(handler *req.RequestHandler) {
 	ctx := handler.Context()
 	r := handler.Request()
 	w := handler.Writer()

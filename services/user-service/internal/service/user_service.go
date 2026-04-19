@@ -186,9 +186,9 @@ func (s *userService) CreateProfile(ctx context.Context, input *domain.CreatePro
 		CountryCode:       input.CountryCode,
 		PhoneVisible:      false,
 		EmailVisible:      false,
-		OnlineStatus:      "offline",
+		OnlineStatus:      domain.OnlineStatusOffline,
 		LastSeenAt:        &now,
-		ProfileVisibility: "private",
+		ProfileVisibility: domain.ProfileVisibilityPrivate,
 		SearchVisibility:  false,
 		IsVerified:        input.IsVerified,
 		PhoneVerified:     false,
@@ -230,6 +230,10 @@ func (s *userService) CreateProfile(ctx context.Context, input *domain.CreatePro
 		EmailVerified:      result.EmailVerified,
 		TwoFactorEnabled:   result.TwoFactorEnabled,
 	}, nil
+}
+
+func (s *userService) UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, error) {
+	panic("unimplemented")
 }
 
 func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevice) error {

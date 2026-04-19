@@ -197,11 +197,11 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 	// Profile routes
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/me", request.Adapt(h.GetMyProfile))
-		r.Post("/profile", request.Adapt(h.CreateProfile))
-		r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
-		r.Put("/profile", request.Adapt(h.UpdateProfile))
-		r.Delete("/profile", request.Adapt(h.DeleteProfile))
-		r.Get("/search", request.Adapt(h.SearchProfiles))
+		r.Post("/me", request.Adapt(h.CreateMyProfile))
+		r.Put("/me", request.Adapt(h.UpdateMyProfile))
+		// r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
+		// r.Delete("/profile", request.Adapt(h.DeleteProfile))
+		// r.Get("/search", request.Adapt(h.SearchProfiles))
 	})
 
 	// Contact routes

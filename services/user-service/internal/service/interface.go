@@ -14,6 +14,7 @@ type UserService interface {
 	// Profile operations
 	GetProfile(ctx context.Context, userID string) (*domain.Profile, error)
 	CreateProfile(ctx context.Context, profile *domain.CreateProfileInput) (*domain.Profile, error)
+	UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, error)
 	AddUserDevice(ctx context.Context, input *domain.UserDevice) error
 	GenerateUsername(ctx context.Context, displayName string) (string, error)
 	AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) error
