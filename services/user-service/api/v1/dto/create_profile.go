@@ -7,16 +7,17 @@ import (
 )
 
 type CreateProfileRequest struct {
-	UserID       string `json:"user_id" validate:"required,uuid4"`
-	DisplayName  string `json:"display_name" validate:"required,max=50"`
-	FirstName    string `json:"first_name" validate:"max=30"`
-	LastName     string `json:"last_name" validate:"max=30"`
-	Bio          string `json:"bio" validate:"max=160"`
-	AvatarURL    string `json:"avatar_url,omitempty" validate:"omitempty,url"`
-	LanguageCode string `json:"language_code" validate:"omitempty,len=2"`
-	Timezone     string `json:"timezone" validate:"omitempty"`
-	CountryCode  string `json:"country_code" validate:"omitempty,len=2"`
-	PushEnabled  *bool  `json:"push_enabled,omitempty" validate:"omitempty"`
+	UserID            string `json:"user_id" validate:"required,uuid4"`
+	DisplayName       string `json:"display_name" validate:"required,max=50"`
+	FirstName         string `json:"first_name" validate:"max=30"`
+	LastName          string `json:"last_name" validate:"max=30"`
+	Bio               string `json:"bio" validate:"max=160"`
+	LanguageCode      string `json:"language_code" validate:"omitempty,len=2"`
+	Timezone          string `json:"timezone" validate:"omitempty"`
+	CountryCode       string `json:"country_code" validate:"omitempty,len=2"`
+	ProfileVisibility string `json:"profile_visibility" validate:"omitempty,oneof=public private friends"`
+	Searchable        *bool  `json:"searchable" validate:"omitempty"`
+	PushEnabled       *bool  `json:"push_enabled" validate:"omitempty"`
 }
 
 func NewCreateProfileRequest() *CreateProfileRequest {
@@ -76,13 +77,6 @@ func (cpr *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) (
 					Code: request.INVALID_FORMAT,
 				})
 			}
-		case "AvatarURL":
-			if err.Tag() == "url" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Msg:  "Avatar URL must be a valid URL",
-					Code: request.INVALID_FORMAT,
-				})
-			}
 		case "LanguageCode":
 			if err.Tag() == "len" {
 				errors = append(errors, request.ValidationErrorDetail{
@@ -101,6 +95,27 @@ func (cpr *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) (
 			if err.Tag() == "timezone" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Msg:  "Timezone must be a valid IANA timezone",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "ProfileVisibility":
+			if err.Tag() == "oneof" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Profile visibility must be one of 'public', 'private', or 'friends'",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "Searchable":
+			if err.Tag() == "bool" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Searchable must be a boolean value",
+					Code: request.INVALID_FORMAT,
+				})
+			}
+		case "PushEnabled":
+			if err.Tag() == "bool" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Msg:  "Push enabled must be a boolean value",
 					Code: request.INVALID_FORMAT,
 				})
 			}

@@ -1,6 +1,8 @@
 package domain
 
-import "time"
+import (
+	"time"
+)
 
 // Profile represents the profile domain model with database fields
 type Profile struct {
@@ -32,18 +34,18 @@ type Profile struct {
 
 // CreateProfileInput represents the input for creating a profile
 type CreateProfileInput struct {
-	UserID       string
-	Username     string
-	DisplayName  string
-	FirstName    *string
-	LastName     *string
-	Bio          *string
-	AvatarURL    *string
-	LanguageCode *string
-	Timezone     *string
-	CountryCode  *string
-	Searchable   bool
-	IsVerified   bool
+	DisplayName       string
+	FirstName         string
+	LastName          string
+	Bio               string
+	LanguageCode      string
+	Timezone          string
+	CountryCode       string
+	City              string
+	PhoneVisible      bool
+	EmailVisible      bool
+	ProfileVisibility ProfileVisibility
+	SearchVisibility  bool
 }
 
 // UpdateProfileInput represents the input for updating a profile
@@ -54,23 +56,17 @@ type UpdateProfileInput struct {
 	Bio               *string
 	BioLinks          *[]string
 	DateOfBirth       *time.Time
-	AvatarURL         *string
+	Gender            *string
+	Pronouns          *string
 	LanguageCode      *string
 	Timezone          *string
 	CountryCode       *string
+	City              *string
+	WebsiteURL        *string
 	SocialLinks       *[]string
+	Interests         *[]string
+	PhoneVisible      *bool
+	EmailVisible      *bool
 	ProfileVisibility *ProfileVisibility
-}
-
-// ProfileUpdate represents a profile update request
-type ProfileUpdate struct {
-	Username     *string
-	DisplayName  *string
-	FirstName    *string
-	LastName     *string
-	Bio          *string
-	AvatarURL    *string
-	LanguageCode *string
-	Timezone     *string
-	CountryCode  *string
+	SearchVisibility  *bool
 }

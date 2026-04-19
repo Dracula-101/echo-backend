@@ -39,4 +39,7 @@ const (
 	// Consumer errors
 	ErrCodeConsumerStartFailed = "CONSUMER_START_FAILED"
 	ErrCodeConsumerCloseFailed = "CONSUMER_CLOSE_FAILED"
+
+	ErrCodeUsernameGenerationFailed = "USERNAME_GENERATION_FAILED"
+	
 )

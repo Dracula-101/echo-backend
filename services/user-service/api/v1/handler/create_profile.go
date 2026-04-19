@@ -55,19 +55,19 @@ func (h *UserHandler) CreateMyProfile(handler *req.RequestHandler) {
 		logger.String("country", location.Country),
 		logger.String("ip", handler.GetClientIP()),
 	)
-	profile, err := h.service.CreateProfile(ctx, &domain.CreateProfileInput{
-		UserID:       userId,
-		Username:     userName,
-		DisplayName:  createProfileRequest.DisplayName,
-		FirstName:    &createProfileRequest.FirstName,
-		Bio:          &createProfileRequest.Bio,
-		AvatarURL:    &createProfileRequest.AvatarURL,
-		LanguageCode: &createProfileRequest.LanguageCode,
-		LastName:     &createProfileRequest.LastName,
-		Timezone:     &location.Timezone,
-		CountryCode:  &location.CountryCode,
-		Searchable:   true,
-		IsVerified:   false,
+	profile, err := h.service.CreateProfile(ctx, userId, &domain.CreateProfileInput{
+		DisplayName:       createProfileRequest.DisplayName,
+		FirstName:         createProfileRequest.FirstName,
+		Bio:               createProfileRequest.Bio,
+		LanguageCode:      createProfileRequest.LanguageCode,
+		LastName:          createProfileRequest.LastName,
+		Timezone:          location.Timezone,
+		City:              location.City,
+		CountryCode:       location.CountryCode,
+		ProfileVisibility: domain.ProfileVisibility(createProfileRequest.ProfileVisibility),
+		SearchVisibility:  *createProfileRequest.Searchable,
+		PhoneVisible:      false,
+		EmailVisible:      false,
 	})
 	if err != nil {
 		h.log.Error("failed to create profile", logger.String("user_id", userId), logger.Error(err))

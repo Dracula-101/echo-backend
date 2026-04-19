@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"user-service/internal/domain"
 	repository "user-service/internal/repo"
@@ -69,30 +68,7 @@ func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Pr
 	}
 
 	// Cache the profile for future requests
-	err = s.cache.SetProfile(ctx, profile.UserID, &domain.Profile{
-		UserID:             profile.UserID,
-		Username:           profile.Username,
-		DisplayName:        profile.DisplayName,
-		FirstName:          profile.FirstName,
-		LastName:           profile.LastName,
-		Bio:                profile.Bio,
-		AvatarURL:          profile.AvatarURL,
-		AvatarThumbnailURL: profile.AvatarThumbnailURL,
-		LanguageCode:       profile.LanguageCode,
-		Timezone:           profile.Timezone,
-		CountryCode:        profile.CountryCode,
-		IsVerified:         profile.IsVerified,
-		PhoneVisible:       profile.PhoneVisible,
-		EmailVisible:       profile.EmailVisible,
-		LastSeenAt:         profile.LastSeenAt,
-		OnlineStatus:       profile.OnlineStatus,
-		ProfileVisibility:  profile.ProfileVisibility,
-		SearchVisibility:   profile.SearchVisibility,
-		TwoFactorEnabled:   profile.TwoFactorEnabled,
-		AccountStatus:      profile.AccountStatus,
-		PhoneVerified:      profile.PhoneVerified,
-		EmailVerified:      profile.EmailVerified,
-	})
+	err = s.cache.SetProfile(ctx, profile.UserID, profile)
 
 	if err != nil {
 		s.log.Error("Failed to cache profile",
@@ -104,136 +80,68 @@ func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Pr
 	return profile, nil
 }
 
-func (s *userService) CreateProfile(ctx context.Context, input *domain.CreateProfileInput) (*domain.Profile, error) {
+func (s *userService) CreateProfile(ctx context.Context, userID string, input *domain.CreateProfileInput) (*domain.Profile, error) {
 	s.log.Info("Creating user profile",
-		logger.String("user_id", input.UserID),
+		logger.String("user_id", userID),
 	)
 
-	existingProfile, err := s.repo.GetProfileByUserID(ctx, input.UserID)
-	if err != nil {
-		s.log.Error("Failed to check existing profile",
-			logger.String("user_id", input.UserID),
-			logger.Error(err),
-		)
-		return nil, err
-	}
-
-	if existingProfile != nil {
-		s.log.Info("Profile already exists, updating existing profile",
-			logger.String("user_id", input.UserID),
-		)
-		result, err := s.repo.UpdateProfile(ctx, repository.UpdateProfileParams{
-			UserID:       input.UserID,
-			Username:     &input.Username,
-			DisplayName:  &input.DisplayName,
-			FirstName:    input.FirstName,
-			LastName:     input.LastName,
-			Bio:          input.Bio,
-			AvatarURL:    input.AvatarURL,
-			LanguageCode: input.LanguageCode,
-			Timezone:     input.Timezone,
-			CountryCode:  input.CountryCode,
-		})
-		if err != nil {
-			s.log.Error("Failed to update existing profile",
-				logger.String("user_id", input.UserID),
-				logger.Error(err),
-			)
-			return nil, err
-		}
-		return &domain.Profile{
-			UserID:             result.UserID,
-			Username:           result.Username,
-			DisplayName:        result.DisplayName,
-			FirstName:          result.FirstName,
-			LastName:           result.LastName,
-			Bio:                result.Bio,
-			AvatarURL:          result.AvatarURL,
-			LanguageCode:       result.LanguageCode,
-			Timezone:           result.Timezone,
-			CountryCode:        result.CountryCode,
-			IsVerified:         result.IsVerified,
-			AvatarThumbnailURL: result.AvatarThumbnailURL,
-			PhoneVisible:       result.PhoneVisible,
-			EmailVisible:       result.EmailVisible,
-			OnlineStatus:       result.OnlineStatus,
-			LastSeenAt:         result.LastSeenAt,
-			ProfileVisibility:  result.ProfileVisibility,
-			SearchVisibility:   result.SearchVisibility,
-			PhoneVerified:      result.PhoneVerified,
-			EmailVerified:      result.EmailVerified,
-			TwoFactorEnabled:   result.TwoFactorEnabled,
-			AccountStatus:      result.AccountStatus,
-		}, nil
-	}
-
-	now := time.Now()
-	languageCode := "en"
-	if input.LanguageCode != nil {
-		languageCode = *input.LanguageCode
-	}
-
-	newProfile := domain.Profile{
-		UserID:            input.UserID,
-		Username:          input.Username,
-		DisplayName:       &input.DisplayName,
-		FirstName:         input.FirstName,
-		LastName:          input.LastName,
-		Bio:               input.Bio,
-		AvatarURL:         input.AvatarURL,
-		LanguageCode:      languageCode,
-		Timezone:          input.Timezone,
-		CountryCode:       input.CountryCode,
-		PhoneVisible:      false,
-		EmailVisible:      false,
-		OnlineStatus:      domain.OnlineStatusOffline,
-		LastSeenAt:        &now,
-		ProfileVisibility: domain.ProfileVisibilityPrivate,
-		SearchVisibility:  false,
-		IsVerified:        input.IsVerified,
-		PhoneVerified:     false,
-		EmailVerified:     false,
-		TwoFactorEnabled:  false,
-		AccountStatus:     domain.AccountStatusActive,
-	}
-
-	result, err := s.repo.CreateProfile(ctx, newProfile)
+	result, err := s.repo.CreateProfile(ctx, userID, repository.CreateProfileInput{
+		DisplayName:       utils.PtrString(input.DisplayName),
+		FirstName:         utils.PtrString(input.FirstName),
+		LastName:          utils.PtrString(input.LastName),
+		Bio:               utils.PtrString(input.Bio),
+		LanguageCode:      utils.PtrString(input.LanguageCode),
+		Timezone:          utils.PtrString(input.Timezone),
+		CountryCode:       utils.PtrString(input.CountryCode),
+		City:              utils.PtrString(input.City),
+		PhoneVisible:      utils.PtrBool(input.PhoneVisible),
+		EmailVisible:      utils.PtrBool(input.EmailVisible),
+		ProfileVisibility: utils.PtrString(input.ProfileVisibility.String()),
+		SearchVisibility:  utils.PtrBool(input.SearchVisibility),
+	})
 	if err != nil {
 		s.log.Error("Failed to create profile",
-			logger.String("user_id", input.UserID),
+			logger.String("user_id", userID),
 			logger.Error(err),
 		)
 		return nil, err
 	}
 
-	return &domain.Profile{
-		UserID:             result.UserID,
-		Username:           result.Username,
-		DisplayName:        result.DisplayName,
-		FirstName:          result.FirstName,
-		LastName:           result.LastName,
-		Bio:                result.Bio,
-		AvatarURL:          result.AvatarURL,
-		LanguageCode:       result.LanguageCode,
-		Timezone:           result.Timezone,
-		CountryCode:        result.CountryCode,
-		IsVerified:         result.IsVerified,
-		AvatarThumbnailURL: result.AvatarThumbnailURL,
-		PhoneVisible:       result.PhoneVisible,
-		EmailVisible:       result.EmailVisible,
-		LastSeenAt:         result.LastSeenAt,
-		OnlineStatus:       result.OnlineStatus,
-		ProfileVisibility:  result.ProfileVisibility,
-		SearchVisibility:   result.SearchVisibility,
-		AccountStatus:      result.AccountStatus,
-		PhoneVerified:      result.PhoneVerified,
-		EmailVerified:      result.EmailVerified,
-		TwoFactorEnabled:   result.TwoFactorEnabled,
-	}, nil
+	err = s.cache.SetProfile(ctx, result.UserID, result)
+	if err != nil {
+		s.log.Error("Failed to cache profile after creation",
+			logger.String("user_id", result.UserID),
+			logger.Error(err),
+		)
+	}
+
+	return result, nil
 }
 
 func (s *userService) UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, error) {
-	panic("unimplemented")
+	s.log.Info("Updating user profile",
+		logger.String("user_id", userID),
+	)
+
+	result, err := s.repo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{
+	})
+	if err != nil {
+		s.log.Error("Failed to update profile",
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+
+	err = s.cache.SetProfile(ctx, result.UserID, result)
+	if err != nil {
+		s.log.Error("Failed to cache profile after update",
+			logger.String("user_id", result.UserID),
+			logger.Error(err),
+		)
+	}
+
+	return result, nil
 }
 
 func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevice) error {
@@ -296,8 +204,7 @@ func (s *userService) AddProfileThumbnail(ctx context.Context, userID string, th
 		logger.String("thumbnail_url", thumbnailURL),
 	)
 
-	_, err := s.repo.UpdateProfile(ctx, repository.UpdateProfileParams{
-		UserID:    userID,
+	_, err := s.repo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{
 		AvatarURL: &thumbnailURL,
 	})
 	if err != nil {

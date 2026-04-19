@@ -119,8 +119,7 @@ func (h *mediaMessageHandler) handleProfilePhotoUploaded(ctx context.Context, ra
 		return nil
 	}
 
-	if _, err := h.userRepo.UpdateProfile(ctx, repository.UpdateProfileParams{
-		UserID:             event.UserId,
+	if _, err := h.userRepo.UpdateProfile(ctx, event.UserId, repository.UpdateProfileParams{
 		AvatarThumbnailURL: &event.ThumbnailURLs.Medium,
 	}); err != nil {
 		h.log.Error("Failed to update user profile with new thumbnail URL",

@@ -11,14 +11,15 @@ import (
 	"strings"
 	"time"
 
-	dbModels "shared/pkg/database/postgres/models"
-	"shared/pkg/utils"
 	"user-service/internal/domain"
 	userErrors "user-service/internal/errors"
 
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
+	dbModels "shared/pkg/database/postgres/models"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 )
 
 // ============================================================================
@@ -53,7 +54,7 @@ func NewUserRepository(db database.Database, log logger.Logger) UserRepository {
 // ============================================================================
 
 // Generate Unique Username
-func (r *userRepository) GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, error) {
+func (r *userRepository) GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, pkgErrors.AppError) {
 	r.log.Debug("Generating unique username",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("base_username", baseUsername),
@@ -87,7 +88,7 @@ func (r *userRepository) GenerateUniqueUsername(ctx context.Context, baseUsernam
 				logger.String("username", username),
 				logger.Error(err),
 			)
-			return nil, err
+			return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to check username existence")
 		}
 
 		if !exists {
@@ -124,7 +125,7 @@ func (r *userRepository) GenerateUniqueUsername(ctx context.Context, baseUsernam
 		logger.Int("attempts", maxAttempts),
 	)
 
-	return nil, fmt.Errorf("unable to generate unique username after %d attempts", maxAttempts)
+	return nil, pkgErrors.FromError(fmt.Errorf("unable to generate unique username after %d attempts", maxAttempts), userErrors.ErrCodeUsernameGenerationFailed, "Failed to generate unique username")
 }
 
 // small helper for random alphanumeric suffixes
@@ -138,7 +139,7 @@ func randAlphaNum(n int) string {
 }
 
 // GetProfileByUserID retrieves a user profile by user ID
-func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, error) {
+func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, pkgErrors.AppError) {
 	r.log.Debug("Fetching profile by user ID",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -163,7 +164,7 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 			logger.String("user_id", userID),
 			logger.Error(err),
 		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get profile by user ID")
 	}
 
 	// Also load auth.users partial: SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1.
@@ -179,7 +180,7 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 			logger.Error(err),
 			logger.String("query", query),
 		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get auth details for profile")
 	}
 
 	r.log.Debug("Profile fetched successfully",
@@ -215,7 +216,7 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 }
 
 // GetProfileByUsername retrieves a user profile by username
-func (r *userRepository) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error) {
+func (r *userRepository) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, pkgErrors.AppError) {
 	r.log.Debug("Fetching profile by username",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("username", username),
@@ -240,7 +241,7 @@ func (r *userRepository) GetProfileByUsername(ctx context.Context, username stri
 			logger.String("username", username),
 			logger.Error(err),
 		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get profile by username")
 	}
 
 	// Also load auth.users partial: SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1.
@@ -256,7 +257,7 @@ func (r *userRepository) GetProfileByUsername(ctx context.Context, username stri
 			logger.Error(err),
 			logger.String("query", query),
 		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get auth details for profile")
 	}
 
 	r.log.Debug("Profile fetched successfully by username",
@@ -291,63 +292,84 @@ func (r *userRepository) GetProfileByUsername(ctx context.Context, username stri
 }
 
 // CreateProfile creates a new user profile
-func (r *userRepository) CreateProfile(ctx context.Context, profile domain.Profile) (*domain.Profile, error) {
+type CreateProfileInput struct {
+	DisplayName       *string
+	FirstName         *string
+	LastName          *string
+	Bio               *string
+	LanguageCode      *string
+	Timezone          *string
+	CountryCode       *string
+	City              *string
+	PhoneVisible      *bool
+	EmailVisible      *bool
+	ProfileVisibility *string
+	SearchVisibility  *bool
+}
+
+func (r *userRepository) CreateProfile(ctx context.Context, userId string, profile CreateProfileInput) (*domain.Profile, pkgErrors.AppError) {
 	r.log.Info("Creating new profile",
 		logger.String("service", userErrors.ServiceName),
-		logger.String("user_id", profile.UserID),
+		logger.String("user_id", userId),
 	)
 
-	var profileModel = dbModels.Profile{
-		UserID:             profile.UserID,
-		Username:           profile.Username,
-		DisplayName:        profile.DisplayName,
-		FirstName:          profile.FirstName,
-		LastName:           profile.LastName,
-		AvatarThumbnailURL: profile.AvatarThumbnailURL,
-		Bio:                profile.Bio,
-		AvatarURL:          profile.AvatarURL,
-		LanguageCode:       profile.LanguageCode,
-		OnlineStatus:       dbModels.OnlineStatusOffline,
-		ProfileVisibility:  dbModels.ProfileVisibilityPublic,
-		SearchVisibility:   profile.SearchVisibility,
-		Timezone:           profile.Timezone,
-		CountryCode:        profile.CountryCode,
-		IsVerified:         profile.IsVerified,
-		PhoneVisible:       profile.PhoneVisible,
-		EmailVisible:       profile.EmailVisible,
-		LastSeenAt:         profile.LastSeenAt,
-	}
-	id, err := r.db.Insert(ctx, &profileModel)
+	userName, err := r.GenerateUniqueUsername(ctx, *profile.DisplayName)
 	if err != nil {
-		r.log.Error("Failed to create profile",
+		r.log.Error("Failed to generate unique username",
 			logger.String("service", userErrors.ServiceName),
-			logger.String("user_id", profile.UserID),
+			logger.String("display_name", *profile.DisplayName),
 			logger.Error(err),
 		)
 		return nil, err
 	}
 
-	createdProfile, dbErr := r.GetProfileByUserID(ctx, profile.UserID)
+	var profileModel = dbModels.Profile{
+		UserID:            userId,
+		Username:          *userName,
+		DisplayName:       profile.DisplayName,
+		FirstName:         profile.FirstName,
+		LastName:          profile.LastName,
+		Bio:               profile.Bio,
+		LanguageCode:      *utils.SafePtrString(profile.LanguageCode),
+		OnlineStatus:      dbModels.OnlineStatusOffline,
+		ProfileVisibility: dbModels.ProfileVisibilityPublic,
+		SearchVisibility:  *utils.SafePtrBool(profile.SearchVisibility),
+		Timezone:          profile.Timezone,
+		CountryCode:       profile.CountryCode,
+		PhoneVisible:      *utils.SafePtrBool(profile.PhoneVisible),
+		EmailVisible:      *utils.SafePtrBool(profile.EmailVisible),
+	}
+	id, dbErr := r.db.Insert(ctx, &profileModel)
 	if dbErr != nil {
+		r.log.Error("Failed to create profile",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userId),
+			logger.Error(dbErr),
+		)
+		return nil, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to create profile")
+	}
+
+	createdProfile, err := r.GetProfileByUserID(ctx, userId)
+	if err != nil {
 		r.log.Error("Failed to retrieve created profile",
 			logger.String("service", userErrors.ServiceName),
-			logger.String("user_id", profile.UserID),
+			logger.String("user_id", userId),
 			logger.String("profile_id", *id),
 			logger.Error(dbErr),
 		)
-		return nil, dbErr
+		return nil, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to retrieve created profile")
 	}
 	if createdProfile == nil {
 		r.log.Error("Created profile not found",
 			logger.String("service", userErrors.ServiceName),
-			logger.String("user_id", profile.UserID),
+			logger.String("user_id", userId),
 		)
-		return nil, fmt.Errorf("created profile not found for user_id: %s", profile.UserID)
+		return nil, pkgErrors.FromError(fmt.Errorf("created profile not found"), userErrors.ErrCodeProfileNotFound, "Created profile not found")
 	}
 
 	r.log.Info("Profile created successfully",
 		logger.String("service", userErrors.ServiceName),
-		logger.String("user_id", profile.UserID),
+		logger.String("user_id", userId),
 		logger.String("profile_id", createdProfile.UserID),
 	)
 	return createdProfile, nil
@@ -355,24 +377,33 @@ func (r *userRepository) CreateProfile(ctx context.Context, profile domain.Profi
 
 // UpdateProfile updates a user profile
 type UpdateProfileParams struct {
-	UserID             string
-	Username           *string
 	DisplayName        *string
 	FirstName          *string
 	LastName           *string
 	Bio                *string
+	BioLinks           *[]string
+	DateOfBirth        *time.Time
 	AvatarURL          *string
 	AvatarThumbnailURL *string
-	CoverImageURL      *string
+	Gender             *string
+	Pronouns           *string
 	LanguageCode       *string
 	Timezone           *string
 	CountryCode        *string
+	City               *string
+	WebsiteURL         *string
+	SocialLinks        *[]string
+	Interests          *[]string
+	PhoneVisible       *bool
+	EmailVisible       *bool
+	ProfileVisibility  *string
+	SearchVisibility   *bool
 }
 
-func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfileParams) (*domain.Profile, error) {
+func (r *userRepository) UpdateProfile(ctx context.Context, userId string, params UpdateProfileParams) (*domain.Profile, pkgErrors.AppError) {
 	r.log.Info("Updating profile",
 		logger.String("service", userErrors.ServiceName),
-		logger.String("user_id", params.UserID),
+		logger.String("user_id", userId),
 	)
 
 	// Build dynamic SET clause
@@ -380,11 +411,6 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 	args := []interface{}{}
 	argPos := 1
 
-	if params.Username != nil {
-		setClauses = append(setClauses, fmt.Sprintf("username = $%d", argPos))
-		args = append(args, *params.Username)
-		argPos++
-	}
 	if params.DisplayName != nil {
 		setClauses = append(setClauses, fmt.Sprintf("display_name = $%d", argPos))
 		args = append(args, *params.DisplayName)
@@ -405,6 +431,25 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		args = append(args, *params.Bio)
 		argPos++
 	}
+	if params.BioLinks != nil {
+		bioLinksJSON, err := json.Marshal(*params.BioLinks)
+		if err != nil {
+			r.log.Error("Failed to marshal bio links",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userId),
+				logger.Error(err),
+			)
+			return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to marshal bio links")
+		}
+		setClauses = append(setClauses, fmt.Sprintf("bio_links = $%d", argPos))
+		args = append(args, string(bioLinksJSON))
+		argPos++
+	}
+	if params.DateOfBirth != nil {
+		setClauses = append(setClauses, fmt.Sprintf("date_of_birth = $%d", argPos))
+		args = append(args, *params.DateOfBirth)
+		argPos++
+	}
 	if params.AvatarURL != nil {
 		setClauses = append(setClauses, fmt.Sprintf("avatar_url = $%d", argPos))
 		args = append(args, *params.AvatarURL)
@@ -413,11 +458,6 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 	if params.AvatarThumbnailURL != nil {
 		setClauses = append(setClauses, fmt.Sprintf("avatar_thumbnail_url = $%d", argPos))
 		args = append(args, *params.AvatarThumbnailURL)
-		argPos++
-	}
-	if params.CoverImageURL != nil {
-		setClauses = append(setClauses, fmt.Sprintf("cover_image_url = $%d", argPos))
-		args = append(args, *params.CoverImageURL)
 		argPos++
 	}
 	if params.LanguageCode != nil {
@@ -435,9 +475,36 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		args = append(args, *params.CountryCode)
 		argPos++
 	}
+	if params.PhoneVisible != nil {
+		setClauses = append(setClauses, fmt.Sprintf("phone_visible = $%d", argPos))
+		args = append(args, *params.PhoneVisible)
+		argPos++
+	}
+	if params.EmailVisible != nil {
+		setClauses = append(setClauses, fmt.Sprintf("email_visible = $%d", argPos))
+		args = append(args, *params.EmailVisible)
+		argPos++
+	}
+	if params.ProfileVisibility != nil {
+		setClauses = append(setClauses, fmt.Sprintf("profile_visibility = $%d", argPos))
+		args = append(args, *params.ProfileVisibility)
+		argPos++
+	}
+	if params.SearchVisibility != nil {
+		setClauses = append(setClauses, fmt.Sprintf("search_visibility = $%d", argPos))
+		args = append(args, *params.SearchVisibility)
+		argPos++
+	}
 
-	args = append(args, params.UserID)
+	if len(setClauses) == 1 {
+		r.log.Debug("No fields to update for profile",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userId),
+		)
+		return r.GetProfileByUserID(ctx, userId)
+	}
 
+	args = append(args, userId)
 	query := fmt.Sprintf(`
 		UPDATE users.profiles 
 		SET %s
@@ -449,7 +516,7 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 
 	r.log.Debug("Executing update query",
 		logger.String("service", userErrors.ServiceName),
-		logger.String("user_id", params.UserID),
+		logger.String("user_id", userId),
 	)
 
 	var profile dbModels.Profile
@@ -457,21 +524,35 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		if postgres.IsNotFoundError(err) {
 			r.log.Debug("No profile updated - not found",
 				logger.String("service", userErrors.ServiceName),
-				logger.String("user_id", params.UserID),
+				logger.String("user_id", userId),
 			)
 			return nil, nil
 		}
 		r.log.Error("Failed to update profile",
 			logger.String("service", userErrors.ServiceName),
-			logger.String("user_id", params.UserID),
+			logger.String("user_id", userId),
 			logger.Error(err),
 		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to update profile")
+	}
+
+	var emailVerified, phoneVerified, twoFactorEnabled bool
+	var accountStatus string
+	authQuery := `SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1 AND deactivated_at IS NULL`
+	err := r.db.QueryRow(ctx, authQuery, profile.UserID).Scan(&emailVerified, &phoneVerified, &twoFactorEnabled, &accountStatus)
+	if err != nil {
+		r.log.Error("Failed to get auth details after profile update",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+			logger.String("query", authQuery),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get auth details after profile update")
 	}
 
 	r.log.Info("Profile updated successfully",
 		logger.String("service", userErrors.ServiceName),
-		logger.String("user_id", params.UserID),
+		logger.String("user_id", userId),
 		logger.String("profile_id", profile.ID),
 	)
 
@@ -494,10 +575,14 @@ func (r *userRepository) UpdateProfile(ctx context.Context, params UpdateProfile
 		LastSeenAt:         profile.LastSeenAt,
 		ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
 		SearchVisibility:   profile.SearchVisibility,
+		PhoneVerified:      emailVerified,
+		EmailVerified:      emailVerified,
+		TwoFactorEnabled:   twoFactorEnabled,
+		AccountStatus:      domain.AccountStatus(accountStatus),
 	}, nil
 }
 
-func (r *userRepository) AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) error {
+func (r *userRepository) AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) pkgErrors.AppError {
 	r.log.Info("Adding user device",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", input.UserID),
@@ -532,7 +617,7 @@ func (r *userRepository) AddUserDevice(ctx context.Context, input *domain.UserDe
 			logger.String("device_id", input.DeviceID),
 			logger.Error(err),
 		)
-		return err
+		return pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to add user device")
 	}
 
 	r.log.Info("User device added successfully",
@@ -544,7 +629,7 @@ func (r *userRepository) AddUserDevice(ctx context.Context, input *domain.UserDe
 	return nil
 }
 
-func (r *userRepository) GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, error) {
+func (r *userRepository) GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, pkgErrors.AppError) {
 	r.log.Debug("Fetching user devices",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -558,7 +643,7 @@ func (r *userRepository) GetUserDevices(ctx context.Context, userID string) ([]*
 			logger.String("user_id", userID),
 			logger.Error(err),
 		)
-		return nil, err
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to fetch user devices")
 	}
 	defer rows.Close()
 
@@ -585,7 +670,7 @@ func (r *userRepository) GetUserDevices(ctx context.Context, userID string) ([]*
 	return devices, nil
 }
 
-func (r *userRepository) UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) error {
+func (r *userRepository) UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) pkgErrors.AppError {
 	r.log.Info("Updating user device",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("user_id", userID),
@@ -646,7 +731,7 @@ func (r *userRepository) UpdateUserDevice(ctx context.Context, input *domain.Upd
 			logger.String("device_id", deviceID),
 			logger.Error(err),
 		)
-		return err
+		return pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to update user device")
 	}
 
 	r.log.Info("User device updated successfully",
@@ -659,7 +744,7 @@ func (r *userRepository) UpdateUserDevice(ctx context.Context, input *domain.Upd
 }
 
 // SearchProfiles searches for profiles by query
-func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, error) {
+func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, pkgErrors.AppError) {
 	r.log.Debug("Searching profiles",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("query", query),
@@ -697,7 +782,7 @@ func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit
 			logger.String("query", query),
 			logger.Error(err),
 		)
-		return nil, 0, err
+		return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to search profiles")
 	}
 	defer rows.Close()
 
@@ -767,7 +852,7 @@ func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit
 }
 
 // UsernameExists checks if a username is already taken
-func (r *userRepository) UsernameExists(ctx context.Context, username string) (bool, error) {
+func (r *userRepository) UsernameExists(ctx context.Context, username string) (bool, pkgErrors.AppError) {
 	r.log.Debug("Checking if username exists",
 		logger.String("service", userErrors.ServiceName),
 		logger.String("username", username),
@@ -782,7 +867,7 @@ func (r *userRepository) UsernameExists(ctx context.Context, username string) (b
 			logger.String("username", username),
 			logger.Error(err),
 		)
-		return false, err
+		return false, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to check username existence")
 	}
 
 	r.log.Debug("Username existence check completed",

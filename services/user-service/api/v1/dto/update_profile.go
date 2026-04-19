@@ -4,6 +4,7 @@ import (
 	"shared/pkg/utils"
 	"shared/server/request"
 	"time"
+	"user-service/internal/domain"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -16,12 +17,17 @@ type UpdateProfileRequest struct {
 	Bio               *string    `json:"bio,omitempty" validate:"omitempty,max=500"`
 	BioLinks          *[]string  `json:"bio_links,omitempty" validate:"omitempty,dive,url"`
 	DateOfBirth       *time.Time `json:"date_of_birth,omitempty" validate:"omitempty"`
+	Gender            *string    `json:"gender,omitempty" validate:"omitempty,oneof=male female non-binary other"`
+	Pronouns          *string    `json:"pronouns,omitempty" validate:"omitempty,max=50"`
 	AvatarURL         *string    `json:"avatar_url,omitempty" validate:"omitempty,url"`
 	LanguageCode      *string    `json:"language_code,omitempty" validate:"omitempty,len=2"`
-	Timezone          *string    `json:"timezone,omitempty"`
-	CountryCode       *string    `json:"country_code,omitempty" validate:"omitempty,len=2"`
+	WebsiteURL        *string    `json:"website_url,omitempty" validate:"omitempty,url"`
+	Interests         *[]string  `json:"interests,omitempty" validate:"omitempty,dive,max=100"`
 	SocialLinks       *[]string  `json:"social_links,omitempty" validate:"omitempty,dive,url"`
+	PhoneVisible      *bool      `json:"phone_visible,omitempty"`
+	EmailVisible      *bool      `json:"email_visible,omitempty"`
 	ProfileVisibility *string    `json:"profile_visibility,omitempty" validate:"omitempty,oneof=public private friends"`
+	SearchVisibility  *bool      `json:"search_visibility,omitempty"`
 }
 
 func NewUpdateProfileRequest() *UpdateProfileRequest {
@@ -86,22 +92,6 @@ func (r *UpdateProfileRequest) ValidateErrors(ve validator.ValidationErrors) ([]
 			if err.Tag() == "url" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Msg:  "Avatar URL must be a valid URL",
-					Code: request.INVALID_FORMAT,
-				})
-			}
-
-		case "LanguageCode":
-			if err.Tag() == "len" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Msg:  "Language code must be exactly 2 characters long",
-					Code: request.INVALID_FORMAT,
-				})
-			}
-
-		case "CountryCode":
-			if err.Tag() == "len" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Msg:  "Country code must be exactly 2 characters long",
 					Code: request.INVALID_FORMAT,
 				})
 			}
@@ -171,35 +161,36 @@ func (r *UpdateProfileRequest) ValidateErrors(ve validator.ValidationErrors) ([]
 		})
 	}
 
-	if r.Timezone != nil && !utils.IsValidTimezone(*r.Timezone) {
-		errors = append(errors, request.ValidationErrorDetail{
-			Msg:  "Invalid timezone",
-			Code: request.INVALID_FORMAT,
-		})
-	}
-
-	if r.CountryCode != nil && !utils.IsValidCountryCode(*r.CountryCode) {
-		errors = append(errors, request.ValidationErrorDetail{
-			Msg:  "Invalid country code",
-			Code: request.INVALID_FORMAT,
-		})
-	}
-
 	return errors, nil
 }
 
 // UpdateProfileResponse represents the response for updating a user profile
 type UpdateProfileResponse struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	DisplayName  *string   `json:"display_name,omitempty"`
-	FirstName    *string   `json:"first_name,omitempty"`
-	LastName     *string   `json:"last_name,omitempty"`
-	Bio          *string   `json:"bio,omitempty"`
-	AvatarURL    *string   `json:"avatar_url,omitempty"`
-	LanguageCode string    `json:"language_code"`
-	Timezone     *string   `json:"timezone,omitempty"`
-	CountryCode  *string   `json:"country_code,omitempty"`
-	IsVerified   bool      `json:"is_verified"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string  `json:"id"`
+	Username     string  `json:"username"`
+	DisplayName  *string `json:"display_name,omitempty"`
+	FirstName    *string `json:"first_name,omitempty"`
+	LastName     *string `json:"last_name,omitempty"`
+	Bio          *string `json:"bio,omitempty"`
+	AvatarURL    *string `json:"avatar_url,omitempty"`
+	LanguageCode string  `json:"language_code"`
+	Timezone     *string `json:"timezone,omitempty"`
+	CountryCode  *string `json:"country_code,omitempty"`
+	IsVerified   bool    `json:"is_verified"`
+}
+
+func NewUpdateProfileResponseFromDomain(profile *domain.Profile) UpdateProfileResponse {
+	return UpdateProfileResponse{
+		ID:           profile.UserID,
+		Username:     profile.Username,
+		DisplayName:  profile.DisplayName,
+		FirstName:    profile.FirstName,
+		LastName:     profile.LastName,
+		Bio:          profile.Bio,
+		AvatarURL:    profile.AvatarURL,
+		LanguageCode: profile.LanguageCode,
+		Timezone:     profile.Timezone,
+		CountryCode:  profile.CountryCode,
+		IsVerified:   profile.IsVerified,
+	}
 }
