@@ -124,6 +124,9 @@ func canonicalPair(a, b string) (string, string) {
 func (u *userCache) getJSON(ctx context.Context, key, label string) ([]byte, pkgErrors.AppError) {
 	data, err := u.cache.Get(ctx, key)
 	if err != nil {
+		if err.Code() == pkgErrors.CodeNotFound {
+			return nil, nil
+		}
 		u.log.Error("cache get failed", logger.String("key", key), logger.Error(err))
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get "+label).
 			WithService("user-service").
@@ -161,6 +164,9 @@ func (u *userCache) del(ctx context.Context, key, label string) pkgErrors.AppErr
 func (u *userCache) getString(ctx context.Context, key, label string) (*string, pkgErrors.AppError) {
 	val, err := u.cache.GetString(ctx, key)
 	if err != nil {
+		if err.Code() == pkgErrors.CodeNotFound {
+			return nil, nil
+		}
 		u.log.Error("cache get string failed", logger.String("key", key), logger.Error(err))
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get "+label).
 			WithService("user-service").

@@ -30,35 +30,45 @@ func NewMemCache() cache.Cache {
 	return c
 }
 
-func (c *memoryCache) Get(ctx context.Context, key string) ([]byte, error) {
+func (c *memoryCache) Get(ctx context.Context, key string) ([]byte, pkgErrors.AppError) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	item, found := c.items[key]
 	if !found {
-		return nil, cache.ErrNotFound
+		return nil, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("memory-cache").
+			WithDetail("key", key)
+
 	}
 
 	if item.expiration > 0 && time.Now().UnixNano() > item.expiration {
-		return nil, cache.ErrNotFound
+		return nil, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key expired").
+			WithService("memory-cache").
+			WithDetail("key", key)
 	}
 
 	return item.value, nil
 }
 
-func (c *memoryCache) GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err error) {
+func (c *memoryCache) GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err pkgErrors.AppError) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	item, found := c.items[key]
 	if !found {
-		return nil, 0, cache.ErrNotFound
+		return nil, 0, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("memory-cache").
+			WithDetail("key", key)
 	}
 
 	if item.expiration > 0 {
 		now := time.Now().UnixNano()
 		if now > item.expiration {
-			return nil, 0, cache.ErrNotFound
+			return nil, 0, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key expired").
+				WithService("memory-cache").
+				WithDetail("key", key)
+
 		}
 		return item.value, time.Duration(item.expiration-now) * time.Nanosecond, nil
 	}

@@ -8,8 +8,8 @@ import (
 )
 
 type Cache interface {
-	Get(ctx context.Context, key string) ([]byte, error)
-	GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err error)
+	Get(ctx context.Context, key string) ([]byte, pkgErrors.AppError)
+	GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err pkgErrors.AppError)
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) pkgErrors.AppError
 
 	GetString(ctx context.Context, key string) (string, pkgErrors.AppError)

@@ -56,15 +56,15 @@ type SessionCache interface {
 
 func (c *sessionCache) GetSession(sessionId string) (*SessionData, pkgErrors.AppError) {
 	key := "session:" + sessionId
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	dataBytes, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return nil, nil
 		}
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get session from cache")
+		return nil, pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to get session from cache")
 	}
 	var data SessionData
-	err = data.FromBytes(dataBytes)
+	err := data.FromBytes(dataBytes)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse session data from cache")
 	}
@@ -126,15 +126,15 @@ func (c *sessionCache) SetOAuthJWK(context context.Context, provider string, jwk
 
 func (c *sessionCache) GetUserStatus(userID string) (*UserStatusData, pkgErrors.AppError) {
 	key := "user_status:" + userID
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	dataBytes, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return nil, nil
 		}
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get user status from cache")
+		return nil, pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to get user status from cache")
 	}
 	var data UserStatusData
-	err = data.FromBytes(dataBytes)
+	err := data.FromBytes(dataBytes)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse user status data from cache")
 	}
@@ -152,15 +152,15 @@ func (c *sessionCache) SetUserStatus(context context.Context, userID string, acc
 
 func (c *sessionCache) GetPre2FA_Auth(token string) (*Pre2FAData, pkgErrors.AppError) {
 	key := "pre_auth:" + token
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	dataBytes, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return nil, nil
 		}
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get pre-2FA auth data from cache")
+		return nil, pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to get pre-2FA auth data from cache")
 	}
 	var data Pre2FAData
-	err = data.FromBytes(dataBytes)
+	err := data.FromBytes(dataBytes)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse pre-2FA auth data from cache")
 	}
@@ -169,15 +169,15 @@ func (c *sessionCache) GetPre2FA_Auth(token string) (*Pre2FAData, pkgErrors.AppE
 
 func (c *sessionCache) Get2FA_Setup(userID string) (*Setup2FAData, pkgErrors.AppError) {
 	key := "2fa_setup:" + userID
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	dataBytes, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return nil, nil
 		}
-		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get 2FA setup data from cache")
+		return nil, pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to get 2FA setup data from cache")
 	}
 	var data Setup2FAData
-	err = data.FromBytes(dataBytes)
+	err := data.FromBytes(dataBytes)
 	if err != nil {
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to parse 2FA setup data from cache")
 	}
@@ -186,36 +186,36 @@ func (c *sessionCache) Get2FA_Setup(userID string) (*Setup2FAData, pkgErrors.App
 
 func (c *sessionCache) GetRefreshUsed(refreshToken string) (bool, pkgErrors.AppError) {
 	key := "refresh_used:" + refreshToken
-	_, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	_, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return false, nil
 		}
-		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to check if refresh token was used")
+		return false, pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to check if refresh token was used")
 	}
 	return true, nil
 }
 
 func (c *sessionCache) GetTOTPUsed(userID string, code string) (bool, pkgErrors.AppError) {
 	key := "totp_used:" + userID + ":" + code
-	_, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	_, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return false, nil
 		}
-		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to check if TOTP code was used")
+		return false, pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to check if TOTP code was used")
 	}
 	return true, nil
 }
 
 func (c *sessionCache) GetOAuthJWK(provider string) (string, pkgErrors.AppError) {
 	key := "oauth_jwk:" + provider
-	dataBytes, err := c.cache.Get(context.Background(), key)
-	if err != nil {
-		if err == cache.ErrNotFound {
+	dataBytes, cacheErr := c.cache.Get(context.Background(), key)
+	if cacheErr != nil {
+		if cacheErr.Code() == pkgErrors.CodeNotFound {
 			return "", nil
 		}
-		return "", pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get OAuth JWK from cache")
+		return "", pkgErrors.FromError(cacheErr, pkgErrors.CodeCacheError, "failed to get OAuth JWK from cache")
 	}
 	return string(dataBytes), nil
 }

@@ -165,7 +165,10 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 			}
 		}
 
-		if utils.ContainsString(*viewerBlockedIDs, *subjectID) || utils.ContainsString(*subjectBlockedIDs, viewerID) {
+		if viewerBlockedIDs != nil && utils.ContainsString(*viewerBlockedIDs, *subjectID) {
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
+		}
+		if subjectBlockedIDs != nil && utils.ContainsString(*subjectBlockedIDs, viewerID) {
 			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
 		}
 
@@ -233,14 +236,15 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 			if setErr := s.cache.SetPrivacy(ctx, viewerID, *subjectID, privacy); setErr != nil {
 				s.log.Error("cache set privacy failed", logger.String("viewer_id", viewerID), logger.String("subject_id", *subjectID), logger.Error(setErr))
 			}
+
+			// step 10: apply p	rivacy and return
+			if !privacy.CanSeeProfile {
+				return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
+			}
+			applyPrivacy(profile, privacy)
 		}
 	}
 
-	// step 10: apply privacy and return
-	if !privacy.CanSeeProfile {
-		return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
-	}
-	applyPrivacy(profile, privacy)
 	return profile, nil
 }
 

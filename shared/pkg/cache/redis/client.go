@@ -55,16 +55,23 @@ func New(config cache.Config) (cache.Cache, error) {
 	return &client{rdb: rdb, logger: lgr}, nil
 }
 
-func (c *client) Get(ctx context.Context, key string) ([]byte, error) {
+func (c *client) Get(ctx context.Context, key string) ([]byte, pkgErrors.AppError) {
 	c.logger.Debug("Getting key from Redis", logger.String("key", key))
 	result, err := c.rdb.Get(ctx, key).Bytes()
 	if err == redis.Nil {
-		return nil, cache.ErrNotFound
+		return nil, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("redis-client").
+			WithDetail("key", key)
 	}
-	return result, err
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get cache key").
+			WithService("redis-client").
+			WithDetail("key", key)
+	}
+	return result, nil
 }
 
-func (c *client) GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err error) {
+func (c *client) GetWithTTL(ctx context.Context, key string) (value []byte, ttl time.Duration, err pkgErrors.AppError) {
 	c.logger.Debug("Getting key with TTL from Redis", logger.String("key", key))
 	pipe := c.rdb.Pipeline()
 	getCmd := pipe.Get(ctx, key)
@@ -72,22 +79,32 @@ func (c *client) GetWithTTL(ctx context.Context, key string) (value []byte, ttl 
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		if err == redis.Nil {
-			return nil, 0, cache.ErrNotFound
+			return nil, 0, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+				WithService("redis-client").
+				WithDetail("key", key)
 		}
-		return nil, 0, err
+		return nil, 0, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get cache key with TTL").
+			WithService("redis-client").
+			WithDetail("key", key)
 	}
 
-	value, err = getCmd.Bytes()
-	if err == redis.Nil {
-		return nil, 0, cache.ErrNotFound
+	value, redisErr := getCmd.Bytes()
+	if redisErr == redis.Nil {
+		return nil, 0, pkgErrors.FromError(cache.ErrNotFound, pkgErrors.CodeNotFound, "key not found").
+			WithService("redis-client").
+			WithDetail("key", key)
 	}
-	if err != nil {
-		return nil, 0, err
+	if redisErr != nil {
+		return nil, 0, pkgErrors.FromError(redisErr, pkgErrors.CodeCacheError, "failed to get cache key").
+			WithService("redis-client").
+			WithDetail("key", key)
 	}
 
-	ttl, err = ttlCmd.Result()
-	if err != nil {
-		return nil, 0, err
+	ttl, redisErr = ttlCmd.Result()
+	if redisErr != nil {
+		return nil, 0, pkgErrors.FromError(redisErr, pkgErrors.CodeCacheError, "failed to get TTL for cache key").
+			WithService("redis-client").
+			WithDetail("key", key)
 	}
 
 	return value, ttl, nil
