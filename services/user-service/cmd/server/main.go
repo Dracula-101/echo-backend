@@ -202,9 +202,9 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 		r.Get("/me", request.Adapt(h.GetMyProfile))
 		r.Post("/me", request.Adapt(h.CreateMyProfile))
 		r.Put("/me", request.Adapt(h.UpdateMyProfile))
-		// r.Get("/profile/{user_id}", request.Adapt(h.GetProfile))
+		r.Get("/@{username}", request.Adapt(h.GetProfile))
 		// r.Delete("/profile", request.Adapt(h.DeleteProfile))
-		// r.Get("/search", request.Adapt(h.SearchProfiles))
+		r.Get("/search", request.Adapt(h.SearchProfiles))
 	})
 
 	// Contact routes

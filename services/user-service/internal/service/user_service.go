@@ -69,10 +69,56 @@ func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Pr
 
 	// Cache the profile for future requests
 	err = s.cache.SetProfile(ctx, profile.UserID, profile)
-
 	if err != nil {
 		s.log.Error("Failed to cache profile",
 			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+		)
+	}
+
+	err = s.cache.SetUserIDByUsername(ctx, *profile.DisplayName, profile.UserID)
+	if err != nil {
+		s.log.Error("Failed to cache username to userID mapping",
+			logger.String("user_id", profile.UserID),
+			logger.String("username", *profile.DisplayName),
+			logger.Error(err),
+		)
+	}
+
+	return profile, nil
+}
+
+func (s *userService) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error) {
+	s.log.Info("Getting user profile by username",
+		logger.String("username", username),
+	)
+
+	profile, err := s.repo.GetProfileByUsername(ctx, username)
+	if err != nil {
+		s.log.Error("Failed to get profile by username",
+			logger.String("username", username),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+
+	if profile == nil {
+		return nil, nil
+	}
+
+	err = s.cache.SetProfile(ctx, profile.UserID, profile)
+	if err != nil {
+		s.log.Error("Failed to cache profile",
+			logger.String("user_id", profile.UserID),
+			logger.Error(err),
+		)
+	}
+
+	err = s.cache.SetUserIDByUsername(ctx, *profile.DisplayName, profile.UserID)
+	if err != nil {
+		s.log.Error("Failed to cache username to userID mapping",
+			logger.String("user_id", profile.UserID),
+			logger.String("username", *profile.DisplayName),
 			logger.Error(err),
 		)
 	}
@@ -114,6 +160,17 @@ func (s *userService) CreateProfile(ctx context.Context, userID string, input *d
 			logger.Error(err),
 		)
 	}
+	err = s.cache.SetUserIDByUsername(ctx, *result.DisplayName, result.UserID)
+	if err != nil {
+		s.log.Error("Failed to cache username to userID mapping after profile creation",
+			logger.String("user_id", result.UserID),
+			logger.String("username", *result.DisplayName),
+			logger.Error(err),
+		)
+	}
+
+	// TODO:
+	// INSERT into users.outbox: user.profile.updated event with {changed_fields: [...], new_values: {...searchable fields only}}.
 
 	return result, nil
 }
@@ -123,8 +180,7 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, input *d
 		logger.String("user_id", userID),
 	)
 
-	result, err := s.repo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{
-	})
+	result, err := s.repo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{})
 	if err != nil {
 		s.log.Error("Failed to update profile",
 			logger.String("user_id", userID),
@@ -139,6 +195,18 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, input *d
 			logger.String("user_id", result.UserID),
 			logger.Error(err),
 		)
+	}
+
+	if input.DisplayName != nil {
+		s.cache.DeleteUserIDByUsername(ctx, *input.DisplayName)
+		err = s.cache.SetUserIDByUsername(ctx, *input.DisplayName, result.UserID)
+		if err != nil {
+			s.log.Error("Failed to cache username to userID mapping after profile creation",
+				logger.String("user_id", result.UserID),
+				logger.String("username", *input.DisplayName),
+				logger.Error(err),
+			)
+		}
 	}
 
 	return result, nil

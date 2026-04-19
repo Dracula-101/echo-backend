@@ -13,6 +13,7 @@ import (
 type UserService interface {
 	// Profile operations
 	GetProfile(ctx context.Context, userID string) (*domain.Profile, error)
+	GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error)
 	CreateProfile(ctx context.Context, userID string, profile *domain.CreateProfileInput) (*domain.Profile, error)
 	UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, error)
 	AddUserDevice(ctx context.Context, input *domain.UserDevice) error

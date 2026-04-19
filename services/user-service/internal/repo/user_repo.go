@@ -339,6 +339,8 @@ func (r *userRepository) CreateProfile(ctx context.Context, userId string, profi
 		CountryCode:       profile.CountryCode,
 		PhoneVisible:      *utils.SafePtrBool(profile.PhoneVisible),
 		EmailVisible:      *utils.SafePtrBool(profile.EmailVisible),
+		CreatedAt:         utils.Ptr(time.Now()),
+		UpdatedAt:         utils.Ptr(time.Now()),
 	}
 	id, dbErr := r.db.Insert(ctx, &profileModel)
 	if dbErr != nil {

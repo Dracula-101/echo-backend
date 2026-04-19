@@ -6,7 +6,7 @@ import (
 )
 
 // GetProfileResponse represents the response for getting a user profile
-type GetMyProfileResponse struct {
+type GetProfileResponse struct {
 	UserID             string     `json:"user_id"`
 	Username           string     `json:"username"`
 	DisplayName        *string    `json:"display_name,omitempty"`
@@ -33,8 +33,8 @@ type GetMyProfileResponse struct {
 	AccountStatus    string `json:"account_status"`
 }
 
-func NewGetMyProfileResponse(profile *domain.Profile) *GetMyProfileResponse {
-	return &GetMyProfileResponse{
+func NewGetProfileResponse(profile *domain.Profile) *GetProfileResponse {
+	return &GetProfileResponse{
 		UserID:             profile.UserID,
 		Username:           profile.Username,
 		DisplayName:        profile.DisplayName,
