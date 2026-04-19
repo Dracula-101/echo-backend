@@ -2,9 +2,12 @@ package domain
 
 import (
 	"time"
+
+	dbModels "shared/pkg/database/postgres/models"
 )
 
 type Settings struct {
+	UserID                    string              `json:"user_id"`
 	ProfileVisibility         ProfileVisibility   `json:"profile_visibility"`
 	LastSeenVisibility        ProfileVisibility   `json:"last_seen_visibility"`
 	OnlineStatusVisibility    ProfileVisibility   `json:"online_status_visibility"`
@@ -49,4 +52,54 @@ type Settings struct {
 	DateFormat                DateFormat          `json:"date_format"`
 	TimeFormat                TimeFormat          `json:"time_format"`
 	LowDataMode               bool                `json:"low_data_mode"`
+}
+
+func FromDBModel(s *dbModels.UserSettings) *Settings {
+	return &Settings{
+		UserID:                    s.UserID,
+		ProfileVisibility:         ProfileVisibility(s.ProfileVisibility),
+		LastSeenVisibility:        ProfileVisibility(s.LastSeenVisibility),
+		OnlineStatusVisibility:    ProfileVisibility(s.OnlineStatusVisibility),
+		ProfilePhotoVisibility:    ProfileVisibility(s.ProfilePhotoVisibility),
+		AboutVisibility:           ProfileVisibility(s.AboutVisibility),
+		ReadReceiptsEnabled:       s.ReadReceiptsEnabled,
+		TypingIndicatorsEnabled:   s.TypingIndicatorsEnabled,
+		PushNotificationsEnabled:  s.PushNotificationsEnabled,
+		EmailNotificationsEnabled: s.EmailNotificationsEnabled,
+		SmsNotificationsEnabled:   s.SMSNotificationsEnabled,
+		MessageNotifications:      s.MessageNotifications,
+		GroupMessageNotifications: s.GroupMessageNotifications,
+		MentionNotifications:      s.MentionNotifications,
+		ReactionNotifications:     s.ReactionNotifications,
+		CallNotifications:         s.CallNotifications,
+		NotificationSound:         NotificationSound(s.NotificationSound),
+		VibrationEnabled:          s.VibrationEnabled,
+		NotificationPreview:       NotificationPreview(s.NotificationPreview),
+		QuietHoursEnabled:         s.QuietHoursEnabled,
+		QuietHoursStart:           s.QuietHoursStart,
+		QuietHoursEnd:             s.QuietHoursEnd,
+		EnterKeyToSend:            s.EnterKeyToSend,
+		AutoDownloadPhotos:        s.AutoDownloadPhotos,
+		AutoDownloadVideos:        s.AutoDownloadVideos,
+		AutoDownloadDocuments:     s.AutoDownloadDocuments,
+		AutoDownloadOnWifiOnly:    s.AutoDownloadOnWifiOnly,
+		CompressImages:            s.CompressImages,
+		SaveToGallery:             s.SaveToGallery,
+		ChatBackupEnabled:         s.ChatBackupEnabled,
+		ChatBackupFrequency:       BackupFrequency(s.ChatBackupFrequency),
+		ScreenLockEnabled:         s.ScreenLockEnabled,
+		ScreenLockTimeout:         s.ScreenLockTimeout,
+		FingerprintUnlock:         s.FingerprintUnlock,
+		FaceUnlock:                s.FaceUnlock,
+		ShowSecurityNotifications: s.ShowSecurityNotifications,
+		Theme:                     Theme(s.Theme),
+		FontSize:                  FontSize(s.FontSize),
+		ChatWallpaper:             s.ChatWallpaper,
+		UseSystemEmoji:            s.UseSystemEmoji,
+		LanguageCode:              s.LanguageCode,
+		Timezone:                  s.Timezone,
+		DateFormat:                DateFormat(s.DateFormat),
+		TimeFormat:                TimeFormat(s.TimeFormat),
+		LowDataMode:               s.LowDataMode,
+	}
 }

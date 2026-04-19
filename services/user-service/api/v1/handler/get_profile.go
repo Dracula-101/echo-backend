@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/request"
 	req "shared/server/request"
@@ -72,7 +73,12 @@ func (h *UserHandler) GetProfile(handler *req.RequestHandler) {
 	profile, err := h.service.GetProfileByUsername(ctx, currentUserID, username)
 	if err != nil {
 		h.log.Error("Failed to get user profile", logger.Error(err))
-		response.InternalServerError(ctx, r, w, "Failed to get user profile", nil)
+		switch pkgErrors.GetCode(err) {
+		case pkgErrors.CodeNotFound:
+			response.NotFoundError(ctx, r, w, fmt.Sprintf("User profile with username '%s' not found", username))
+		default:
+			response.InternalServerError(ctx, r, w, "Failed to get user profile", nil)
+		}
 		return
 	}
 	if profile == nil {

@@ -31,8 +31,9 @@ func (s OnlineStatus) String() string {
 type ProfileVisibility string
 
 const (
-	ProfileVisibilityPublic  ProfileVisibility = "public"
-	ProfileVisibilityPrivate ProfileVisibility = "private"
+	ProfileVisibilityPublic   ProfileVisibility = "public"
+	ProfileVisibilityFriends  ProfileVisibility = "friends"
+	ProfileVisibilityPrivate  ProfileVisibility = "private"
 )
 
 func (s ProfileVisibility) String() string {

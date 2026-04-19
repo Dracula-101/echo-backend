@@ -10,6 +10,11 @@ import (
 	"user-service/internal/health"
 	"user-service/internal/health/checkers"
 	repository "user-service/internal/repo"
+	"user-service/internal/repo/blocked_users"
+	"user-service/internal/repo/contacts"
+	"user-service/internal/repo/devices"
+	"user-service/internal/repo/privacy_overrides"
+	"user-service/internal/repo/settings"
 	"user-service/internal/service"
 	userCache "user-service/internal/service/cache"
 	"user-service/internal/service/location"
@@ -401,8 +406,18 @@ func main() {
 	tokenService := createTokenService(cfg, log)
 	userCache := userCache.NewUserCache(cacheClient, log)
 	userRepo := repository.NewUserRepository(dbClient, log)
+	blockedRepo := blocked_users.NewBlockedRepository(dbClient, log)
+	contactsRepo := contacts.NewContactRepository(dbClient, log)
+	settingsRepo := settings.NewSettingsRepository(dbClient, log)
+	privacyRepo := privacy_overrides.NewPrivacyOverrideRepository(dbClient, log)
+	deviceRepo := devices.NewDeviceRepository(dbClient, log)
 	services, buildErr := service.NewServiceBuilder().
 		WithUserRepo(userRepo).
+		WithBlockedRepo(blockedRepo).
+		WithContactsRepo(contactsRepo).
+		WithSettingsRepo(settingsRepo).
+		WithPrivacyRepo(privacyRepo).
+		WithDeviceRepo(deviceRepo).
 		WithCache(userCache).
 		WithLogger(log).
 		WithLocationEndpoint(cfg.Server.LocationServiceEndpoint).

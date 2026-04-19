@@ -6,6 +6,11 @@ import (
 
 	"user-service/internal/domain"
 	repository "user-service/internal/repo"
+	"user-service/internal/repo/blocked_users"
+	"user-service/internal/repo/contacts"
+	"user-service/internal/repo/devices"
+	"user-service/internal/repo/privacy_overrides"
+	"user-service/internal/repo/settings"
 	"user-service/internal/service/cache"
 
 	"shared/pkg/database/postgres"
@@ -15,13 +20,36 @@ import (
 )
 
 type userService struct {
-	repo  repository.UserRepository
-	cache cache.UserCache
-	log   logger.Logger
+	repo        repository.UserRepository
+	blockedRepo blocked_users.BlockedRepository
+	contactRepo contacts.ContactRepository
+	settingsRepo settings.SettingsRepository
+	privacyRepo privacy_overrides.PrivacyOverrideRepository
+	deviceRepo  devices.DeviceRepository
+	cache       cache.UserCache
+	log         logger.Logger
 }
 
-func newUserService(repo repository.UserRepository, cache cache.UserCache, log logger.Logger) *userService {
-	return &userService{repo: repo, cache: cache, log: log}
+func newUserService(
+	repo repository.UserRepository,
+	blockedRepo blocked_users.BlockedRepository,
+	contactRepo contacts.ContactRepository,
+	settingsRepo settings.SettingsRepository,
+	privacyRepo privacy_overrides.PrivacyOverrideRepository,
+	deviceRepo devices.DeviceRepository,
+	cache cache.UserCache,
+	log logger.Logger,
+) *userService {
+	return &userService{
+		repo:         repo,
+		blockedRepo:  blockedRepo,
+		contactRepo:  contactRepo,
+		settingsRepo: settingsRepo,
+		privacyRepo:  privacyRepo,
+		deviceRepo:   deviceRepo,
+		cache:        cache,
+		log:          log,
+	}
 }
 
 func (s *userService) GenerateUsername(ctx context.Context, displayName string) (string, pkgErrors.AppError) {
@@ -102,6 +130,9 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 		if err != nil {
 			return nil, err
 		}
+		if p == nil {
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
+		}
 		if setErr := s.cache.SetUserIDByUsername(ctx, username, p.UserID); setErr != nil {
 			s.log.Error("cache set username mapping failed", logger.String("username", username), logger.Error(setErr))
 		}
@@ -117,6 +148,9 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 		p, err := s.repo.GetProfileByUserID(ctx, *subjectID)
 		if err != nil {
 			return nil, err
+		}
+		if p == nil {
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
 		}
 		profile = p
 		if setErr := s.cache.SetProfile(ctx, *subjectID, profile); setErr != nil {
@@ -137,7 +171,7 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 			s.log.Error("cache get blocked IDs failed", logger.String("user_id", viewerID), logger.Error(cacheErr))
 		}
 		if viewerBlockedIDs == nil {
-			ids, err := s.repo.GetBlockedUsers(ctx, viewerID)
+			ids, err := s.blockedRepo.GetBlockedUserIDs(ctx, viewerID)
 			if err != nil {
 				return nil, err
 			}
@@ -155,7 +189,7 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 			s.log.Error("cache get blocked IDs failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
 		}
 		if subjectBlockedIDs == nil {
-			ids, err := s.repo.GetBlockedUsers(ctx, *subjectID)
+			ids, err := s.blockedRepo.GetBlockedUserIDs(ctx, *subjectID)
 			if err != nil {
 				return nil, err
 			}
@@ -178,20 +212,13 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 			s.log.Error("cache get contact IDs failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
 		}
 		if subjectContactIDs == nil {
-			contacts, err := s.repo.GetContacts(ctx, *subjectID)
+			ids, err := s.contactRepo.GetContactIDs(ctx, *subjectID)
 			if err != nil {
 				return nil, err
 			}
-			if contacts != nil {
-
-				var idStrs []string
-				for _, contact := range *contacts {
-					idStrs = append(idStrs, contact.UserID)
-				}
-				subjectContactIDs = &idStrs
-				if setErr := s.cache.SetContactIDs(ctx, *subjectID, idStrs); setErr != nil {
-					s.log.Error("cache set contact IDs failed", logger.String("user_id", *subjectID), logger.Error(setErr))
-				}
+			subjectContactIDs = &ids
+			if setErr := s.cache.SetContactIDs(ctx, *subjectID, ids); setErr != nil {
+				s.log.Error("cache set contact IDs failed", logger.String("user_id", *subjectID), logger.Error(setErr))
 			}
 		}
 		areContacts := utils.ContainsString(*subjectContactIDs, viewerID)
@@ -202,12 +229,15 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 			s.log.Error("cache get settings failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
 		}
 		if settings == nil {
-			userSettings, err := s.repo.GetSettings(ctx, *subjectID)
+			userSettings, err := s.settingsRepo.GetSettings(ctx, *subjectID)
 			if err != nil {
 				return nil, err
 			}
 			if userSettings == nil {
-				return nil, pkgErrors.New(pkgErrors.CodeNotFound, "settings not found")
+				userSettings, err = s.settingsRepo.CreateSettings(ctx, *subjectID)
+				if err != nil {
+					return nil, err
+				}
 			}
 			settings = &cache.Settings{
 				UserID:                  *subjectID,
@@ -226,24 +256,23 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 		}
 
 		// step 8: privacy overrides (no cache)
-		override, err := s.repo.GetPrivacyOverrides(ctx, *subjectID, viewerID)
+		override, err := s.privacyRepo.GetPrivacyOverride(ctx, *subjectID, viewerID)
 		if err != nil {
 			return nil, err
 		}
-		if override != nil {
-			// step 9: build and cache privacy result
-			privacy = buildPrivacyResult(areContacts, settings, override)
-			if setErr := s.cache.SetPrivacy(ctx, viewerID, *subjectID, privacy); setErr != nil {
-				s.log.Error("cache set privacy failed", logger.String("viewer_id", viewerID), logger.String("subject_id", *subjectID), logger.Error(setErr))
-			}
 
-			// step 10: apply p	rivacy and return
-			if !privacy.CanSeeProfile {
-				return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
-			}
-			applyPrivacy(profile, privacy)
+		// step 9: build and cache privacy result (always, override may be nil)
+		privacy = buildPrivacyResult(areContacts, settings, override)
+		if setErr := s.cache.SetPrivacy(ctx, viewerID, *subjectID, privacy); setErr != nil {
+			s.log.Error("cache set privacy failed", logger.String("viewer_id", viewerID), logger.String("subject_id", *subjectID), logger.Error(setErr))
 		}
 	}
+
+	// step 10: apply privacy and return
+	if !privacy.CanSeeProfile {
+		return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
+	}
+	applyPrivacy(profile, privacy)
 
 	return profile, nil
 }
@@ -251,10 +280,12 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 func buildPrivacyResult(areContacts bool, s *cache.Settings, override *domain.PrivacyOverride) *cache.PrivacyResult {
 	isVisible := func(visibility string) bool {
 		switch visibility {
-		case string(domain.ProfileVisibilityPrivate):
-			return true
 		case string(domain.ProfileVisibilityPublic):
+			return true
+		case string(domain.ProfileVisibilityFriends):
 			return areContacts
+		case string(domain.ProfileVisibilityPrivate):
+			return false
 		default:
 			return false
 		}
@@ -406,7 +437,7 @@ func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 		logger.String("device_id", input.DeviceID),
 	)
 
-	devices, err := s.repo.GetUserDevices(ctx, input.UserID)
+	existingDevices, err := s.deviceRepo.GetDevices(ctx, input.UserID)
 	if err != nil && !postgres.IsNotFoundError(err) {
 		s.log.Error("Failed to get user devices",
 			logger.String("user_id", input.UserID),
@@ -416,7 +447,7 @@ func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 	}
 
 	alreadyRegistered := false
-	for _, device := range devices {
+	for _, device := range existingDevices {
 		if device.DeviceID == input.DeviceID {
 			s.log.Info("Device already registered for user",
 				logger.String("user_id", input.UserID),
@@ -428,7 +459,7 @@ func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 	}
 
 	if !alreadyRegistered {
-		err = s.repo.AddUserDevice(ctx, input, true)
+		err = s.deviceRepo.AddDevice(ctx, input, true)
 		if err != nil {
 			s.log.Error("Failed to add user device",
 				logger.String("user_id", input.UserID),
@@ -442,12 +473,12 @@ func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 			logger.String("device_id", input.DeviceID),
 		)
 	} else {
-		for _, device := range devices {
+		for _, device := range existingDevices {
 			updateInput := &domain.UpdateUserDevice{
 				IsActive:   utils.PtrBool(device.DeviceID == input.DeviceID),
 				AppVersion: input.AppVersion,
 			}
-			s.repo.UpdateUserDevice(ctx, updateInput, input.UserID, device.DeviceID)
+			s.deviceRepo.UpdateDevice(ctx, updateInput, input.UserID, device.DeviceID)
 		}
 	}
 

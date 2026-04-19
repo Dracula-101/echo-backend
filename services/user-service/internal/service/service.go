@@ -6,6 +6,11 @@ import (
 	"shared/pkg/logger"
 
 	repository "user-service/internal/repo"
+	"user-service/internal/repo/blocked_users"
+	"user-service/internal/repo/contacts"
+	"user-service/internal/repo/devices"
+	"user-service/internal/repo/privacy_overrides"
+	"user-service/internal/repo/settings"
 	"user-service/internal/service/cache"
 	"user-service/internal/service/location"
 )
@@ -16,9 +21,14 @@ type Services struct {
 }
 
 type ServiceBuilder struct {
-	userRepo         repository.UserRepository
-	cache            cache.UserCache
-	log              logger.Logger
+	userRepo        repository.UserRepository
+	blockedRepo     blocked_users.BlockedRepository
+	contactsRepo    contacts.ContactRepository
+	settingsRepo    settings.SettingsRepository
+	privacyRepo     privacy_overrides.PrivacyOverrideRepository
+	deviceRepo      devices.DeviceRepository
+	cache           cache.UserCache
+	log             logger.Logger
 	locationEndpoint string
 }
 
@@ -28,6 +38,31 @@ func NewServiceBuilder() *ServiceBuilder {
 
 func (b *ServiceBuilder) WithUserRepo(repo repository.UserRepository) *ServiceBuilder {
 	b.userRepo = repo
+	return b
+}
+
+func (b *ServiceBuilder) WithBlockedRepo(repo blocked_users.BlockedRepository) *ServiceBuilder {
+	b.blockedRepo = repo
+	return b
+}
+
+func (b *ServiceBuilder) WithContactsRepo(repo contacts.ContactRepository) *ServiceBuilder {
+	b.contactsRepo = repo
+	return b
+}
+
+func (b *ServiceBuilder) WithSettingsRepo(repo settings.SettingsRepository) *ServiceBuilder {
+	b.settingsRepo = repo
+	return b
+}
+
+func (b *ServiceBuilder) WithPrivacyRepo(repo privacy_overrides.PrivacyOverrideRepository) *ServiceBuilder {
+	b.privacyRepo = repo
+	return b
+}
+
+func (b *ServiceBuilder) WithDeviceRepo(repo devices.DeviceRepository) *ServiceBuilder {
+	b.deviceRepo = repo
 	return b
 }
 
@@ -54,7 +89,7 @@ func (b *ServiceBuilder) Build() (*Services, error) {
 		return nil, fmt.Errorf("logger is required")
 	}
 
-	userSvc := newUserService(b.userRepo, b.cache, b.log)
+	userSvc := newUserService(b.userRepo, b.blockedRepo, b.contactsRepo, b.settingsRepo, b.privacyRepo, b.deviceRepo, b.cache, b.log)
 	return &Services{
 		User:     userSvc,
 		Location: location.NewLocationService(b.locationEndpoint, b.log),

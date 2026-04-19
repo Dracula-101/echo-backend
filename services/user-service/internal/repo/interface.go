@@ -8,34 +8,15 @@ import (
 	pkgErrors "shared/pkg/errors"
 )
 
-// ============================================================================
-// Repository Interface
-// ============================================================================
-
-// UserRepositoryInterface defines the contract for user repository operations
+// UserRepository handles operations exclusively on users.profiles.
 type UserRepository interface {
-	// Profile retrieval
 	GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, pkgErrors.AppError)
 	GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, pkgErrors.AppError)
 	GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, pkgErrors.AppError)
-
-	// Profile management
 	CreateProfile(ctx context.Context, userId string, profile CreateProfileInput) (*domain.Profile, pkgErrors.AppError)
 	UpdateProfile(ctx context.Context, userId string, params UpdateProfileParams) (*domain.Profile, pkgErrors.AppError)
-	IsBlocked(ctx context.Context, requesterID, targetID string) (bool, pkgErrors.AppError)
-	GetBlockedUsers(ctx context.Context, userID string) ([]string, pkgErrors.AppError)
-	GetContacts(ctx context.Context, userID string) (*[]domain.Profile, pkgErrors.AppError)
-	GetSettings(ctx context.Context, userID string) (*domain.Settings, pkgErrors.AppError)
-	GetPrivacyOverrides(ctx context.Context, userID string, targetUserID string) (*domain.PrivacyOverride, pkgErrors.AppError)
-
-	AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) pkgErrors.AppError
-	GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, pkgErrors.AppError)
-	UpdateUserDevice(ctx context.Context, input *domain.UpdateUserDevice, userID string, deviceID string) pkgErrors.AppError
-
-	// Search and validation
 	SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, pkgErrors.AppError)
 	UsernameExists(ctx context.Context, username string) (bool, pkgErrors.AppError)
 }
 
-// Compile-time interface compliance check
 var _ UserRepository = (*userRepository)(nil)
