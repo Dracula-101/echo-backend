@@ -12,6 +12,7 @@ type Profile struct {
 	FirstName          *string
 	LastName           *string
 	Bio                *string
+	BioLinks           *[]string
 	AvatarURL          *string
 	AvatarThumbnailURL *string
 	LanguageCode       string
@@ -19,7 +20,7 @@ type Profile struct {
 	CountryCode        *string
 	PhoneVisible       bool
 	EmailVisible       bool
-	OnlineStatus       OnlineStatus
+	OnlineStatus       *OnlineStatus
 	LastSeenAt         *time.Time
 	ProfileVisibility  ProfileVisibility
 	SearchVisibility   bool
@@ -30,6 +31,9 @@ type Profile struct {
 	EmailVerified    bool
 	TwoFactorEnabled bool
 	AccountStatus    AccountStatus
+
+	// enriched fields from followers service
+	IsContact *bool
 }
 
 // CreateProfileInput represents the input for creating a profile

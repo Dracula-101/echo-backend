@@ -59,10 +59,17 @@ func (h *UserHandler) GetProfile(handler *req.RequestHandler) {
 		return
 	}
 
+	currentUserID, ok := request.GetUserIDFromContext(ctx) // currentUserID may be empty if unauthenticated, service layer should handle it
+	if !ok {
+		h.log.Info("No user ID in context, treating as unauthenticated request")
+		response.UnauthorizedError(ctx, r, w, "Missing or invalid authentication token", nil)
+		return
+	}
+
 	h.log.Debug("Received GetProfile request",
 		logger.String("username", username),
 	)
-	profile, err := h.service.GetProfileByUsername(ctx, username)
+	profile, err := h.service.GetProfileByUsername(ctx, currentUserID, username)
 	if err != nil {
 		h.log.Error("Failed to get user profile", logger.Error(err))
 		response.InternalServerError(ctx, r, w, "Failed to get user profile", nil)

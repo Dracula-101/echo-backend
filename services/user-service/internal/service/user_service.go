@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"user-service/internal/domain"
 	repository "user-service/internal/repo"
 	"user-service/internal/service/cache"
 
 	"shared/pkg/database/postgres"
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 )
@@ -22,7 +24,7 @@ func newUserService(repo repository.UserRepository, cache cache.UserCache, log l
 	return &userService{repo: repo, cache: cache, log: log}
 }
 
-func (s *userService) GenerateUsername(ctx context.Context, displayName string) (string, error) {
+func (s *userService) GenerateUsername(ctx context.Context, displayName string) (string, pkgErrors.AppError) {
 	s.log.Info("Generating username",
 		logger.String("display_name", displayName),
 	)
@@ -39,7 +41,7 @@ func (s *userService) GenerateUsername(ctx context.Context, displayName string) 
 	return *username, nil
 }
 
-func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Profile, error) {
+func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Profile, pkgErrors.AppError) {
 	s.log.Info("Getting user profile",
 		logger.String("user_id", userID),
 	)
@@ -87,46 +89,219 @@ func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Pr
 
 	return profile, nil
 }
+func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, username string) (*domain.Profile, pkgErrors.AppError) {
+	s.log.Info("getting profile by username", logger.String("username", username))
 
-func (s *userService) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, error) {
-	s.log.Info("Getting user profile by username",
-		logger.String("username", username),
-	)
-
-	profile, err := s.repo.GetProfileByUsername(ctx, username)
-	if err != nil {
-		s.log.Error("Failed to get profile by username",
-			logger.String("username", username),
-			logger.Error(err),
-		)
-		return nil, err
+	// step 1: username → userID
+	subjectID, cacheErr := s.cache.GetUserIDByUsername(ctx, username)
+	if cacheErr != nil {
+		s.log.Error("cache get username mapping failed", logger.String("username", username), logger.Error(cacheErr))
+	}
+	if subjectID == nil {
+		p, err := s.repo.GetProfileByUsername(ctx, username)
+		if err != nil {
+			return nil, err
+		}
+		if setErr := s.cache.SetUserIDByUsername(ctx, username, p.UserID); setErr != nil {
+			s.log.Error("cache set username mapping failed", logger.String("username", username), logger.Error(setErr))
+		}
+		subjectID = &p.UserID
 	}
 
+	// step 2: load profile
+	profile, cacheErr := s.cache.GetProfile(ctx, *subjectID)
+	if cacheErr != nil {
+		s.log.Error("cache get profile failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
+	}
 	if profile == nil {
-		return nil, nil
+		p, err := s.repo.GetProfileByUserID(ctx, *subjectID)
+		if err != nil {
+			return nil, err
+		}
+		profile = p
+		if setErr := s.cache.SetProfile(ctx, *subjectID, profile); setErr != nil {
+			s.log.Error("cache set profile failed", logger.String("user_id", *subjectID), logger.Error(setErr))
+		}
 	}
 
-	err = s.cache.SetProfile(ctx, profile.UserID, profile)
-	if err != nil {
-		s.log.Error("Failed to cache profile",
-			logger.String("user_id", profile.UserID),
-			logger.Error(err),
-		)
+	// step 3: privacy cache
+	privacy, cacheErr := s.cache.GetPrivacy(ctx, viewerID, *subjectID)
+	if cacheErr != nil {
+		s.log.Error("cache get privacy failed", logger.String("viewer_id", viewerID), logger.String("subject_id", *subjectID), logger.Error(cacheErr))
 	}
 
-	err = s.cache.SetUserIDByUsername(ctx, *profile.DisplayName, profile.UserID)
-	if err != nil {
-		s.log.Error("Failed to cache username to userID mapping",
-			logger.String("user_id", profile.UserID),
-			logger.String("username", *profile.DisplayName),
-			logger.Error(err),
-		)
+	if privacy == nil {
+		// step 4: viewer block list
+		viewerBlockedIDs, cacheErr := s.cache.GetBlockedIDs(ctx, viewerID)
+		if cacheErr != nil {
+			s.log.Error("cache get blocked IDs failed", logger.String("user_id", viewerID), logger.Error(cacheErr))
+		}
+		if viewerBlockedIDs == nil {
+			ids, err := s.repo.GetBlockedUsers(ctx, viewerID)
+			if err != nil {
+				return nil, err
+			}
+			if ids != nil {
+				viewerBlockedIDs = &ids
+				if setErr := s.cache.SetBlockedIDs(ctx, viewerID, ids); setErr != nil {
+					s.log.Error("cache set blocked IDs failed", logger.String("user_id", viewerID), logger.Error(setErr))
+				}
+			}
+		}
+
+		// step 5: subject block list
+		subjectBlockedIDs, cacheErr := s.cache.GetBlockedIDs(ctx, *subjectID)
+		if cacheErr != nil {
+			s.log.Error("cache get blocked IDs failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
+		}
+		if subjectBlockedIDs == nil {
+			ids, err := s.repo.GetBlockedUsers(ctx, *subjectID)
+			if err != nil {
+				return nil, err
+			}
+			subjectBlockedIDs = &ids
+			if setErr := s.cache.SetBlockedIDs(ctx, *subjectID, ids); setErr != nil {
+				s.log.Error("cache set blocked IDs failed", logger.String("user_id", *subjectID), logger.Error(setErr))
+			}
+		}
+
+		if utils.ContainsString(*viewerBlockedIDs, *subjectID) || utils.ContainsString(*subjectBlockedIDs, viewerID) {
+			return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
+		}
+
+		// step 6: subject contact IDs (check if viewer is in subject's contacts)
+		subjectContactIDs, cacheErr := s.cache.GetContactIDs(ctx, *subjectID)
+		if cacheErr != nil {
+			s.log.Error("cache get contact IDs failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
+		}
+		if subjectContactIDs == nil {
+			contacts, err := s.repo.GetContacts(ctx, *subjectID)
+			if err != nil {
+				return nil, err
+			}
+			if contacts != nil {
+
+				var idStrs []string
+				for _, contact := range *contacts {
+					idStrs = append(idStrs, contact.UserID)
+				}
+				subjectContactIDs = &idStrs
+				if setErr := s.cache.SetContactIDs(ctx, *subjectID, idStrs); setErr != nil {
+					s.log.Error("cache set contact IDs failed", logger.String("user_id", *subjectID), logger.Error(setErr))
+				}
+			}
+		}
+		areContacts := utils.ContainsString(*subjectContactIDs, viewerID)
+
+		// step 7: subject settings
+		settings, cacheErr := s.cache.GetSettings(ctx, *subjectID)
+		if cacheErr != nil {
+			s.log.Error("cache get settings failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
+		}
+		if settings == nil {
+			userSettings, err := s.repo.GetSettings(ctx, *subjectID)
+			if err != nil {
+				return nil, err
+			}
+			if userSettings == nil {
+				return nil, pkgErrors.New(pkgErrors.CodeNotFound, "settings not found")
+			}
+			settings = &cache.Settings{
+				UserID:                  *subjectID,
+				ProfileVisibility:       string(userSettings.ProfileVisibility),
+				LastSeenVisibility:      string(userSettings.LastSeenVisibility),
+				OnlineStatusVisibility:  string(userSettings.OnlineStatusVisibility),
+				ProfilePhotoVisibility:  string(userSettings.ProfilePhotoVisibility),
+				AboutVisibility:         string(userSettings.AboutVisibility),
+				ReadReceiptsEnabled:     userSettings.ReadReceiptsEnabled,
+				TypingIndicatorsEnabled: userSettings.TypingIndicatorsEnabled,
+				UpdatedAt:               time.Now().Unix(),
+			}
+			if setErr := s.cache.SetSettings(ctx, *subjectID, settings); setErr != nil {
+				s.log.Error("cache set settings failed", logger.String("user_id", *subjectID), logger.Error(setErr))
+			}
+		}
+
+		// step 8: privacy overrides (no cache)
+		override, err := s.repo.GetPrivacyOverrides(ctx, *subjectID, viewerID)
+		if err != nil {
+			return nil, err
+		}
+		if override != nil {
+			// step 9: build and cache privacy result
+			privacy = buildPrivacyResult(areContacts, settings, override)
+			if setErr := s.cache.SetPrivacy(ctx, viewerID, *subjectID, privacy); setErr != nil {
+				s.log.Error("cache set privacy failed", logger.String("viewer_id", viewerID), logger.String("subject_id", *subjectID), logger.Error(setErr))
+			}
+		}
 	}
 
+	// step 10: apply privacy and return
+	if !privacy.CanSeeProfile {
+		return nil, pkgErrors.New(pkgErrors.CodeNotFound, "user not found")
+	}
+	applyPrivacy(profile, privacy)
 	return profile, nil
 }
 
-func (s *userService) CreateProfile(ctx context.Context, userID string, input *domain.CreateProfileInput) (*domain.Profile, error) {
+func buildPrivacyResult(areContacts bool, s *cache.Settings, override *domain.PrivacyOverride) *cache.PrivacyResult {
+	isVisible := func(visibility string) bool {
+		switch visibility {
+		case string(domain.ProfileVisibilityPrivate):
+			return true
+		case string(domain.ProfileVisibilityPublic):
+			return areContacts
+		default:
+			return false
+		}
+	}
+
+	r := &cache.PrivacyResult{
+		CanSeeProfile:      isVisible(s.ProfileVisibility),
+		CanSeeAvatar:       isVisible(s.ProfilePhotoVisibility),
+		CanSeeLastSeen:     isVisible(s.LastSeenVisibility),
+		CanSeeOnlineStatus: isVisible(s.OnlineStatusVisibility),
+		CanSeeAbout:        isVisible(s.AboutVisibility),
+		AreContacts:        areContacts,
+	}
+
+	if override != nil {
+		if override.ProfilePhotoVisible != nil {
+			r.CanSeeAvatar = *override.ProfilePhotoVisible
+		}
+		if override.LastSeenVisible != nil {
+			r.CanSeeLastSeen = *override.LastSeenVisible
+		}
+		if override.OnlineStatusVisible != nil {
+			r.CanSeeOnlineStatus = *override.OnlineStatusVisible
+		}
+		if override.AboutVisible != nil {
+			r.CanSeeAbout = *override.AboutVisible
+		}
+	}
+
+	return r
+}
+
+func applyPrivacy(p *domain.Profile, r *cache.PrivacyResult) {
+	if !r.CanSeeAvatar {
+		p.AvatarURL = nil
+		p.AvatarThumbnailURL = nil
+	}
+	if !r.CanSeeLastSeen {
+		p.LastSeenAt = nil
+	}
+	if !r.CanSeeOnlineStatus {
+		p.OnlineStatus = nil
+	}
+	if !r.CanSeeAbout {
+		p.Bio = nil
+		p.BioLinks = nil
+	}
+	p.IsContact = utils.PtrBool(r.AreContacts)
+}
+
+func (s *userService) CreateProfile(ctx context.Context, userID string, input *domain.CreateProfileInput) (*domain.Profile, pkgErrors.AppError) {
 	s.log.Info("Creating user profile",
 		logger.String("user_id", userID),
 	)
@@ -168,6 +343,23 @@ func (s *userService) CreateProfile(ctx context.Context, userID string, input *d
 			logger.Error(err),
 		)
 	}
+	err = s.cache.SetSettings(ctx, result.UserID, &cache.Settings{
+		UserID:                  result.UserID,
+		ProfileVisibility:       string(input.ProfileVisibility),
+		LastSeenVisibility:      string(input.ProfileVisibility), // default to private
+		OnlineStatusVisibility:  string(input.ProfileVisibility), // default to private
+		ProfilePhotoVisibility:  string(input.ProfileVisibility), // default to private
+		AboutVisibility:         string(input.ProfileVisibility), // default to private
+		ReadReceiptsEnabled:     true,                            // default to true
+		TypingIndicatorsEnabled: true,                            // default to true
+		UpdatedAt:               time.Now().Unix(),
+	})
+	if err != nil {
+		s.log.Error("Failed to cache settings after profile creation",
+			logger.String("user_id", result.UserID),
+			logger.Error(err),
+		)
+	}
 
 	// TODO:
 	// INSERT into users.outbox: user.profile.updated event with {changed_fields: [...], new_values: {...searchable fields only}}.
@@ -175,7 +367,7 @@ func (s *userService) CreateProfile(ctx context.Context, userID string, input *d
 	return result, nil
 }
 
-func (s *userService) UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, error) {
+func (s *userService) UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, pkgErrors.AppError) {
 	s.log.Info("Updating user profile",
 		logger.String("user_id", userID),
 	)
@@ -189,30 +381,22 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, input *d
 		return nil, err
 	}
 
-	err = s.cache.SetProfile(ctx, result.UserID, result)
-	if err != nil {
-		s.log.Error("Failed to cache profile after update",
-			logger.String("user_id", result.UserID),
-			logger.Error(err),
-		)
-	}
-
+	// Invalidate cache
 	if input.DisplayName != nil {
 		s.cache.DeleteUserIDByUsername(ctx, *input.DisplayName)
-		err = s.cache.SetUserIDByUsername(ctx, *input.DisplayName, result.UserID)
-		if err != nil {
-			s.log.Error("Failed to cache username to userID mapping after profile creation",
-				logger.String("user_id", result.UserID),
-				logger.String("username", *input.DisplayName),
-				logger.Error(err),
-			)
-		}
+		s.cache.DeleteStatusFeed(ctx, userID)
+	}
+	if input.ProfileVisibility != nil || input.SearchVisibility != nil {
+		s.cache.DeleteSettings(ctx, userID)
+	}
+	if input.ProfileVisibility != nil {
+		s.cache.IncrPrivacyVersion(ctx, userID)
 	}
 
 	return result, nil
 }
 
-func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevice) error {
+func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevice) pkgErrors.AppError {
 	s.log.Info("Adding user device",
 		logger.String("user_id", input.UserID),
 		logger.String("device_id", input.DeviceID),
@@ -266,7 +450,7 @@ func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevic
 	return nil
 }
 
-func (s *userService) AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) error {
+func (s *userService) AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) pkgErrors.AppError {
 	s.log.Info("Adding profile thumbnail",
 		logger.String("user_id", userID),
 		logger.String("thumbnail_url", thumbnailURL),

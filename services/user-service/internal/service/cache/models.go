@@ -3,13 +3,15 @@ package cache
 import "user-service/internal/domain"
 
 type Settings struct {
-	UserID               string `json:"user_id"`
-	NotificationsEnabled bool   `json:"notifications_enabled"`
-	LastSeenVisible      bool   `json:"last_seen_visible"`
-	ProfilePhotoVisible  bool   `json:"profile_photo_visible"`
-	StatusVisible        bool   `json:"status_visible"`
-	ReadReceiptsEnabled  bool   `json:"read_receipts_enabled"`
-	UpdatedAt            int64  `json:"updated_at"`
+	UserID                  string `json:"user_id"`
+	ProfileVisibility       string `json:"profile_visibility"`
+	LastSeenVisibility      string `json:"last_seen_visibility"`
+	OnlineStatusVisibility  string `json:"online_status_visibility"`
+	ProfilePhotoVisibility  string `json:"profile_photo_visibility"`
+	AboutVisibility         string `json:"about_visibility"`
+	ReadReceiptsEnabled     bool   `json:"read_receipts_enabled"`
+	TypingIndicatorsEnabled bool   `json:"typing_indicators_enabled"`
+	UpdatedAt               int64  `json:"updated_at"`
 }
 
 type Presence struct {
@@ -36,4 +38,15 @@ type SearchResult struct {
 	Users  []*domain.Profile `json:"users"`
 	Total  int64             `json:"total"`
 	Offset int64             `json:"offset"`
+}
+
+type PrivacyResult struct {
+	CanSeeProfile      bool `json:"can_see_profile"`
+	CanSeeAvatar       bool `json:"can_see_avatar"`
+	CanSeeLastSeen     bool `json:"can_see_last_seen"`
+	CanSeeOnlineStatus bool `json:"can_see_online_status"`
+	CanSeeAbout        bool `json:"can_see_about"`
+	CanSeePhone        bool `json:"can_see_phone"`
+	CanSeeEmail        bool `json:"can_see_email"`
+	AreContacts        bool `json:"are_contacts"`
 }

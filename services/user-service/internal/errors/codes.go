@@ -41,5 +41,5 @@ const (
 	ErrCodeConsumerCloseFailed = "CONSUMER_CLOSE_FAILED"
 
 	ErrCodeUsernameGenerationFailed = "USERNAME_GENERATION_FAILED"
-	
+	ErrCodeProfileBlocked           = "PROFILE_BLOCKED"
 )

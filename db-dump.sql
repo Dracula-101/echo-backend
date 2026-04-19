@@ -89,7 +89,7 @@ BEGIN
         display_name = 'Deleted User',
         bio = NULL,
         avatar_url = NULL,
-        cover_photo_url = NULL,
+        cover_image_url = NULL,
         website_url = NULL,
         location = NULL,
         search_visibility = FALSE,

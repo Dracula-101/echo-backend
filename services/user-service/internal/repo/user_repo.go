@@ -203,7 +203,7 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 		CountryCode:        profile.CountryCode,
 		PhoneVisible:       profile.PhoneVisible,
 		EmailVisible:       profile.EmailVisible,
-		OnlineStatus:       domain.OnlineStatus(profile.OnlineStatus),
+		OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
 		LastSeenAt:         profile.LastSeenAt,
 		ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
 		SearchVisibility:   profile.SearchVisibility,
@@ -279,7 +279,7 @@ func (r *userRepository) GetProfileByUsername(ctx context.Context, username stri
 		CountryCode:       profile.CountryCode,
 		PhoneVisible:      profile.PhoneVisible,
 		EmailVisible:      profile.EmailVisible,
-		OnlineStatus:      domain.OnlineStatus(profile.OnlineStatus),
+		OnlineStatus:      utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
 		LastSeenAt:        profile.LastSeenAt,
 		ProfileVisibility: domain.ProfileVisibility(profile.ProfileVisibility),
 		SearchVisibility:  profile.SearchVisibility,
@@ -574,7 +574,7 @@ func (r *userRepository) UpdateProfile(ctx context.Context, userId string, param
 		IsVerified:         profile.IsVerified,
 		PhoneVisible:       profile.PhoneVisible,
 		EmailVisible:       profile.EmailVisible,
-		OnlineStatus:       domain.OnlineStatus(profile.OnlineStatus),
+		OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
 		LastSeenAt:         profile.LastSeenAt,
 		ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
 		SearchVisibility:   profile.SearchVisibility,
@@ -582,6 +582,259 @@ func (r *userRepository) UpdateProfile(ctx context.Context, userId string, param
 		EmailVerified:      emailVerified,
 		TwoFactorEnabled:   twoFactorEnabled,
 		AccountStatus:      domain.AccountStatus(accountStatus),
+	}, nil
+}
+
+func (r *userRepository) IsBlocked(ctx context.Context, requesterID, targetID string) (bool, pkgErrors.AppError) {
+	r.log.Debug("Checking if requester has blocked target",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("requester_id", requesterID),
+		logger.String("target_id", targetID),
+	)
+
+	query := `SELECT EXISTS (
+		SELECT 1 FROM users.blocked_users
+		WHERE user_id = $1
+		AND blocked_user_id = $2
+		AND unblocked_at IS NULL
+	)`
+	var isBlocked bool
+	err := r.db.QueryRow(ctx, query, requesterID, targetID).Scan(&isBlocked)
+	if err != nil {
+		r.log.Error("Failed to check block status",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("requester_id", requesterID),
+			logger.String("target_id", targetID),
+			logger.Error(err),
+		)
+		return false, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to check block status")
+	}
+
+	r.log.Debug("Block status checked successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("requester_id", requesterID),
+		logger.String("target_id", targetID),
+		logger.Bool("is_blocked", isBlocked),
+	)
+
+	return isBlocked, nil
+}
+
+func (r *userRepository) GetBlockedUsers(ctx context.Context, userID string) ([]string, pkgErrors.AppError) {
+	r.log.Debug("Fetching blocked users",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT blocked_user_id FROM users.blocked_users WHERE user_id = $1 AND unblocked_at IS NULL`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		r.log.Error("Failed to fetch blocked users",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to fetch blocked users")
+	}
+	defer rows.Close()
+
+	var blockedUserIDs []string
+	for rows.Next() {
+		var blockedUserID string
+		if err := rows.Scan(&blockedUserID); err != nil {
+			r.log.Error("Failed to scan blocked user ID",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.Error(err),
+			)
+			continue
+		}
+		blockedUserIDs = append(blockedUserIDs, blockedUserID)
+	}
+
+	r.log.Debug("Blocked users fetched successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int("blocked_count", len(blockedUserIDs)),
+	)
+
+	return blockedUserIDs, nil
+}
+
+func (r *userRepository) GetContacts(ctx context.Context, userID string) (*[]domain.Profile, pkgErrors.AppError) {
+	r.log.Debug("Fetching contacts",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT contact_user_id FROM users.contacts WHERE user_id = $1 AND status = $2`
+	rows, err := r.db.Query(ctx, query, userID, dbModels.ContactStatusActive)
+	if err != nil {
+		r.log.Error("Failed to fetch contact IDs",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to fetch contact IDs")
+	}
+	defer rows.Close()
+
+	var contacts []domain.Profile
+	for rows.Next() {
+		var contactUserID string
+		if err := rows.Scan(&contactUserID); err != nil {
+			r.log.Error("Failed to scan contact user ID",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.Error(err),
+			)
+			continue
+		}
+
+		profile, err := r.GetProfileByUserID(ctx, contactUserID)
+		if err != nil {
+			r.log.Error("Failed to fetch profile for contact",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("contact_user_id", contactUserID),
+				logger.Error(err),
+			)
+			continue
+		}
+		if profile != nil {
+			contacts = append(contacts, *profile)
+		}
+	}
+
+	r.log.Debug("Contacts fetched successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int("contact_count", len(contacts)),
+	)
+
+	return &contacts, nil
+}
+
+func (r *userRepository) GetSettings(ctx context.Context, userID string) (*domain.Settings, pkgErrors.AppError) {
+	r.log.Debug("Fetching user settings",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT * FROM users.settings WHERE user_id = $1`
+	row := r.db.QueryRow(ctx, query, userID)
+
+	var settings dbModels.UserSettings
+	err := row.ScanModel(&settings)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("Settings not found",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return nil, nil
+		}
+		r.log.Error("Failed to get user settings",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get user settings")
+	}
+
+	r.log.Debug("User settings fetched successfully",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	return &domain.Settings{
+		ProfileVisibility:         domain.ProfileVisibility(settings.ProfileVisibility),
+		LastSeenVisibility:        domain.ProfileVisibility(settings.LastSeenVisibility),
+		OnlineStatusVisibility:    domain.ProfileVisibility(settings.OnlineStatusVisibility),
+		ProfilePhotoVisibility:    domain.ProfileVisibility(settings.ProfilePhotoVisibility),
+		AboutVisibility:           domain.ProfileVisibility(settings.AboutVisibility),
+		ReadReceiptsEnabled:       settings.ReadReceiptsEnabled,
+		TypingIndicatorsEnabled:   settings.TypingIndicatorsEnabled,
+		PushNotificationsEnabled:  settings.PushNotificationsEnabled,
+		EmailNotificationsEnabled: settings.EmailNotificationsEnabled,
+		SmsNotificationsEnabled:   settings.SMSNotificationsEnabled,
+		MessageNotifications:      settings.MessageNotifications,
+		GroupMessageNotifications: settings.GroupMessageNotifications,
+		MentionNotifications:      settings.MentionNotifications,
+		ReactionNotifications:     settings.ReactionNotifications,
+		CallNotifications:         settings.CallNotifications,
+		NotificationSound:         domain.NotificationSound(settings.NotificationSound),
+		VibrationEnabled:          settings.VibrationEnabled,
+		NotificationPreview:       domain.NotificationPreview(settings.NotificationPreview),
+		QuietHoursEnabled:         settings.QuietHoursEnabled,
+		QuietHoursStart:           settings.QuietHoursStart,
+		QuietHoursEnd:             settings.QuietHoursEnd,
+		EnterKeyToSend:            settings.EnterKeyToSend,
+		AutoDownloadPhotos:        settings.AutoDownloadPhotos,
+		AutoDownloadVideos:        settings.AutoDownloadVideos,
+		AutoDownloadDocuments:     settings.AutoDownloadDocuments,
+		AutoDownloadOnWifiOnly:    settings.AutoDownloadOnWifiOnly,
+		CompressImages:            settings.CompressImages,
+		SaveToGallery:             settings.SaveToGallery,
+		ChatBackupEnabled:         settings.ChatBackupEnabled,
+		ChatBackupFrequency:       domain.BackupFrequency(settings.ChatBackupFrequency),
+		ScreenLockEnabled:         settings.ScreenLockEnabled,
+		ScreenLockTimeout:         settings.ScreenLockTimeout,
+		FingerprintUnlock:         settings.FingerprintUnlock,
+		FaceUnlock:                settings.FaceUnlock,
+		ShowSecurityNotifications: settings.ShowSecurityNotifications,
+		Theme:                     domain.Theme(settings.Theme),
+		FontSize:                  domain.FontSize(settings.FontSize),
+		ChatWallpaper:             settings.ChatWallpaper,
+		UseSystemEmoji:            settings.UseSystemEmoji,
+		LanguageCode:              settings.LanguageCode,
+		Timezone:                  settings.Timezone,
+		DateFormat:                domain.DateFormat(settings.DateFormat),
+		TimeFormat:                domain.TimeFormat(settings.TimeFormat),
+		LowDataMode:               settings.LowDataMode,
+	}, nil
+}
+
+func (r *userRepository) GetPrivacyOverrides(ctx context.Context, userID string, targetUserID string) (*domain.PrivacyOverride, pkgErrors.AppError) {
+	r.log.Debug("Fetching user privacy overrides",
+		logger.String("service", userErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT * FROM users.privacy_overrides WHERE user_id = $1 AND target_user_id = $2`
+	row := r.db.QueryRow(ctx, query, userID, targetUserID)
+
+	var overrides dbModels.PrivacyOverride
+	err := row.ScanModel(&overrides)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("Privacy override not found",
+				logger.String("service", userErrors.ServiceName),
+				logger.String("user_id", userID),
+				logger.String("target_user_id", targetUserID),
+			)
+			return nil, nil
+		}
+		r.log.Error("Failed to scan user privacy override",
+			logger.String("service", userErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to scan user privacy override")
+	}
+
+	return &domain.PrivacyOverride{
+		ID:                      overrides.ID,
+		UserID:                  overrides.UserID,
+		TargetUserID:            overrides.TargetUserID,
+		LastSeenVisible:         overrides.LastSeenVisible,
+		OnlineStatusVisible:     overrides.OnlineStatusVisible,
+		ProfilePhotoVisible:     overrides.ProfilePhotoVisible,
+		AboutVisible:            overrides.AboutVisible,
+		ReadReceiptsEnabled:     overrides.ReadReceiptsEnabled,
+		TypingIndicatorsEnabled: overrides.TypingIndicatorsEnabled,
+		CreatedAt:               overrides.CreatedAt,
+		UpdatedAt:               overrides.UpdatedAt,
 	}, nil
 }
 
@@ -812,7 +1065,7 @@ func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit
 			Timezone:           profile.Timezone,
 			PhoneVisible:       profile.PhoneVisible,
 			EmailVisible:       profile.EmailVisible,
-			OnlineStatus:       domain.OnlineStatus(profile.OnlineStatus),
+			OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
 			LastSeenAt:         profile.LastSeenAt,
 			ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
 			SearchVisibility:   profile.SearchVisibility,

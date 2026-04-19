@@ -22,6 +22,11 @@ type UserRepository interface {
 	// Profile management
 	CreateProfile(ctx context.Context, userId string, profile CreateProfileInput) (*domain.Profile, pkgErrors.AppError)
 	UpdateProfile(ctx context.Context, userId string, params UpdateProfileParams) (*domain.Profile, pkgErrors.AppError)
+	IsBlocked(ctx context.Context, requesterID, targetID string) (bool, pkgErrors.AppError)
+	GetBlockedUsers(ctx context.Context, userID string) ([]string, pkgErrors.AppError)
+	GetContacts(ctx context.Context, userID string) (*[]domain.Profile, pkgErrors.AppError)
+	GetSettings(ctx context.Context, userID string) (*domain.Settings, pkgErrors.AppError)
+	GetPrivacyOverrides(ctx context.Context, userID string, targetUserID string) (*domain.PrivacyOverride, pkgErrors.AppError)
 
 	AddUserDevice(ctx context.Context, input *domain.UserDevice, isCurrentDevice bool) pkgErrors.AppError
 	GetUserDevices(ctx context.Context, userID string) ([]*domain.UserDevice, pkgErrors.AppError)

@@ -3,6 +3,8 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"time"
 	"user-service/internal/domain"
 
@@ -16,11 +18,11 @@ type UserCache interface {
 	SetProfile(ctx context.Context, userID string, p *domain.Profile) pkgErrors.AppError
 	DeleteProfile(ctx context.Context, userID string) pkgErrors.AppError
 
-	GetUserIDByUsername(ctx context.Context, username string) (string, pkgErrors.AppError)
+	GetUserIDByUsername(ctx context.Context, username string) (*string, pkgErrors.AppError)
 	SetUserIDByUsername(ctx context.Context, username, userID string) pkgErrors.AppError
 	DeleteUserIDByUsername(ctx context.Context, username string) pkgErrors.AppError
 
-	GetUserIDByPhone(ctx context.Context, e164 string) (string, pkgErrors.AppError)
+	GetUserIDByPhone(ctx context.Context, e164 string) (*string, pkgErrors.AppError)
 	SetUserIDByPhone(ctx context.Context, e164, userID string) pkgErrors.AppError
 	DeleteUserIDByPhone(ctx context.Context, e164 string) pkgErrors.AppError
 
@@ -36,20 +38,31 @@ type UserCache interface {
 	SetContactPresence(ctx context.Context, userID string, entries []*ContactPresenceEntry) pkgErrors.AppError
 	DeleteContactPresence(ctx context.Context, userID string) pkgErrors.AppError
 
-	GetBlockedIDs(ctx context.Context, userID string) ([]string, pkgErrors.AppError)
+	GetBlockedIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError)
 	SetBlockedIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError
 	DeleteBlockedIDs(ctx context.Context, userID string) pkgErrors.AppError
 
-	GetContactIDs(ctx context.Context, userID string) ([]string, pkgErrors.AppError)
+	GetContactIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError)
 	SetContactIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError
 	DeleteContactIDs(ctx context.Context, userID string) pkgErrors.AppError
 
 	GetSearchCache(ctx context.Context, key string) (*SearchResult, pkgErrors.AppError)
 	SetSearchCache(ctx context.Context, key string, result *SearchResult) pkgErrors.AppError
 
-	GetStatusFeed(ctx context.Context, userID string) ([]*StatusEntry, pkgErrors.AppError)
+	GetStatusFeed(ctx context.Context, userID string) (*[]*StatusEntry, pkgErrors.AppError)
 	SetStatusFeed(ctx context.Context, userID string, entries []*StatusEntry) pkgErrors.AppError
 	DeleteStatusFeed(ctx context.Context, userID string) pkgErrors.AppError
+
+	GetPrivacy(ctx context.Context, viewerID, subjectID string) (*PrivacyResult, pkgErrors.AppError)
+	SetPrivacy(ctx context.Context, viewerID, subjectID string, r *PrivacyResult) pkgErrors.AppError
+	DeletePrivacy(ctx context.Context, viewerID, subjectID string) pkgErrors.AppError
+	GetPrivacyVersion(ctx context.Context, userID string) (int64, pkgErrors.AppError)
+	IncrPrivacyVersion(ctx context.Context, userID string) (int64, pkgErrors.AppError)
+
+	AcquireContactLock(ctx context.Context, userA, userB string) (bool, pkgErrors.AppError)
+	ReleaseContactLock(ctx context.Context, userA, userB string) pkgErrors.AppError
+	AcquireBlockLock(ctx context.Context, userA, userB string) (bool, pkgErrors.AppError)
+	ReleaseBlockLock(ctx context.Context, userA, userB string) pkgErrors.AppError
 }
 
 type userCache struct {
@@ -60,6 +73,16 @@ type userCache struct {
 func NewUserCache(c cache.Cache, log logger.Logger) UserCache {
 	return &userCache{cache: c, log: log}
 }
+
+const (
+	PrivacyPrefix        = "privacy:"
+	PrivacyVersionPrefix = "privacy_version:"
+	LockContactPrefix    = "lock:contact:"
+	LockBlockPrefix      = "lock:block:"
+
+	TTLPrivacy = 120 * time.Second
+	TTLLock    = 10 * time.Second
+)
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -89,6 +112,13 @@ func unmarshalStringSlice(data []byte) ([]string, error) {
 		return nil, err
 	}
 	return v, nil
+}
+
+func canonicalPair(a, b string) (string, string) {
+	if a < b {
+		return a, b
+	}
+	return b, a
 }
 
 func (u *userCache) getJSON(ctx context.Context, key, label string) ([]byte, pkgErrors.AppError) {
@@ -128,15 +158,15 @@ func (u *userCache) del(ctx context.Context, key, label string) pkgErrors.AppErr
 	return nil
 }
 
-func (u *userCache) getString(ctx context.Context, key, label string) (string, pkgErrors.AppError) {
+func (u *userCache) getString(ctx context.Context, key, label string) (*string, pkgErrors.AppError) {
 	val, err := u.cache.GetString(ctx, key)
 	if err != nil {
 		u.log.Error("cache get string failed", logger.String("key", key), logger.Error(err))
-		return "", pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get "+label).
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get "+label).
 			WithService("user-service").
 			WithDetail("key", key)
 	}
-	return val, nil
+	return &val, nil
 }
 
 func (u *userCache) setString(ctx context.Context, key, val string, ttl time.Duration, label string) pkgErrors.AppError {
@@ -174,7 +204,7 @@ func (u *userCache) DeleteProfile(ctx context.Context, userID string) pkgErrors.
 
 // ── username → user_id ────────────────────────────────────────────────────────
 
-func (u *userCache) GetUserIDByUsername(ctx context.Context, username string) (string, pkgErrors.AppError) {
+func (u *userCache) GetUserIDByUsername(ctx context.Context, username string) (*string, pkgErrors.AppError) {
 	return u.getString(ctx, ProfileUsernamePrefix+username, "username mapping")
 }
 
@@ -188,7 +218,7 @@ func (u *userCache) DeleteUserIDByUsername(ctx context.Context, username string)
 
 // ── phone → user_id ───────────────────────────────────────────────────────────
 
-func (u *userCache) GetUserIDByPhone(ctx context.Context, e164 string) (string, pkgErrors.AppError) {
+func (u *userCache) GetUserIDByPhone(ctx context.Context, e164 string) (*string, pkgErrors.AppError) {
 	return u.getString(ctx, ProfilePhonePrefix+e164, "phone mapping")
 }
 
@@ -271,7 +301,7 @@ func (u *userCache) DeleteContactPresence(ctx context.Context, userID string) pk
 
 // ── blocked IDs ───────────────────────────────────────────────────────────────
 
-func (u *userCache) GetBlockedIDs(ctx context.Context, userID string) ([]string, pkgErrors.AppError) {
+func (u *userCache) GetBlockedIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError) {
 	data, appErr := u.getJSON(ctx, BlockedPrefix+userID, "blocked IDs")
 	if appErr != nil || data == nil {
 		return nil, appErr
@@ -281,7 +311,7 @@ func (u *userCache) GetBlockedIDs(ctx context.Context, userID string) ([]string,
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to unmarshal blocked IDs").
 			WithService("user-service").WithDetail("user_id", userID)
 	}
-	return ids, nil
+	return &ids, nil
 }
 
 func (u *userCache) SetBlockedIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError {
@@ -294,7 +324,7 @@ func (u *userCache) DeleteBlockedIDs(ctx context.Context, userID string) pkgErro
 
 // ── contact IDs ───────────────────────────────────────────────────────────────
 
-func (u *userCache) GetContactIDs(ctx context.Context, userID string) ([]string, pkgErrors.AppError) {
+func (u *userCache) GetContactIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError) {
 	data, appErr := u.getJSON(ctx, ContactIDsPrefix+userID, "contact IDs")
 	if appErr != nil || data == nil {
 		return nil, appErr
@@ -304,7 +334,7 @@ func (u *userCache) GetContactIDs(ctx context.Context, userID string) ([]string,
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to unmarshal contact IDs").
 			WithService("user-service").WithDetail("user_id", userID)
 	}
-	return ids, nil
+	return &ids, nil
 }
 
 func (u *userCache) SetContactIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError {
@@ -336,7 +366,7 @@ func (u *userCache) SetSearchCache(ctx context.Context, key string, result *Sear
 
 // ── status feed ───────────────────────────────────────────────────────────────
 
-func (u *userCache) GetStatusFeed(ctx context.Context, userID string) ([]*StatusEntry, pkgErrors.AppError) {
+func (u *userCache) GetStatusFeed(ctx context.Context, userID string) (*[]*StatusEntry, pkgErrors.AppError) {
 	data, appErr := u.getJSON(ctx, StatusFeedPrefix+userID, "status feed")
 	if appErr != nil || data == nil {
 		return nil, appErr
@@ -346,7 +376,7 @@ func (u *userCache) GetStatusFeed(ctx context.Context, userID string) ([]*Status
 		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to unmarshal status feed").
 			WithService("user-service").WithDetail("user_id", userID)
 	}
-	return entries, nil
+	return &entries, nil
 }
 
 func (u *userCache) SetStatusFeed(ctx context.Context, userID string, entries []*StatusEntry) pkgErrors.AppError {
@@ -355,4 +385,105 @@ func (u *userCache) SetStatusFeed(ctx context.Context, userID string, entries []
 
 func (u *userCache) DeleteStatusFeed(ctx context.Context, userID string) pkgErrors.AppError {
 	return u.del(ctx, StatusFeedPrefix+userID, "status feed")
+}
+
+func privacyKey(viewerID, subjectID string) string {
+	return fmt.Sprintf("%s%s:%s", PrivacyPrefix, viewerID, subjectID)
+}
+
+func (u *userCache) GetPrivacy(ctx context.Context, viewerID, subjectID string) (*PrivacyResult, pkgErrors.AppError) {
+	data, appErr := u.getJSON(ctx, privacyKey(viewerID, subjectID), "privacy result")
+	if appErr != nil || data == nil {
+		return nil, appErr
+	}
+	r, err := unmarshal[PrivacyResult](data)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to unmarshal privacy result").
+			WithService("user-service").
+			WithDetail("viewer_id", viewerID).
+			WithDetail("subject_id", subjectID)
+	}
+	return r, nil
+}
+
+func (u *userCache) SetPrivacy(ctx context.Context, viewerID, subjectID string, r *PrivacyResult) pkgErrors.AppError {
+	return u.setJSON(ctx, privacyKey(viewerID, subjectID), r, TTLPrivacy, "privacy result")
+}
+
+func (u *userCache) DeletePrivacy(ctx context.Context, viewerID, subjectID string) pkgErrors.AppError {
+	return u.del(ctx, privacyKey(viewerID, subjectID), "privacy result")
+}
+
+func (u *userCache) GetPrivacyVersion(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
+	val, err := u.cache.GetString(ctx, PrivacyVersionPrefix+userID)
+	if err != nil {
+		if err.Code() == pkgErrors.CodeNotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+	v, parseErr := strconv.ParseInt(val, 10, 64)
+	if parseErr != nil {
+		return 0, pkgErrors.FromError(parseErr, pkgErrors.CodeCacheError, "failed to parse privacy version").
+			WithService("user-service").
+			WithDetail("user_id", userID)
+	}
+	return v, nil
+}
+
+func (u *userCache) IncrPrivacyVersion(ctx context.Context, userID string) (int64, pkgErrors.AppError) {
+	newVal, err := u.cache.Increment(ctx, PrivacyVersionPrefix+userID, 1)
+	if err != nil {
+		u.log.Error("failed to increment privacy version",
+			logger.String("user_id", userID),
+			logger.Error(err))
+		return 0, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to increment privacy version").
+			WithService("user-service").
+			WithDetail("user_id", userID)
+	}
+	return newVal, nil
+}
+
+func (u *userCache) AcquireContactLock(ctx context.Context, userA, userB string) (bool, pkgErrors.AppError) {
+	lo, hi := canonicalPair(userA, userB)
+	key := fmt.Sprintf("%s%s:%s", LockContactPrefix, lo, hi)
+	acquired, err := u.cache.AcquireLock(ctx, key, TTLLock)
+	if err != nil {
+		u.log.Error("contact lock acquire failed", logger.String("key", key), logger.Error(err))
+		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to acquire contact lock").
+			WithService("user-service").
+			WithDetail("key", key)
+	}
+	return acquired, nil
+}
+
+func (u *userCache) ReleaseContactLock(ctx context.Context, userA, userB string) pkgErrors.AppError {
+	lo, hi := canonicalPair(userA, userB)
+	key := fmt.Sprintf("%s%s:%s", LockContactPrefix, lo, hi)
+	if err := u.cache.ReleaseLock(ctx, key); err != nil {
+		u.log.Warn("contact lock release failed", logger.String("key", key), logger.Error(err))
+	}
+	return nil
+}
+
+func (u *userCache) AcquireBlockLock(ctx context.Context, userA, userB string) (bool, pkgErrors.AppError) {
+	lo, hi := canonicalPair(userA, userB)
+	key := fmt.Sprintf("%s%s:%s", LockBlockPrefix, lo, hi)
+	acquired, err := u.cache.AcquireLock(ctx, key, TTLLock)
+	if err != nil {
+		u.log.Error("block lock acquire failed", logger.String("key", key), logger.Error(err))
+		return false, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to acquire block lock").
+			WithService("user-service").
+			WithDetail("key", key)
+	}
+	return acquired, nil
+}
+
+func (u *userCache) ReleaseBlockLock(ctx context.Context, userA, userB string) pkgErrors.AppError {
+	lo, hi := canonicalPair(userA, userB)
+	key := fmt.Sprintf("%s%s:%s", LockBlockPrefix, lo, hi)
+	if err := u.cache.ReleaseLock(ctx, key); err != nil {
+		u.log.Warn("block lock release failed", logger.String("key", key), logger.Error(err))
+	}
+	return nil
 }
