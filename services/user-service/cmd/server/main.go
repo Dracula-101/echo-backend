@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"user-service/api/v1/handler"
+	"user-service/api/v1/middleware"
 	"user-service/internal/config"
 	"user-service/internal/consumer"
 	"user-service/internal/health"
@@ -11,9 +12,11 @@ import (
 	repository "user-service/internal/repo"
 	"user-service/internal/service"
 	userCache "user-service/internal/service/cache"
+	"user-service/internal/service/location"
 	"user-service/internal/service/search"
 
 	"shared/pkg/cache"
+	"shared/pkg/cache/memory"
 	"shared/pkg/cache/redis"
 	"shared/pkg/database"
 	"shared/pkg/database/postgres"
@@ -268,7 +271,7 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 	return builder
 }
 
-func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+func createRouter(h *handler.UserHandler, locationService location.LocationService, memCache cache.Cache, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
 	skipPaths := []string{"/profile", "/health", "/metrics", "/live", "/ready", "/health/liveness", "/health/readiness"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
@@ -284,6 +287,7 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
+			router.Middleware(middleware.LocationFromIP(locationService, memCache, log)),
 			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
 			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
 			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
@@ -308,46 +312,10 @@ func createRouter(h *handler.UserHandler, healthHandler *health.Handler, log log
 	return r, nil
 }
 
-func setupShutdownManager(srv *server.Server, dbClient database.Database, cacheClient cache.Cache, consumer consumer.MediaEventsConsumer, log logger.Logger, cfg *config.Config) *shutdown.Manager {
+func setupShutdownManager(srv *server.Server, log logger.Logger, cfg *config.Config) *shutdown.Manager {
 	shutdownMgr := shutdown.New(
 		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
 		shutdown.WithLogger(log),
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"close-database",
-		shutdown.Hook(func(ctx context.Context) error {
-			if dbClient != nil {
-				log.Info("Closing database connection")
-				return dbClient.Close()
-			}
-			return nil
-		}),
-		shutdown.PriorityHigh,
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"close-cache",
-		shutdown.Hook(func(ctx context.Context) error {
-			if cacheClient != nil && cfg.Cache.Enabled {
-				log.Info("Closing cache connection")
-				return cacheClient.Close()
-			}
-			return nil
-		}),
-		shutdown.PriorityHigh,
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"close-messaging-consumer",
-		shutdown.Hook(func(ctx context.Context) error {
-			if consumer != nil {
-				log.Info("Closing messaging consumer")
-				return consumer.Close()
-			}
-			return nil
-		}),
-		shutdown.PriorityHigh,
 	)
 
 	shutdownMgr.RegisterWithPriority(
@@ -428,6 +396,7 @@ func main() {
 	} else {
 		log.Info("Cache is disabled in configuration")
 	}
+	memCache := memory.NewMemCache()
 
 	tokenService := createTokenService(cfg, log)
 	userCache := userCache.NewUserCache(cacheClient, log)
@@ -456,7 +425,7 @@ func main() {
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(userHandler, healthHandler, log)
+	routerInstance, err := createRouter(userHandler, services.Location, memCache, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}
@@ -476,7 +445,7 @@ func main() {
 		log.Fatal("Failed to create server", logger.Error(err))
 	}
 
-	shutdownMgr := setupShutdownManager(srv, dbClient, cacheClient, *consumer, log, cfg)
+	shutdownMgr := setupShutdownManager(srv, log, cfg)
 
 	serverErrors := make(chan error, 1)
 	go func() {
