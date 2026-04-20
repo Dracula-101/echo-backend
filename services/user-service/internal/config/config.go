@@ -8,6 +8,7 @@ type Config struct {
 	Server        ServerConfig        `yaml:"server" mapstructure:"server"`
 	Database      DatabaseConfig      `yaml:"database" mapstructure:"database"`
 	Cache         CacheConfig         `yaml:"cache" mapstructure:"cache"`
+	Search        SearchConfig        `yaml:"search" mapstructure:"search"`
 	Kafka         KafkaConfig         `yaml:"kafka" mapstructure:"kafka"`
 	Security      SecurityConfig      `yaml:"security" mapstructure:"security"`
 	Logging       LoggingConfig       `yaml:"logging" mapstructure:"logging"`
@@ -62,6 +63,18 @@ type PostgresConfig struct {
 type CacheConfig struct {
 	Enabled     bool        `yaml:"enabled" mapstructure:"enabled"`
 	RedisConfig RedisConfig `yaml:"redis" mapstructure:"redis"`
+}
+
+type SearchConfig struct {
+	Meilisearch MeilisearchConfig `yaml:"meilisearch" mapstructure:"meilisearch"`
+}
+
+// MeilisearchConfig contains Meilisearch specific configuration
+type MeilisearchConfig struct {
+	Host      string        `yaml:"host" mapstructure:"host"`
+	APIKey    string        `yaml:"api_key" mapstructure:"api_key"`
+	IndexName string        `yaml:"index_name" mapstructure:"index_name"`
+	Timeout   time.Duration `yaml:"timeout" mapstructure:"timeout"`
 }
 
 // RedisConfig contains Redis specific configuration

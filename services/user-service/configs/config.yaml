@@ -57,6 +57,14 @@ kafka:
     session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
     heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 
+# add the milieu variable for the search service endpoint with all configurable parameters
+search:
+  meilisearch:
+    host: ${MEILISEARCH_HOST:http://localhost:7700}
+    api_key: ${MEILISEARCH_API_KEY:masterKey}
+    index_name: ${MEILISEARCH_INDEX_NAME:users}
+    timeout: ${MEILISEARCH_TIMEOUT:5s}
+
 security:
   allowed_origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
   allowed_methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}

@@ -9,6 +9,7 @@ import (
 	"shared/server/response"
 	"strconv"
 	"user-service/api/v1/dto"
+	"user-service/internal/domain"
 )
 
 // SearchProfiles flow at a glance:
@@ -32,6 +33,7 @@ func (h *UserHandler) SearchProfiles(handler *req.RequestHandler) {
 		response.BadRequestError(ctx, r, w, "Query parameter is required", fmt.Errorf("query parameter is missing"))
 		return
 	}
+	typeStr := handler.QueryParamDefault("type", "all")
 	limitStr := handler.QueryParamDefault("limit", "20")
 	offsetStr := handler.QueryParamDefault("offset", "0")
 
@@ -47,6 +49,12 @@ func (h *UserHandler) SearchProfiles(handler *req.RequestHandler) {
 		return
 	}
 
+	queryType := domain.UserQueryType(typeStr)
+	if !queryType.IsValid() {
+		// If the type is invalid, we can choose to return an error or default to "all".
+		queryType = domain.UserQueryTypeAll
+	}
+
 	h.log.Debug("searching user profiles",
 		logger.String("query", query),
 		logger.Int("limit", limit),
@@ -54,7 +62,7 @@ func (h *UserHandler) SearchProfiles(handler *req.RequestHandler) {
 		logger.String("request_id", handler.GetRequestID()),
 	)
 
-	profiles, total, err := h.searchService.SearchProfiles(ctx, query, limit, offset)
+	profiles, total, err := h.searchService.SearchProfiles(ctx, query, queryType, limit, offset)
 	if err != nil {
 		h.log.Error("Failed to search profiles",
 			logger.String("query", query),

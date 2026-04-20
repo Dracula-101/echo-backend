@@ -437,86 +437,262 @@ func (r *userRepository) UpdateProfile(ctx context.Context, userId string, param
 	}, nil
 }
 
-func (r *userRepository) SearchProfiles(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int, pkgErrors.AppError) {
-	searchPattern := "%" + query + "%"
-	searchQuery := `
-		SELECT *
-		FROM users.profiles
-		WHERE
-			deactivated_at IS NULL
-			AND search_visibility = true
-			AND (
-				username ILIKE '%' || $1 || '%'
-				OR display_name ILIKE '%' || $1 || '%'
-			)
-		ORDER BY
-			CASE WHEN username ILIKE $1 THEN 1 ELSE 0 END DESC,
-			CASE WHEN username ILIKE $1 || '%' THEN 1 ELSE 0 END DESC,
-			LEAST(
-				NULLIF(POSITION(LOWER($1) IN LOWER(username)), 0),
-				NULLIF(POSITION(LOWER($1) IN LOWER(display_name)), 0)
-			) ASC NULLS LAST,
-			LENGTH(username) ASC,
-			created_at DESC
-		LIMIT $2 OFFSET $3`
-
-	rows, dbErr := r.db.Query(ctx, searchQuery, searchPattern, limit, offset)
-	if dbErr != nil {
-		r.log.Error("Failed to search profiles",
+func (r *userRepository) SearchProfilesByUsername(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int64, pkgErrors.AppError) {
+	searchQuery := fmt.Sprintf("%%%s%%", query)
+	rows, err := r.db.Query(ctx,
+		`SELECT * FROM users.profiles WHERE username ILIKE $1 AND deactivated_at IS NULL AND search_visibility = true ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+		searchQuery, limit, offset,
+	)
+	if err != nil {
+		r.log.Error("Failed to search profiles by username",
 			logger.String("query", query),
-			logger.Error(dbErr),
+			logger.Int("limit", limit),
+			logger.Int("offset", offset),
+			logger.Error(err),
 		)
-		return nil, 0, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to search profiles")
+		return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to search profiles by username")
 	}
 	defer rows.Close()
 
-	var profiles []*domain.Profile
+	profiles := []*domain.Profile{}
 	for rows.Next() {
-		var p dbModels.Profile
-		if err := rows.ScanModel(&p); err != nil {
-			r.log.Error("Failed to scan profile", logger.Error(err))
-			continue
+		var profile dbModels.Profile
+		if err := rows.ScanModel(&profile); err != nil {
+			r.log.Error("Failed to scan profile row",
+				logger.Error(err),
+			)
+			return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to scan profile row")
 		}
+
 		profiles = append(profiles, &domain.Profile{
-			UserID:             p.UserID,
-			Username:           p.Username,
-			DisplayName:        p.DisplayName,
-			FirstName:          p.FirstName,
-			LastName:           p.LastName,
-			Bio:                p.Bio,
-			AvatarURL:          p.AvatarURL,
-			AvatarThumbnailURL: p.AvatarThumbnailURL,
-			LanguageCode:       p.LanguageCode,
-			Timezone:           p.Timezone,
-			CountryCode:        p.CountryCode,
-			PhoneVisible:       p.PhoneVisible,
-			EmailVisible:       p.EmailVisible,
-			OnlineStatus:       utils.Ptr(domain.OnlineStatus(p.OnlineStatus)),
-			LastSeenAt:         p.LastSeenAt,
-			ProfileVisibility:  domain.ProfileVisibility(p.ProfileVisibility),
-			SearchVisibility:   p.SearchVisibility,
-			IsVerified:         p.IsVerified,
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        profile.DisplayName,
+			FirstName:          profile.FirstName,
+			LastName:           profile.LastName,
+			Bio:                profile.Bio,
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			LanguageCode:       profile.LanguageCode,
+			Timezone:           profile.Timezone,
+			CountryCode:        profile.CountryCode,
+			PhoneVisible:       profile.PhoneVisible,
+			EmailVisible:       profile.EmailVisible,
+			OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
+			LastSeenAt:         profile.LastSeenAt,
+			ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
+			SearchVisibility:   profile.SearchVisibility,
+			IsVerified:         profile.IsVerified,
 		})
 	}
 
-	var totalCount int
-	countErr := r.db.QueryRow(ctx, `
-		SELECT COUNT(*) FROM users.profiles
-		WHERE (
-			username ILIKE $1 OR
-			display_name ILIKE $1 OR
-			first_name ILIKE $1 OR
-			last_name ILIKE $1
-		)
-		AND deactivated_at IS NULL
-		AND search_visibility = true`,
-		searchPattern,
-	).Scan(&totalCount)
+	var total int64
+	countErr := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM users.profiles WHERE username ILIKE $1 AND deactivated_at IS NULL`,
+		searchQuery,
+	).Scan(&total)
 	if countErr != nil {
-		totalCount = len(profiles)
+		r.log.Error("Failed to count total profiles for username search",
+			logger.String("query", query),
+			logger.Error(countErr),
+		)
+		return nil, 0, pkgErrors.FromError(countErr, userErrors.ErrCodeDatabaseError, "Failed to count total profiles for username search")
 	}
 
-	return profiles, totalCount, nil
+	return profiles, total, nil
+}
+
+func (r *userRepository) SearchProfilesByFullName(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int64, pkgErrors.AppError) {
+	searchQuery := fmt.Sprintf("%%%s%%", query)
+	rows, err := r.db.Query(ctx,
+		`SELECT * FROM users.profiles WHERE (first_name || ' ' || last_name) ILIKE $1 AND deactivated_at IS NULL AND search_visibility = true ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+		searchQuery, limit, offset,
+	)
+	if err != nil {
+		r.log.Error("Failed to search profiles by full name",
+			logger.String("query", query),
+			logger.Int("limit", limit),
+			logger.Int("offset", offset),
+			logger.Error(err),
+		)
+		return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to search profiles by full name")
+	}
+	defer rows.Close()
+
+	profiles := []*domain.Profile{}
+	for rows.Next() {
+		var profile dbModels.Profile
+		if err := rows.ScanModel(&profile); err != nil {
+			r.log.Error("Failed to scan profile row",
+				logger.Error(err),
+			)
+			return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to scan profile row")
+		}
+
+		profiles = append(profiles, &domain.Profile{
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        profile.DisplayName,
+			FirstName:          profile.FirstName,
+			LastName:           profile.LastName,
+			Bio:                profile.Bio,
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			LanguageCode:       profile.LanguageCode,
+			Timezone:           profile.Timezone,
+			CountryCode:        profile.CountryCode,
+			PhoneVisible:       profile.PhoneVisible,
+			EmailVisible:       profile.EmailVisible,
+			OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
+			LastSeenAt:         profile.LastSeenAt,
+			ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
+			SearchVisibility:   profile.SearchVisibility,
+			IsVerified:         profile.IsVerified,
+		})
+	}
+
+	var total int64
+	countErr := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM users.profiles WHERE (first_name || ' ' || last_name) ILIKE $1 AND deactivated_at IS NULL`,
+		searchQuery,
+	).Scan(&total)
+	if countErr != nil {
+		r.log.Error("Failed to count total profiles for full name search",
+			logger.String("query", query),
+			logger.Error(countErr),
+		)
+		return nil, 0, pkgErrors.FromError(countErr, userErrors.ErrCodeDatabaseError, "Failed to count total profiles for full name search")
+	}
+
+	return profiles, total, nil
+}
+
+func (r *userRepository) SearchProfilesByEmail(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int64, pkgErrors.AppError) {
+	rows, err := r.db.Query(ctx,
+		`SELECT p.* FROM users.profiles p JOIN auth.users u ON p.user_id = u.id WHERE u.email ILIKE $1 AND p.deactivated_at IS NULL AND p.search_visibility = true ORDER BY p.created_at DESC LIMIT $2 OFFSET $3`,
+		fmt.Sprintf("%%%s%%", query), limit, offset,
+	)
+	if err != nil {
+		r.log.Error("Failed to search profiles by email",
+			logger.String("query", query),
+			logger.Int("limit", limit),
+			logger.Int("offset", offset),
+			logger.Error(err),
+		)
+		return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to search profiles by email")
+	}
+	defer rows.Close()
+
+	profiles := []*domain.Profile{}
+	for rows.Next() {
+		var profile dbModels.Profile
+		if err := rows.ScanModel(&profile); err != nil {
+			r.log.Error("Failed to scan profile row",
+				logger.Error(err),
+			)
+			return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to scan profile row")
+		}
+
+		profiles = append(profiles, &domain.Profile{
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        profile.DisplayName,
+			FirstName:          profile.FirstName,
+			LastName:           profile.LastName,
+			Bio:                profile.Bio,
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			LanguageCode:       profile.LanguageCode,
+			Timezone:           profile.Timezone,
+			CountryCode:        profile.CountryCode,
+			PhoneVisible:       profile.PhoneVisible,
+			EmailVisible:       profile.EmailVisible,
+			OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
+			LastSeenAt:         profile.LastSeenAt,
+			ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
+			SearchVisibility:   profile.SearchVisibility,
+			IsVerified:         profile.IsVerified,
+		})
+	}
+
+	var total int64
+	countErr := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM users.profiles p JOIN auth.users u ON p.user_id = u.id WHERE u.email ILIKE $1 AND p.deactivated_at IS NULL`,
+		fmt.Sprintf("%%%s%%", query),
+	).Scan(&total)
+	if countErr != nil {
+		r.log.Error("Failed to count total profiles for email search",
+			logger.String("query", query),
+			logger.Error(countErr),
+		)
+		return nil, 0, pkgErrors.FromError(countErr, userErrors.ErrCodeDatabaseError, "Failed to count total profiles for email search")
+	}
+
+	return profiles, total, nil
+}
+
+func (r *userRepository) SearchProfilesByPhone(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int64, pkgErrors.AppError) {
+	rows, err := r.db.Query(ctx,
+		`SELECT p.* FROM users.profiles p JOIN auth.users u ON p.user_id = u.id WHERE u.phone ILIKE $1 AND p.deactivated_at IS NULL AND p.search_visibility = true ORDER BY p.created_at DESC LIMIT $2 OFFSET $3`,
+		fmt.Sprintf("%%%s%%", query), limit, offset,
+	)
+	if err != nil {
+		r.log.Error("Failed to search profiles by phone",
+			logger.String("query", query),
+			logger.Int("limit", limit),
+			logger.Int("offset", offset),
+			logger.Error(err),
+		)
+		return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to search profiles by phone")
+	}
+	defer rows.Close()
+
+	profiles := []*domain.Profile{}
+	for rows.Next() {
+		var profile dbModels.Profile
+		if err := rows.ScanModel(&profile); err != nil {
+			r.log.Error("Failed to scan profile row",
+				logger.Error(err),
+			)
+			return nil, 0, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to scan profile row")
+		}
+
+		profiles = append(profiles, &domain.Profile{
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        profile.DisplayName,
+			FirstName:          profile.FirstName,
+			LastName:           profile.LastName,
+			Bio:                profile.Bio,
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			LanguageCode:       profile.LanguageCode,
+			Timezone:           profile.Timezone,
+			CountryCode:        profile.CountryCode,
+			PhoneVisible:       profile.PhoneVisible,
+			EmailVisible:       profile.EmailVisible,
+			OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
+			LastSeenAt:         profile.LastSeenAt,
+			ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
+			SearchVisibility:   profile.SearchVisibility,
+			IsVerified:         profile.IsVerified,
+		})
+	}
+
+	var total int64
+	countErr := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM users.profiles p JOIN auth.users u ON p.user_id = u.id WHERE u.phone ILIKE $1 AND p.deactivated_at IS NULL`,
+		fmt.Sprintf("%%%s%%", query),
+	).Scan(&total)
+	if countErr != nil {
+		r.log.Error("Failed to count total profiles for phone search",
+			logger.String("query", query),
+			logger.Error(countErr),
+		)
+		return nil, 0, pkgErrors.FromError(countErr, userErrors.ErrCodeDatabaseError, "Failed to count total profiles for phone search")
+	}
+
+	return profiles, total, nil
 }
 
 func (r *userRepository) UsernameExists(ctx context.Context, username string) (bool, pkgErrors.AppError) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"user-service/api/v1/handler"
 	"user-service/api/v1/middleware"
+	ratelimiter "user-service/api/v1/rate_limiter"
 	"user-service/internal/config"
 	"user-service/internal/consumer"
 	"user-service/internal/health"
@@ -29,8 +30,11 @@ import (
 	adapter "shared/pkg/logger/adapter"
 	"shared/pkg/messaging"
 	"shared/pkg/messaging/kafka"
+	windowStore "shared/pkg/windowstore/memory"
 
 	prommetrics "shared/pkg/monitoring/metrics/prometheus"
+	searchClient "shared/pkg/search"
+	"shared/pkg/search/meilisearch"
 	"shared/server/common/token"
 	env "shared/server/env"
 	"shared/server/headers"
@@ -130,6 +134,23 @@ func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache
 	return cacheClient, nil
 }
 
+func createSearchClient(cfg *config.Config, log logger.Logger) (searchClient.Search, error) {
+	log.Debug("Creating Meilisearch client - configuration",
+		logger.String("host", cfg.Search.Meilisearch.Host),
+	)
+	searchClient, err := meilisearch.New(meilisearch.Config{
+		Host:    cfg.Search.Meilisearch.Host,
+		APIKey:  cfg.Search.Meilisearch.APIKey,
+		Timeout: cfg.Search.Meilisearch.Timeout,
+	}, log)
+	if err != nil {
+		log.Error("Failed to create Meilisearch client", logger.Error(err))
+		return nil, err
+	}
+	log.Info("Meilisearch client created successfully")
+	return searchClient, nil
+}
+
 func createConsumer(cfg *config.Config, userRepo repository.UserRepository, log logger.Logger) (*consumer.MediaEventsConsumer, error) {
 	c := cfg.Kafka.Consumer
 	log.Debug("Creating messaging consumer - configuration",
@@ -199,17 +220,52 @@ func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg 
 	return healthMgr
 }
 
-func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Logger) *router.Builder {
+func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ratelimiter.RateLimiter, log logger.Logger) *router.Builder {
 	log.Debug("Registering user routes")
 
 	// Profile routes
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get("/me", request.Adapt(h.GetMyProfile))
-		r.Post("/me", request.Adapt(h.CreateMyProfile))
-		r.Put("/me", request.Adapt(h.UpdateMyProfile))
-		r.Get("/@{username}", request.Adapt(h.GetProfile))
+		r.Get(
+			"/me",
+			request.Adapt(h.GetMyProfile),
+		)
+		r.Post(
+			"/me",
+			request.Adapt(h.CreateMyProfile),
+		)
+		r.Put(
+			"/me",
+			request.Adapt(h.UpdateMyProfile),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return ratelimiter.AllowProfileUpdate(ctx, key, limit)
+				},
+				func(req request.RequestHandler) string {
+					userId, _ := request.GetUserIDFromContext(req.Context())
+					return userId
+				},
+				10,
+			),
+		)
+		r.Get(
+			"/@{username}",
+			request.Adapt(h.GetProfile),
+		)
 		// r.Delete("/profile", request.Adapt(h.DeleteProfile))
-		r.Get("/search", request.Adapt(h.SearchProfiles))
+		r.Get(
+			"/search",
+			request.Adapt(h.SearchProfiles),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return ratelimiter.AllowSearch(ctx, key, limit)
+				},
+				func(req request.RequestHandler) string {
+					userId, _ := request.GetUserIDFromContext(req.Context())
+					return userId
+				},
+				30,
+			),
+		)
 	})
 
 	// Contact routes
@@ -276,8 +332,8 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, log logger.Log
 	return builder
 }
 
-func createRouter(h *handler.UserHandler, locationService location.LocationService, memCache cache.Cache, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
-	skipPaths := []string{"/profile", "/health", "/metrics", "/live", "/ready", "/health/liveness", "/health/readiness"}
+func createRouter(h *handler.UserHandler, locationService location.LocationService, memCache cache.Cache, ratelimiter ratelimiter.RateLimiter, healthHandler *health.Handler, log logger.Logger) (*router.Router, error) {
+	skipPaths := []string{"/health", "/metrics", "/live", "/ready", "/health/liveness", "/health/readiness"}
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
 			healthHandler.Health(rh.Writer(), rh.Request())
@@ -312,7 +368,7 @@ func createRouter(h *handler.UserHandler, locationService location.LocationServi
 		r.Get("/health/readiness", healthHandler.Readiness)
 	})
 
-	builder = setupRoutes(builder, h, log)
+	builder = setupRoutes(builder, h, ratelimiter, log)
 	r := builder.Build()
 	return r, nil
 }
@@ -401,6 +457,13 @@ func main() {
 	} else {
 		log.Info("Cache is disabled in configuration")
 	}
+
+	var searchClient searchClient.Search
+	searchClient, err = createSearchClient(cfg, log)
+	if err != nil {
+		log.Fatal("Failed to create search client", logger.Error(err))
+	}
+
 	memCache := memory.NewMemCache()
 
 	tokenService := createTokenService(cfg, log)
@@ -433,14 +496,16 @@ func main() {
 	if consumer == nil {
 		log.Fatal("Messaging consumer is nil after creation")
 	}
+	windowStore := windowStore.NewMemory(log)
+	ratelimiter := ratelimiter.NewRateLimiter(cacheClient, windowStore, log)
 
-	searchService := search.NewSearchService(userRepo, log)
+	searchService := search.NewSearchService(userRepo, searchClient, userCache, log)
 	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, userCache, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(userHandler, services.Location, memCache, healthHandler, log)
+	routerInstance, err := createRouter(userHandler, services.Location, memCache, ratelimiter, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}
