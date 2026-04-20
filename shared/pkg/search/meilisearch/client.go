@@ -180,7 +180,7 @@ func (c *client) Search(ctx context.Context, indexName, query string, opts *sear
 		logger.Int("duration_ms", int(time.Since(start).Milliseconds())),
 	)
 
-	return toResult(resp), nil
+	return toResult(resp, log), nil
 }
 
 func (c *client) SearchMulti(ctx context.Context, queries []search.MultiQuery) (*search.MultiResult, *search.SearchError) {
@@ -207,7 +207,7 @@ func (c *client) SearchMulti(ctx context.Context, queries []search.MultiQuery) (
 
 	results := make([]search.Result, len(resp.Results))
 	for i, r := range resp.Results {
-		results[i] = *toResult(&r)
+		results[i] = *toResult(&r, log)
 	}
 
 	return &search.MultiResult{Results: results}, nil

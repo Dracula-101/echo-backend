@@ -5,6 +5,7 @@ import (
 
 	ms "github.com/meilisearch/meilisearch-go"
 
+	"shared/pkg/logger"
 	"shared/pkg/search"
 )
 
@@ -18,6 +19,7 @@ func buildSearchRequest(query string, opts *search.QueryOptions) *ms.SearchReque
 	req.Facets = opts.Facets
 	req.AttributesToRetrieve = opts.AttributesToRetrieve
 	req.AttributesToHighlight = opts.AttributesToHighlight
+	req.AttributesToSearchOn = opts.AttributesToSearchOn
 	req.HighlightPreTag = opts.HighlightPreTag
 	req.HighlightPostTag = opts.HighlightPostTag
 	req.AttributesToCrop = opts.AttributesToCrop
@@ -35,7 +37,11 @@ func buildSearchRequest(query string, opts *search.QueryOptions) *ms.SearchReque
 	return req
 }
 
-func toResult(r *ms.SearchResponse) *search.Result {
+func toResult(r *ms.SearchResponse, log logger.Logger) *search.Result {
+	log.Debug("Converting Meilisearch response to search.Result",
+		logger.Any("raw_response", r),
+		logger.Int("hits_count", len(r.Hits)),
+	)
 	hits := make([]map[string]interface{}, len(r.Hits))
 	for i, h := range r.Hits {
 		decoded := make(map[string]interface{})

@@ -77,6 +77,13 @@ func SafePtrBool(b *bool) *bool {
 	return &val
 }
 
+func SafeBool(b *bool) bool {
+	if b == nil {
+		return false
+	}
+	return *b
+}
+
 func PtrFloat64(f float64) *float64 {
 	return &f
 }

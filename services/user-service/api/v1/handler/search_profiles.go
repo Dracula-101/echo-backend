@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
+	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
 	"strconv"
@@ -62,7 +63,17 @@ func (h *UserHandler) SearchProfiles(handler *req.RequestHandler) {
 		logger.String("request_id", handler.GetRequestID()),
 	)
 
-	profiles, total, err := h.searchService.SearchProfiles(ctx, query, queryType, limit, offset)
+	userId, ok := request.GetUserIDFromContext(ctx)
+	var requesterUserId *string
+	if ok {
+		requesterUserId = &userId
+	} else {
+		h.log.Warn("User ID not found in context, proceeding with empty user ID for search",
+			logger.String("request_id", handler.GetRequestID()),
+		)
+	}
+
+	profiles, total, err := h.searchService.SearchProfiles(ctx, query, queryType, limit, offset, requesterUserId)
 	if err != nil {
 		h.log.Error("Failed to search profiles",
 			logger.String("query", query),
@@ -82,6 +93,10 @@ func (h *UserHandler) SearchProfiles(handler *req.RequestHandler) {
 			DisplayName:        utils.DerefString(profile.DisplayName),
 			AvatarURL:          profile.AvatarURL,
 			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			Bio:                profile.Bio,
+			IsVerified:         profile.IsVerified,
+			IsContact:          utils.SafeBool(profile.IsContact),
+			ProfileVisibility:  profile.ProfileVisibility.String(),
 		}
 	}
 

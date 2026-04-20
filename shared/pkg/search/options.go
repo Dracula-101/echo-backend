@@ -6,6 +6,7 @@ type QueryOptions struct {
 	Facets                []string
 	AttributesToRetrieve  []string
 	AttributesToHighlight []string
+	AttributesToSearchOn  []string
 	HighlightPreTag       string
 	HighlightPostTag      string
 	AttributesToCrop      []string

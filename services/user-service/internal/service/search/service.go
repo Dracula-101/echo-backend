@@ -2,7 +2,6 @@ package search
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"shared/pkg/logger"
 	"shared/pkg/search"
@@ -13,15 +12,15 @@ import (
 
 var SearchIndexName = "users"
 
-var searchIndexSettings = &search.IndexSettings{
-	SearchableAttributes: []string{"username", "display_name", "phone"},
+var SearchIndexSettings = &search.IndexSettings{
+	SearchableAttributes: []string{"username", "display_name", "first_name", "last_name"},
 	FilterableAttributes: []string{"search_visibility", "deactivated_at"},
 }
 
 type SearchService interface {
 	CreateIndex(ctx context.Context) error
 	AddOrUpdateProfileInIndex(ctx context.Context, profile domain.SearchProfile) error
-	SearchProfiles(ctx context.Context, query string, queryType domain.UserQueryType, limit, offset int) ([]*domain.Profile, int, error)
+	SearchProfiles(ctx context.Context, query string, queryType domain.UserQueryType, limit, offset int, requesterUserId *string) ([]*domain.Profile, int, error)
 }
 
 // Compile-time interface compliance check
@@ -99,7 +98,7 @@ func (s *searchService) ensureIndexSettings(ctx context.Context) error {
 		logger.String("index_name", SearchIndexName),
 	)
 
-	err := s.searchClient.UpdateSettings(ctx, SearchIndexName, searchIndexSettings)
+	err := s.searchClient.UpdateSettings(ctx, SearchIndexName, SearchIndexSettings)
 	if err != nil {
 		s.log.Error("Failed to apply search index settings",
 			logger.String("index_name", SearchIndexName),
@@ -115,7 +114,7 @@ func (s *searchService) ensureIndexSettings(ctx context.Context) error {
 	return nil
 }
 
-func (s *searchService) SearchProfiles(ctx context.Context, query string, queryType domain.UserQueryType, limit, offset int) ([]*domain.Profile, int, error) {
+func (s *searchService) SearchProfiles(ctx context.Context, query string, queryType domain.UserQueryType, limit, offset int, requesterUserId *string) ([]*domain.Profile, int, error) {
 	s.log.Info("Searching user profiles",
 		logger.String("query", query),
 		logger.String("query_type", string(queryType)),
@@ -123,125 +122,210 @@ func (s *searchService) SearchProfiles(ctx context.Context, query string, queryT
 		logger.Int("offset", offset),
 	)
 
-	sha := sha256.Sum256(fmt.Appendf(nil, "%s:%s:%d:%d", query, queryType.String(), limit, offset))
-	cacheKey := string(sha[:])
-
-	_, err := s.userCache.GetSearchCache(ctx, cacheKey)
+	cacheKey := fmt.Sprintf("%s:%s:%d:%d", queryType, query, limit, offset)
+	cached, err := s.userCache.GetSearchCache(ctx, cacheKey)
 	if err != nil {
 		s.log.Error("Failed to retrieve search result from cache",
 			logger.String("cache_key", cacheKey),
 			logger.Error(err),
 		)
 	}
-	// if result != nil {
-	// 	s.log.Info("Search result found in cache",
-	// 		logger.String("cache_key", cacheKey),
-	// 	)
-	// 	return result.Users, int(result.Total), nil
-	// }
-
-	// search the meilisearch index for user profiles
-	searchResultIds, searchErr := s.searchClient.Search(ctx, SearchIndexName, query, &search.QueryOptions{
-		Filter: "search_visibility = true AND deactivated_at IS NULL",
-		AttributesToHighlight: func() []string {
-			switch queryType {
-			case domain.UserQueryTypeName:
-				return []string{"display_name"}
-			case domain.UserQueryTypePhone:
-				return []string{"phone"}
-			case domain.UserQueryTypeUsername:
-				return []string{"username"}
-			case domain.UserQueryTypeAll:
-				return []string{"username", "display_name", "phone"}
-			default:
-				return []string{"username", "display_name", "phone"}
-			}
-		}(),
-		AttributesToRetrieve: []string{"user_id"},
-		Limit:                int64(limit),
-		Offset:               int64(offset),
-		ShowRankingScore:     true,
-	})
-	if searchErr != nil {
-		s.log.Error("Failed to search user profiles in search index",
-			logger.String("query", query),
-			logger.String("query_type", string(queryType)),
-			logger.Int("limit", limit),
-			logger.Int("offset", offset),
-			logger.Error(searchErr),
-		)
-	} else {
-		s.log.Info("Search result found in search index",
-			logger.String("query", query),
-			logger.String("query_type", string(queryType)),
-			logger.Int("limit", limit),
-			logger.Int("offset", offset),
-			logger.Int("hits", len(searchResultIds.Hits)),
-		)
-		var userIds []string
-		for _, hit := range searchResultIds.Hits {
-			if userID, ok := hit["user_id"].(string); ok {
-				userIds = append(userIds, userID)
-			}
-		}
-
-		profilesMap, err := s.userRepo.GetProfileByUserIDs(ctx, userIds)
-		if err != nil {
-			s.log.Error("Failed to get profiles by user IDs",
-				logger.Strings("user_ids", userIds),
-				logger.Error(err),
-			)
-			return nil, 0, err
-		}
-
-		var profiles []*domain.Profile
-		for _, userID := range userIds {
-			if profile, exists := profilesMap[userID]; exists {
-				profiles = append(profiles, profile)
-			}
-		}
-
-		return profiles, int(searchResultIds.TotalHits), nil
-		// TODO: we can return the search results directly without hitting the database, but we need to convert the search result to the profile struct
+	if cached != nil && len(cached.Users) > 0 {
+		s.log.Info("Search result found in cache", logger.String("cache_key", cacheKey))
+		users, total := excludeRequesterProfile(cached.Users, int(cached.Total), requesterUserId)
+		return users, total, nil
 	}
 
-	var users []*domain.Profile
-	var total int64
+	profiles, total, searchErr := s.meilisearchByType(ctx, query, queryType, limit, offset, requesterUserId)
+	if searchErr == nil {
+		profiles, total = excludeRequesterProfile(profiles, total, requesterUserId)
+		s.userCache.SetSearchCache(ctx, cacheKey, &cache.SearchResult{
+			Users:  profiles,
+			Total:  int64(total),
+			Offset: int64(offset),
+		})
+		return profiles, total, nil
+	}
+	s.log.Error("Meilisearch failed, falling back to Postgres",
+		logger.String("query", query),
+		logger.String("query_type", string(queryType)),
+		logger.Error(searchErr),
+	)
+
+	var pgUsers []*domain.Profile
+	var pgTotal int64
 	switch queryType {
 	case domain.UserQueryTypeName:
-		users, total, err = s.userRepo.SearchProfilesByFullName(ctx, query, limit, offset)
-
-	case domain.UserQueryTypePhone:
-		users, total, err = s.userRepo.SearchProfilesByPhone(ctx, query, limit, offset)
-
+		pgUsers, pgTotal, err = s.userRepo.SearchProfilesByFullName(ctx, query, limit, offset)
 	case domain.UserQueryTypeUsername:
-		users, total, err = s.userRepo.SearchProfilesByUsername(ctx, query, limit, offset)
-
+		pgUsers, pgTotal, err = s.userRepo.SearchProfilesByUsername(ctx, query, limit, offset)
 	case domain.UserQueryTypeAll:
-		users, total, err = s.userRepo.SearchProfilesByUsername(ctx, query, limit, offset)
+		pgUsers, pgTotal, err = s.userRepo.SearchProfilesByUsername(ctx, query, limit, offset)
 	}
 	if err != nil {
 		s.log.Error("Failed to search user profiles",
 			logger.String("query", query),
 			logger.String("query_type", string(queryType)),
-			logger.Int("limit", limit),
-			logger.Int("offset", offset),
 			logger.Error(err),
 		)
 		return nil, 0, err
 	}
 
-	cacheErr := s.userCache.SetSearchCache(ctx, cacheKey, &cache.SearchResult{
-		Users:  users,
-		Total:  int64(total),
+	pgProfiles, pgTotalInt := excludeRequesterProfile(pgUsers, int(pgTotal), requesterUserId)
+
+	s.userCache.SetSearchCache(ctx, cacheKey, &cache.SearchResult{ //nolint:errcheck
+		Users:  pgProfiles,
+		Total:  int64(pgTotalInt),
 		Offset: int64(offset),
 	})
-	if cacheErr != nil {
-		s.log.Error("Failed to set search result in cache",
-			logger.String("cache_key", cacheKey),
-			logger.Error(cacheErr),
-		)
+
+	return pgProfiles, pgTotalInt, nil
+}
+
+func excludeRequesterProfile(profiles []*domain.Profile, total int, requesterUserId *string) ([]*domain.Profile, int) {
+	if requesterUserId == nil || *requesterUserId == "" || len(profiles) == 0 {
+		return profiles, total
 	}
 
-	return users, int(total), nil
+	filtered := make([]*domain.Profile, 0, len(profiles))
+	removed := 0
+	for _, p := range profiles {
+		if p == nil {
+			continue
+		}
+		if p.UserID == *requesterUserId {
+			removed++
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+
+	if removed == 0 {
+		return profiles, total
+	}
+
+	adjustedTotal := total - removed
+	if adjustedTotal < 0 {
+		adjustedTotal = 0
+	}
+
+	return filtered, adjustedTotal
+}
+
+// meilisearchByType runs the appropriate Meilisearch query for the given type.
+// For "all" it fans out to username + name in a single multi-search call.
+func (s *searchService) meilisearchByType(ctx context.Context, query string, queryType domain.UserQueryType, limit, offset int, requesterUserId *string) ([]*domain.Profile, int, error) {
+	retrieve := []string{"user_id"}
+
+	switch queryType {
+	case domain.UserQueryTypeUsername:
+		res, serr := s.searchClient.Search(ctx, SearchIndexName, query, &search.QueryOptions{
+			Filter:               "search_visibility = true AND deactivated_at IS NULL",
+			AttributesToSearchOn: []string{"username"},
+			AttributesToRetrieve: retrieve,
+			Limit:                int64(limit),
+			Offset:               int64(offset),
+			ShowRankingScore:     true,
+		})
+		if serr != nil {
+			return nil, 0, serr
+		}
+		return s.hitsToProfiles(ctx, res.Hits, int(res.TotalHits), requesterUserId)
+
+	case domain.UserQueryTypeName:
+		res, serr := s.searchClient.Search(ctx, SearchIndexName, query, &search.QueryOptions{
+			Filter:               "search_visibility = true",
+			AttributesToSearchOn: []string{"display_name", "first_name", "last_name"},
+			AttributesToRetrieve: retrieve,
+			Limit:                int64(limit),
+			Offset:               int64(offset),
+			ShowRankingScore:     true,
+		})
+		if serr != nil {
+			return nil, 0, serr
+		}
+		return s.hitsToProfiles(ctx, res.Hits, int(res.TotalHits), requesterUserId)
+
+	case domain.UserQueryTypeAll:
+		multi, serr := s.searchClient.SearchMulti(ctx, []search.MultiQuery{
+			{
+				IndexUID: SearchIndexName,
+				Query:    query,
+				Opts: &search.QueryOptions{
+					Filter:               "search_visibility = true AND deactivated_at IS NULL",
+					AttributesToSearchOn: []string{"username"},
+					AttributesToRetrieve: retrieve,
+					Limit:                int64(limit),
+					Offset:               int64(offset),
+					ShowRankingScore:     true,
+				},
+			},
+			{
+				IndexUID: SearchIndexName,
+				Query:    query,
+				Opts: &search.QueryOptions{
+					Filter:               "search_visibility = true",
+					AttributesToSearchOn: []string{"display_name", "first_name", "last_name"},
+					AttributesToRetrieve: retrieve,
+					Limit:                int64(limit),
+					Offset:               int64(offset),
+					ShowRankingScore:     true,
+				},
+			},
+		})
+		if serr != nil {
+			return nil, 0, serr
+		}
+
+		// Merge hits from both results, deduplicate by user_id.
+		seen := make(map[string]struct{})
+		var merged []map[string]interface{}
+		total := int64(0)
+		for _, r := range multi.Results {
+			total += r.TotalHits
+			for _, h := range r.Hits {
+				uid, _ := h["user_id"].(string)
+				if uid == "" {
+					continue
+				}
+				if _, dup := seen[uid]; dup {
+					continue
+				}
+				seen[uid] = struct{}{}
+				merged = append(merged, h)
+			}
+		}
+		return s.hitsToProfiles(ctx, merged, int(total), requesterUserId)
+	}
+
+	return nil, 0, nil
+}
+
+func (s *searchService) hitsToProfiles(ctx context.Context, hits []map[string]interface{}, total int, requesterUserId *string) ([]*domain.Profile, int, error) {
+	userIds := make([]string, 0, len(hits))
+	for _, hit := range hits {
+		if uid, ok := hit["user_id"].(string); ok && uid != "" {
+			userIds = append(userIds, uid)
+		}
+	}
+	if len(userIds) == 0 {
+		return nil, 0, nil
+	}
+
+	profilesMap, err := s.userRepo.GetProfileByUserIDs(ctx, userIds, requesterUserId)
+	if err != nil {
+		s.log.Error("Failed to get profiles by user IDs",
+			logger.Strings("user_ids", userIds),
+			logger.Error(err),
+		)
+		return nil, 0, err
+	}
+
+	profiles := make([]*domain.Profile, 0, len(userIds))
+	for _, uid := range userIds {
+		if p, ok := profilesMap[uid]; ok {
+			profiles = append(profiles, p)
+		}
+	}
+	return profiles, total, nil
 }

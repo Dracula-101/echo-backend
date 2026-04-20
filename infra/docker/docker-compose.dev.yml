@@ -48,12 +48,12 @@ x-env-kafka: &env-kafka
 x-meiliseach: &env-meilisearch
   # Preferred names used by user-service config.yaml
   MEILISEARCH_HOST: http://meilisearch:7700
-  MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-echo_search_key}
+  MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-meilisearch_search_key}
   MEILISEARCH_INDEX_NAME: users
   MEILISEARCH_TIMEOUT: 5s
   # Backward-compatible aliases
   MEILI_HOST: http://meilisearch:7700
-  MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-echo_search_key}
+  MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-meilisearch_search_key}
   MEILI_INDEX_NAME: users
   MEILI_TIMEOUT: 5s
 
@@ -109,6 +109,7 @@ networks:
 volumes:
   go-mod-cache:
   go-build-cache:
+  meilisearch-data:
   api-gateway-cache:
   auth-service-cache:
   message-service-cache:
@@ -257,9 +258,10 @@ services:
   meilisearch:
     ports: [ "7700:7700" ]
     environment:
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-echo_search_key}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-meilisearch_search_key}
     command: meilisearch --env production --http-addr '0.0.0.0:7700' --db-path /data.ms --log-level debug
     volumes:
+      - meilisearch-data:/data.ms
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
       - ${PWD}/infra/scripts/meilisearch-init:/scripts:ro
@@ -358,7 +360,7 @@ services:
       KAFKA_GROUP_ID: user-service-consumer-group
       # Meilisearch configuration
       MEILISEARCH_HOST: http://meilisearch:7700
-      MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-echo_search_key}
+      MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-meilisearch_search_key}
       MEILISEARCH_INDEX_NAME: users
       MEILISEARCH_TIMEOUT: 5s
     volumes:

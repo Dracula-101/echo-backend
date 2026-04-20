@@ -106,7 +106,7 @@ func randAlphaNum(n int) string {
 	return string(b)
 }
 
-func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, pkgErrors.AppError) {
+func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError) {
 	row := r.db.QueryRow(ctx, `SELECT * FROM users.profiles WHERE user_id = $1`, userID)
 
 	var profile dbModels.Profile
@@ -133,6 +133,22 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 			logger.Error(authErr),
 		)
 		return nil, pkgErrors.FromError(authErr, userErrors.ErrCodeDatabaseError, "Failed to get auth details for profile")
+	}
+
+	var isContact *bool
+	if requesterUserId != nil && *requesterUserId != userID {
+		contactErr := r.db.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM users.contacts WHERE user_id = $1 AND contact_user_id = $2)`,
+			*requesterUserId, userID,
+		).Scan(&isContact)
+		if contactErr != nil {
+			r.log.Error("Failed to check if profile is contact",
+				logger.String("requester_user_id", *requesterUserId),
+				logger.String("user_id", userID),
+				logger.Error(contactErr),
+			)
+			isContact = nil
+		}
 	}
 
 	return &domain.Profile{
@@ -173,10 +189,11 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 			}
 			return &links
 		}(),
+		IsContact: isContact,
 	}, nil
 }
 
-func (r *userRepository) GetProfileByUserIDs(ctx context.Context, userIDs []string) (map[string]*domain.Profile, pkgErrors.AppError) {
+func (r *userRepository) GetProfileByUserIDs(ctx context.Context, userIDs []string, requesterUserId *string) (map[string]*domain.Profile, pkgErrors.AppError) {
 	if len(userIDs) == 0 {
 		return map[string]*domain.Profile{}, nil
 	}
@@ -338,7 +355,7 @@ func (r *userRepository) CreateProfile(ctx context.Context, userId string, profi
 		return nil, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to create profile")
 	}
 
-	created, err := r.GetProfileByUserID(ctx, userId)
+	created, err := r.GetProfileByUserID(ctx, userId, nil)
 	if err != nil {
 		r.log.Error("Failed to retrieve created profile",
 			logger.String("user_id", userId),
@@ -443,7 +460,7 @@ func (r *userRepository) UpdateProfile(ctx context.Context, userId string, param
 	}
 
 	if len(setClauses) == 1 {
-		return r.GetProfileByUserID(ctx, userId)
+		return r.GetProfileByUserID(ctx, userId, nil)
 	}
 
 	args = append(args, userId)

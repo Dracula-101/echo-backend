@@ -25,7 +25,7 @@ func (h *UserHandler) GetMyProfile(handler *req.RequestHandler) {
 	h.log.Debug("Received GetMyProfile request",
 		logger.String("user_id", userId),
 	)
-	profile, err := h.service.GetProfile(ctx, userId)
+	profile, err := h.service.GetProfile(ctx, userId, nil)
 	if err != nil {
 		h.log.Error("Failed to get user profile", logger.Error(err))
 		response.InternalServerError(ctx, r, w, "Failed to get user profile", nil)

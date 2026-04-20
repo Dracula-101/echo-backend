@@ -20,14 +20,14 @@ import (
 )
 
 type userService struct {
-	repo        repository.UserRepository
-	blockedRepo blocked_users.BlockedRepository
-	contactRepo contacts.ContactRepository
+	repo         repository.UserRepository
+	blockedRepo  blocked_users.BlockedRepository
+	contactRepo  contacts.ContactRepository
 	settingsRepo settings.SettingsRepository
-	privacyRepo privacy_overrides.PrivacyOverrideRepository
-	deviceRepo  devices.DeviceRepository
-	cache       cache.UserCache
-	log         logger.Logger
+	privacyRepo  privacy_overrides.PrivacyOverrideRepository
+	deviceRepo   devices.DeviceRepository
+	cache        cache.UserCache
+	log          logger.Logger
 }
 
 func newUserService(
@@ -69,7 +69,7 @@ func (s *userService) GenerateUsername(ctx context.Context, displayName string) 
 	return *username, nil
 }
 
-func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Profile, pkgErrors.AppError) {
+func (s *userService) GetProfile(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError) {
 	s.log.Info("Getting user profile",
 		logger.String("user_id", userID),
 	)
@@ -84,7 +84,7 @@ func (s *userService) GetProfile(ctx context.Context, userID string) (*domain.Pr
 		return cachedProfile, nil
 	}
 
-	profile, err := s.repo.GetProfileByUserID(ctx, userID)
+	profile, err := s.repo.GetProfileByUserID(ctx, userID, requesterUserId)
 	if err != nil {
 		s.log.Error("Failed to get profile",
 			logger.String("user_id", userID),
@@ -145,7 +145,7 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 		s.log.Error("cache get profile failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
 	}
 	if profile == nil {
-		p, err := s.repo.GetProfileByUserID(ctx, *subjectID)
+		p, err := s.repo.GetProfileByUserID(ctx, *subjectID, &viewerID)
 		if err != nil {
 			return nil, err
 		}

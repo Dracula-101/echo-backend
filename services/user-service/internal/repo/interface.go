@@ -9,8 +9,8 @@ import (
 
 // UserRepository handles operations exclusively on users.profiles.
 type UserRepository interface {
-	GetProfileByUserID(ctx context.Context, userID string) (*domain.Profile, pkgErrors.AppError)
-	GetProfileByUserIDs(ctx context.Context, userIDs []string) (map[string]*domain.Profile, pkgErrors.AppError)
+	GetProfileByUserID(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError)
+	GetProfileByUserIDs(ctx context.Context, userIDs []string, requesterUserId *string) (map[string]*domain.Profile, pkgErrors.AppError)
 	GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, pkgErrors.AppError)
 	GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, pkgErrors.AppError)
 	CreateProfile(ctx context.Context, userId string, profile CreateProfileInput) (*domain.Profile, pkgErrors.AppError)
