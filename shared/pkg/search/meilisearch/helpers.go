@@ -38,15 +38,28 @@ func buildSearchRequest(query string, opts *search.QueryOptions) *ms.SearchReque
 func toResult(r *ms.SearchResponse) *search.Result {
 	hits := make([]map[string]interface{}, len(r.Hits))
 	for i, h := range r.Hits {
-		decoded := make(map[string]interface{}, len(h))
-		for k, raw := range h {
-			var v interface{}
-			if err := json.Unmarshal(raw, &v); err == nil {
+		decoded := make(map[string]interface{})
+		switch hit := h.(type) {
+		case map[string]interface{}:
+			for k, v := range hit {
 				decoded[k] = v
-				continue
 			}
+		case map[string]json.RawMessage:
+			for k, raw := range hit {
+				var v interface{}
+				if err := json.Unmarshal(raw, &v); err == nil {
+					decoded[k] = v
+					continue
+				}
 
-			decoded[k] = string(raw)
+				decoded[k] = string(raw)
+			}
+		default:
+			// Keep compatibility across SDK versions that return hits as generic interfaces.
+			b, err := json.Marshal(hit)
+			if err == nil {
+				_ = json.Unmarshal(b, &decoded)
+			}
 		}
 		hits[i] = decoded
 	}
@@ -62,26 +75,6 @@ func toResult(r *ms.SearchResponse) *search.Result {
 		TotalPages:         r.TotalPages,
 		HitsPerPage:        r.HitsPerPage,
 		Page:               r.Page,
-	}
-
-	if len(r.FacetDistribution) > 0 {
-		var dist map[string]map[string]int64
-		if json.Unmarshal(r.FacetDistribution, &dist) == nil {
-			result.FacetDistribution = dist
-		}
-	}
-
-	if len(r.FacetStats) > 0 {
-		var stats map[string]struct {
-			Min float64 `json:"min"`
-			Max float64 `json:"max"`
-		}
-		if json.Unmarshal(r.FacetStats, &stats) == nil {
-			result.FacetStats = make(map[string]search.FacetStat, len(stats))
-			for k, v := range stats {
-				result.FacetStats[k] = search.FacetStat{Min: v.Min, Max: v.Max}
-			}
-		}
 	}
 
 	return result

@@ -61,7 +61,7 @@ kafka:
 search:
   meilisearch:
     host: ${MEILISEARCH_HOST:http://localhost:7700}
-    api_key: ${MEILISEARCH_API_KEY:masterKey}
+    api_key: ${MEILISEARCH_API_KEY:echo_search_key}
     index_name: ${MEILISEARCH_INDEX_NAME:users}
     timeout: ${MEILISEARCH_TIMEOUT:5s}
 
@@ -142,5 +142,4 @@ jwt:
   audience: ${JWT_AUDIENCE:user-service-clients}
   signing_method: ${JWT_SIGNING_METHOD:HS256}
   access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
-  refresh_token_ttl : ${JWT_REFRESH_TOKEN_TTL:7d}
-
+  refresh_token_ttl: ${JWT_REFRESH_TOKEN_TTL:7d}

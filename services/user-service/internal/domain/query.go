@@ -17,3 +17,7 @@ func (t UserQueryType) IsValid() bool {
 		return false
 	}
 }
+
+func (t UserQueryType) String() string {
+	return string(t)
+}

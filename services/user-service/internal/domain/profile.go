@@ -25,6 +25,7 @@ type Profile struct {
 	ProfileVisibility  ProfileVisibility
 	SearchVisibility   bool
 	IsVerified         bool
+	DeactivatedAt      *time.Time
 
 	// enriched fields from auth.users
 	PhoneVerified    bool
@@ -73,4 +74,24 @@ type UpdateProfileInput struct {
 	EmailVisible      *bool
 	ProfileVisibility *ProfileVisibility
 	SearchVisibility  *bool
+}
+
+type SearchProfile struct {
+	UserID           string     `json:"user_id"`
+	Username         string     `json:"username"`
+	DisplayName      *string    `json:"display_name"`
+	FirstName        *string    `json:"first_name"`
+	LastName         *string    `json:"last_name"`
+	SearchVisibility bool       `json:"search_visibility"`
+	DeactivatedAt    *time.Time `json:"deactivated_at"`
+}
+
+// SearchID implements [search.Document].
+func (s SearchProfile) SearchID() string {
+	return s.UserID
+}
+
+// SearchIndex implements [search.Document].
+func (s SearchProfile) SearchIndex() string {
+	return "users"
 }

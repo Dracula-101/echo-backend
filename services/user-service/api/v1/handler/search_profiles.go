@@ -77,10 +77,11 @@ func (h *UserHandler) SearchProfiles(handler *req.RequestHandler) {
 	users := make([]dto.UserSearchResult, len(profiles))
 	for i, profile := range profiles {
 		users[i] = dto.UserSearchResult{
-			UserID:      profile.UserID,
-			Username:    profile.Username,
-			DisplayName: utils.DerefString(profile.DisplayName),
-			AvatarURL:   profile.AvatarURL,
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        utils.DerefString(profile.DisplayName),
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
 		}
 	}
 

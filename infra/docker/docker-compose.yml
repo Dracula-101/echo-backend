@@ -241,7 +241,6 @@ services:
     <<: *service-base
     image: getmeili/meilisearch:v1.5
     container_name: echo-meilisearch
-    profiles: [ "search" ]
     ports: [ "${MEILI_PORT:-7700}:7700" ]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-echo_search_key}
@@ -257,7 +256,7 @@ services:
         aliases: [ meilisearch.echo.local ]
     healthcheck:
       <<: *healthcheck-fast
-      test: [ "CMD", "wget", "--no-verbose", "--spider", "http://localhost:7700/health" ]
+      test: [ "CMD", "wget", "--no-verbose", "--spider", "http://127.0.0.1:7700/health" ]
     labels: { com.echo.service: meilisearch, com.echo.tier: search }
 
   # ---------------------------------------------------------------------------

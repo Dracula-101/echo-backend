@@ -23,6 +23,7 @@ up:
 	@echo "  $(BULLET) PostgreSQL  $(YELLOW)localhost:5432$(NC)"
 	@echo "  $(BULLET) Redis       $(YELLOW)localhost:6379$(NC)"
 	@echo "  $(BULLET) Kafka       $(YELLOW)localhost:9092$(NC)"
+	@echo "  $(BULLET) Meilisearch  $(YELLOW)localhost:7700$(NC)"
 	@echo ""
 	@echo "$(DIM)Quick commands: $(CYAN)make logs$(NC) $(DIM)|$(NC) $(CYAN)make status$(NC) $(DIM)|$(NC) $(CYAN)make health$(NC)"
 	@echo ""
@@ -114,6 +115,7 @@ status:
 	@echo "  Kafka:      $$(docker inspect -f '{{.State.Running}}' echo-kafka 2>/dev/null | grep -q true && echo '$(BRIGHT_GREEN)$(CHECK) Running$(NC)' || echo '$(BRIGHT_RED)$(CROSS) Stopped$(NC)')"
 	@echo "  PostgreSQL: $$(docker inspect -f '{{.State.Running}}' echo-postgres 2>/dev/null | grep -q true && echo '$(BRIGHT_GREEN)$(CHECK) Running$(NC)' || echo '$(BRIGHT_RED)$(CROSS) Stopped$(NC)')"
 	@echo "  Redis:      $$(docker inspect -f '{{.State.Running}}' echo-redis 2>/dev/null | grep -q true && echo '$(BRIGHT_GREEN)$(CHECK) Running$(NC)' || echo '$(BRIGHT_RED)$(CROSS) Stopped$(NC)')"
+	@echo "  Meilisearch: $$(docker inspect -f '{{.State.Running}}' echo-meilisearch 2>/dev/null | grep -q true && echo '$(BRIGHT_GREEN)$(CHECK) Running$(NC)' || echo '$(BRIGHT_RED)$(CROSS) Stopped$(NC)')"
 	@echo ""
 
 clean:

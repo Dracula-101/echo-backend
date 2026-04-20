@@ -75,6 +75,21 @@ func (h *UserHandler) CreateMyProfile(handler *req.RequestHandler) {
 		return
 	}
 
+	defer func() {
+		err := h.searchService.AddOrUpdateProfileInIndex(ctx, domain.SearchProfile{
+			UserID:           profile.UserID,
+			Username:         profile.Username,
+			DisplayName:      profile.DisplayName,
+			FirstName:        profile.FirstName,
+			LastName:         profile.LastName,
+			SearchVisibility: profile.SearchVisibility,
+			DeactivatedAt:    profile.DeactivatedAt,
+		})
+		if err != nil {
+			h.log.Error("failed to add profile to search index", logger.String("user_id", userId), logger.Error(err))
+		}
+	}()
+
 	response.JSONWithMessage(ctx, r, w, http.StatusCreated, "Profile created successfully", dto.CreateProfileResponse{
 		ID:                 profile.UserID,
 		Username:           profile.Username,

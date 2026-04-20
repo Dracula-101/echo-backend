@@ -1,10 +1,11 @@
 package dto
 
 type UserSearchResult struct {
-	UserID      string  `json:"user_id"`
-	DisplayName string  `json:"display_name"`
-	Username    string  `json:"username"`
-	AvatarURL   *string `json:"avatar_url,omitempty"`
+	UserID             string  `json:"user_id"`
+	DisplayName        string  `json:"display_name"`
+	Username           string  `json:"username"`
+	AvatarURL          *string `json:"avatar_url,omitempty"`
+	AvatarThumbnailURL *string `json:"avatar_thumbnail_url,omitempty"`
 }
 
 type SearchUsersResponse struct {

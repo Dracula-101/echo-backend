@@ -158,7 +158,77 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 		EmailVerified:      emailVerified,
 		TwoFactorEnabled:   twoFactorEnabled,
 		AccountStatus:      domain.AccountStatus(accountStatus),
+		DeactivatedAt:      profile.DeactivatedAt,
+		BioLinks: func() *[]string {
+			if profile.BioLinks == nil {
+				return nil
+			}
+			var links []string
+			if err := json.Unmarshal([]byte(*profile.BioLinks), &links); err != nil {
+				r.log.Error("Failed to unmarshal bio links",
+					logger.String("user_id", profile.UserID),
+					logger.Error(err),
+				)
+				return nil
+			}
+			return &links
+		}(),
 	}, nil
+}
+
+func (r *userRepository) GetProfileByUserIDs(ctx context.Context, userIDs []string) (map[string]*domain.Profile, pkgErrors.AppError) {
+	if len(userIDs) == 0 {
+		return map[string]*domain.Profile{}, nil
+	}
+	rows, err := r.db.Query(ctx, `SELECT * FROM users.profiles WHERE user_id = ANY($1)`, userIDs)
+	if err != nil {
+		r.log.Error("Failed to get profiles by user IDs",
+			logger.Strings("user_ids", userIDs),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get profiles by user IDs")
+	}
+	defer rows.Close()
+
+	profiles := make(map[string]*domain.Profile)
+	for rows.Next() {
+		var profile dbModels.Profile
+		if err := rows.ScanModel(&profile); err != nil {
+			r.log.Error("Failed to scan profile row",
+				logger.Error(err),
+			)
+			return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to scan profile row")
+		}
+
+		profiles[profile.UserID] = &domain.Profile{
+			UserID:             profile.UserID,
+			Username:           profile.Username,
+			DisplayName:        profile.DisplayName,
+			FirstName:          profile.FirstName,
+			LastName:           profile.LastName,
+			Bio:                profile.Bio,
+			AvatarURL:          profile.AvatarURL,
+			AvatarThumbnailURL: profile.AvatarThumbnailURL,
+			LanguageCode:       profile.LanguageCode,
+			Timezone:           profile.Timezone,
+			CountryCode:        profile.CountryCode,
+			PhoneVisible:       profile.PhoneVisible,
+			EmailVisible:       profile.EmailVisible,
+			OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
+			LastSeenAt:         profile.LastSeenAt,
+			ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
+			SearchVisibility:   profile.SearchVisibility,
+			IsVerified:         profile.IsVerified,
+			DeactivatedAt:      profile.DeactivatedAt,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		r.log.Error("Error iterating over profile rows",
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Error iterating over profile rows")
+	}
+	return profiles, nil
 }
 
 func (r *userRepository) GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, pkgErrors.AppError) {

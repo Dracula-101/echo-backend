@@ -500,6 +500,13 @@ func main() {
 	ratelimiter := ratelimiter.NewRateLimiter(cacheClient, windowStore, log)
 
 	searchService := search.NewSearchService(userRepo, searchClient, userCache, log)
+	go func() {
+		if err := searchService.CreateIndex(context.Background()); err != nil {
+			log.Error("Failed to create search index on startup", logger.Error(err))
+		} else {
+			log.Info("Search index created successfully on startup")
+		}
+	}()
 	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, userCache, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
