@@ -269,13 +269,13 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 	})
 
 	// Contact routes
-	builder = builder.WithRoutesGroup("/me", func(rg *router.RouteGroup) {
+	builder = builder.WithRoutesGroup("/me/contacts", func(rg *router.RouteGroup) {
 		rg.Get(
-			"/contacts",
+			"",
 			request.Adapt(h.ListContacts),
 		)
 		rg.Post(
-			"/contacts",
+			"",
 			request.Adapt(h.AddContact),
 			middleware.RateLimit(
 				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
@@ -288,12 +288,20 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 				20,
 			),
 		)
+		rg.Post(
+			"/{contact_id}/accept",
+			request.Adapt(h.AcceptContact),
+		)
+		rg.Post(
+			"/{contact_id}/reject",
+			request.Adapt(h.RejectContact),
+		)
 		rg.Put(
-			"/contacts/{contact_id}",
+			"/{contact_id}",
 			request.Adapt(h.UpdateContact),
 		)
 		rg.Delete(
-			"/contacts/{contact_id}",
+			"/{contact_id}",
 			request.Adapt(h.RemoveContact),
 		)
 	})

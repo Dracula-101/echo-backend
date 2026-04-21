@@ -93,7 +93,12 @@ func (r *contactRepository) GetContacts(ctx context.Context, userID string, para
 
 func (r *contactRepository) GetContact(ctx context.Context, userID, contactID string) (*domain.Contact, pkgErrors.AppError) {
 	c := &dbModels.Contact{}
-	if dbErr := r.db.FindOne(ctx, c, `SELECT * FROM users.contacts WHERE id = $1 AND user_id = $2`, contactID, userID); dbErr != nil {
+	// For accept/reject flows, the authenticated user is the recipient of a pending request.
+	dbErr := r.db.FindOne(ctx, c, `SELECT * FROM users.contacts WHERE contact_user_id = $1 AND id = $2`, userID, contactID)
+	if dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			return nil, nil
+		}
 		r.log.Error("failed to get contact",
 			logger.String("contact_id", contactID),
 			logger.Error(dbErr),
@@ -174,16 +179,27 @@ func (r *contactRepository) CreateContactRequest(ctx context.Context, userID, ta
 
 func (r *contactRepository) AcceptContactRequest(ctx context.Context, contactID, userID string) (*domain.Contact, pkgErrors.AppError) {
 	query := `
-		INSERT INTO users.contacts (user_id, contact_user_id, status, contact_source, accepted_at, created_at)
-		SELECT contact_user_id, user_id, 'active', 'contact_accept', NOW(), NOW()
-		FROM users.contacts
-		WHERE id = $1 AND user_id = $2 AND status = 'pending'
+		WITH accepted_request AS (
+			UPDATE users.contacts
+			SET relationship_type = 'friend',
+				status = 'active',
+				accepted_at = NOW(),
+				updated_at = NOW()
+			WHERE id = $1 AND contact_user_id = $2 AND status = 'pending'
+			RETURNING user_id, contact_user_id
+		)
+		INSERT INTO users.contacts (user_id, contact_user_id, relationship_type, status, contact_source, accepted_at, created_at)
+		SELECT contact_user_id, user_id, 'friend', 'active', 'contact_accept', NOW(), NOW()
+		FROM accepted_request
 		ON CONFLICT (user_id, contact_user_id) DO UPDATE
-		SET status = 'active', accepted_at = NOW(), updated_at = NOW()
+		SET relationship_type = 'friend', status = 'active', accepted_at = NOW(), updated_at = NOW()
 		RETURNING *`
 
 	c := &dbModels.Contact{}
 	if dbErr := r.db.FindOneAndUpdate(ctx, c, query, contactID, userID); dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			return nil, pkgErrors.New(userErrors.ErrCodeInvalidRequest, "Contact request not found or no longer pending")
+		}
 		r.log.Error("failed to accept contact request",
 			logger.String("contact_id", contactID),
 			logger.Error(dbErr),
