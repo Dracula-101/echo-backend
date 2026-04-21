@@ -40,7 +40,7 @@ func (h *UserHandler) UpdateMyProfile(handler *req.RequestHandler) {
 
 	location, _ := request.GetIPAddressInfoFromContext(ctx)
 
-	profile, err := h.service.UpdateProfile(ctx, userId, &domain.UpdateProfileInput{
+	profile, err := h.userService.UpdateProfile(ctx, userId, &domain.UpdateProfileInput{
 		DisplayName:  updateProfileRequest.DisplayName,
 		FirstName:    updateProfileRequest.FirstName,
 		LastName:     updateProfileRequest.LastName,

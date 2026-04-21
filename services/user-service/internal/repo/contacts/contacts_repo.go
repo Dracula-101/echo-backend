@@ -137,12 +137,13 @@ func (r *contactRepository) ContactExists(ctx context.Context, userID, targetID 
 	return domain.NewContact(*c), nil
 }
 
-func (r *contactRepository) CreateContactRequest(ctx context.Context, userID, targetID, source string) (*domain.Contact, pkgErrors.AppError) {
+func (r *contactRepository) CreateContactRequest(ctx context.Context, userID, targetID, message, source string) (*domain.Contact, pkgErrors.AppError) {
 	c := &dbModels.Contact{
 		UserID:        userID,
 		ContactUserID: targetID,
 		Status:        dbModels.ContactStatusPending,
 		ContactSource: utils.Ptr(source),
+		Notes:         utils.Ptr(message),
 	}
 	id, dbErr := r.db.Insert(ctx, c)
 	if dbErr != nil {
@@ -159,13 +160,12 @@ func (r *contactRepository) CreateContactRequest(ctx context.Context, userID, ta
 
 func (r *contactRepository) AcceptContactRequest(ctx context.Context, contactID, userID string) (*domain.Contact, pkgErrors.AppError) {
 	query := `
-		UPDATE users.contacts
-		SET status      = 'active',
-		    accepted_at = NOW(),
-		    updated_at  = NOW()
-		WHERE id = $1
-		AND contact_user_id = $2
-		AND status = 'pending'
+		INSERT INTO users.contacts (user_id, contact_user_id, status, contact_source, accepted_at, created_at)
+		SELECT contact_user_id, user_id, 'active', 'contact_accept', NOW(), NOW()
+		FROM users.contacts
+		WHERE id = $1 AND user_id = $2 AND status = 'pending'
+		ON CONFLICT (user_id, contact_user_id) DO UPDATE
+		SET status = 'active', accepted_at = NOW(), updated_at = NOW()
 		RETURNING *`
 
 	c := &dbModels.Contact{}

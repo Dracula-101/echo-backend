@@ -8,45 +8,40 @@ import (
 	repository "user-service/internal/repo"
 	"user-service/internal/repo/blocked_users"
 	"user-service/internal/repo/contacts"
-	"user-service/internal/repo/devices"
 	"user-service/internal/repo/privacy_overrides"
 	"user-service/internal/repo/settings"
 	"user-service/internal/service/cache"
 
-	"shared/pkg/database/postgres"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
 )
 
 type userService struct {
-	repo         repository.UserRepository
+	userRepo     repository.UserRepository
 	blockedRepo  blocked_users.BlockedRepository
 	contactRepo  contacts.ContactRepository
 	settingsRepo settings.SettingsRepository
 	privacyRepo  privacy_overrides.PrivacyOverrideRepository
-	deviceRepo   devices.DeviceRepository
 	cache        cache.UserCache
 	log          logger.Logger
 }
 
-func newUserService(
-	repo repository.UserRepository,
+func NewUserService(
+	userRepo repository.UserRepository,
 	blockedRepo blocked_users.BlockedRepository,
 	contactRepo contacts.ContactRepository,
 	settingsRepo settings.SettingsRepository,
 	privacyRepo privacy_overrides.PrivacyOverrideRepository,
-	deviceRepo devices.DeviceRepository,
 	cache cache.UserCache,
 	log logger.Logger,
 ) *userService {
 	return &userService{
-		repo:         repo,
+		userRepo:     userRepo,
 		blockedRepo:  blockedRepo,
 		contactRepo:  contactRepo,
 		settingsRepo: settingsRepo,
 		privacyRepo:  privacyRepo,
-		deviceRepo:   deviceRepo,
 		cache:        cache,
 		log:          log,
 	}
@@ -57,7 +52,7 @@ func (s *userService) GenerateUsername(ctx context.Context, displayName string) 
 		logger.String("display_name", displayName),
 	)
 
-	username, err := s.repo.GenerateUniqueUsername(ctx, displayName)
+	username, err := s.userRepo.GenerateUniqueUsername(ctx, displayName)
 	if err != nil {
 		s.log.Error("Failed to generate username",
 			logger.String("display_name", displayName),
@@ -84,7 +79,7 @@ func (s *userService) GetProfile(ctx context.Context, userID string, requesterUs
 		return cachedProfile, nil
 	}
 
-	profile, err := s.repo.GetProfileByUserID(ctx, userID, requesterUserId)
+	profile, err := s.userRepo.GetProfileByUserID(ctx, userID, requesterUserId)
 	if err != nil {
 		s.log.Error("Failed to get profile",
 			logger.String("user_id", userID),
@@ -126,7 +121,7 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 		s.log.Error("cache get username mapping failed", logger.String("username", username), logger.Error(cacheErr))
 	}
 	if subjectID == nil {
-		p, err := s.repo.GetProfileByUsername(ctx, username)
+		p, err := s.userRepo.GetProfileByUsername(ctx, username)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +140,7 @@ func (s *userService) GetProfileByUsername(ctx context.Context, viewerID, userna
 		s.log.Error("cache get profile failed", logger.String("user_id", *subjectID), logger.Error(cacheErr))
 	}
 	if profile == nil {
-		p, err := s.repo.GetProfileByUserID(ctx, *subjectID, &viewerID)
+		p, err := s.userRepo.GetProfileByUserID(ctx, *subjectID, &viewerID)
 		if err != nil {
 			return nil, err
 		}
@@ -341,7 +336,7 @@ func (s *userService) CreateProfile(ctx context.Context, userID string, input *d
 		logger.String("user_id", userID),
 	)
 
-	result, err := s.repo.CreateProfile(ctx, userID, repository.CreateProfileInput{
+	result, err := s.userRepo.CreateProfile(ctx, userID, repository.CreateProfileInput{
 		DisplayName:       utils.PtrString(input.DisplayName),
 		FirstName:         utils.PtrString(input.FirstName),
 		LastName:          utils.PtrString(input.LastName),
@@ -407,7 +402,7 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, input *d
 		logger.String("user_id", userID),
 	)
 
-	result, err := s.repo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{})
+	result, err := s.userRepo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{})
 	if err != nil {
 		s.log.Error("Failed to update profile",
 			logger.String("user_id", userID),
@@ -431,67 +426,13 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, input *d
 	return result, nil
 }
 
-func (s *userService) AddUserDevice(ctx context.Context, input *domain.UserDevice) pkgErrors.AppError {
-	s.log.Info("Adding user device",
-		logger.String("user_id", input.UserID),
-		logger.String("device_id", input.DeviceID),
-	)
-
-	existingDevices, err := s.deviceRepo.GetDevices(ctx, input.UserID)
-	if err != nil && !postgres.IsNotFoundError(err) {
-		s.log.Error("Failed to get user devices",
-			logger.String("user_id", input.UserID),
-			logger.Error(err),
-		)
-		return err
-	}
-
-	alreadyRegistered := false
-	for _, device := range existingDevices {
-		if device.DeviceID == input.DeviceID {
-			s.log.Info("Device already registered for user",
-				logger.String("user_id", input.UserID),
-				logger.String("device_id", input.DeviceID),
-			)
-			alreadyRegistered = true
-			break
-		}
-	}
-
-	if !alreadyRegistered {
-		err = s.deviceRepo.AddDevice(ctx, input, true)
-		if err != nil {
-			s.log.Error("Failed to add user device",
-				logger.String("user_id", input.UserID),
-				logger.String("device_id", input.DeviceID),
-				logger.Error(err),
-			)
-			return err
-		}
-		s.log.Info("User device added successfully",
-			logger.String("user_id", input.UserID),
-			logger.String("device_id", input.DeviceID),
-		)
-	} else {
-		for _, device := range existingDevices {
-			updateInput := &domain.UpdateUserDevice{
-				IsActive:   utils.PtrBool(device.DeviceID == input.DeviceID),
-				AppVersion: input.AppVersion,
-			}
-			s.deviceRepo.UpdateDevice(ctx, updateInput, input.UserID, device.DeviceID)
-		}
-	}
-
-	return nil
-}
-
 func (s *userService) AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) pkgErrors.AppError {
 	s.log.Info("Adding profile thumbnail",
 		logger.String("user_id", userID),
 		logger.String("thumbnail_url", thumbnailURL),
 	)
 
-	_, err := s.repo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{
+	_, err := s.userRepo.UpdateProfile(ctx, userID, repository.UpdateProfileParams{
 		AvatarURL: &thumbnailURL,
 	})
 	if err != nil {

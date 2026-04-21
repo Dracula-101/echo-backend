@@ -18,7 +18,6 @@ type UserService interface {
 	GetProfileByUsername(ctx context.Context, currentUserID string, username string) (*domain.Profile, pkgErrors.AppError)
 	CreateProfile(ctx context.Context, userID string, profile *domain.CreateProfileInput) (*domain.Profile, pkgErrors.AppError)
 	UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, pkgErrors.AppError)
-	AddUserDevice(ctx context.Context, input *domain.UserDevice) pkgErrors.AppError
 	GenerateUsername(ctx context.Context, displayName string) (string, pkgErrors.AppError)
 	AddProfileThumbnail(ctx context.Context, userID string, thumbnailURL string) pkgErrors.AppError
 }

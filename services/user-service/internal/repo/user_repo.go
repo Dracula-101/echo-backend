@@ -306,6 +306,60 @@ func (r *userRepository) GetProfileByUsername(ctx context.Context, username stri
 	}, nil
 }
 
+func (r *userRepository) GetProfileByPhone(ctx context.Context, phone string) (*domain.Profile, pkgErrors.AppError) {
+	row := r.db.QueryRow(ctx,
+		`SELECT * FROM users.profiles WHERE phone_visible = true AND deactivated_at IS NULL AND user_id IN (SELECT id FROM auth.users WHERE phone = $1)`,
+		phone,
+	)
+	var profile dbModels.Profile
+	err := row.ScanModel(&profile)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		r.log.Error("Failed to get profile by phone",
+			logger.String("phone", phone),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to get profile by phone")
+	}
+	var emailVerified, phoneVerified, twoFactorEnabled bool
+	var accountStatus string
+
+	authErr := r.db.QueryRow(ctx, `SELECT email_verified, phone_verified, two_factor_enabled, account_status FROM auth.users WHERE id = $1`, profile.UserID).Scan(&emailVerified, &phoneVerified, &twoFactorEnabled, &accountStatus)
+	if authErr != nil {
+		r.log.Error("Failed to get auth details for profile",
+			logger.String("user_id", profile.UserID),
+			logger.Error(authErr),
+		)
+		return nil, pkgErrors.FromError(authErr, userErrors.ErrCodeDatabaseError, "Failed to get auth details for profile")
+	}
+	return &domain.Profile{
+		UserID:             profile.UserID,
+		Username:           profile.Username,
+		DisplayName:        profile.DisplayName,
+		FirstName:          profile.FirstName,
+		LastName:           profile.LastName,
+		Bio:                profile.Bio,
+		AvatarURL:          profile.AvatarURL,
+		AvatarThumbnailURL: profile.AvatarThumbnailURL,
+		LanguageCode:       profile.LanguageCode,
+		Timezone:           profile.Timezone,
+		CountryCode:        profile.CountryCode,
+		PhoneVisible:       profile.PhoneVisible,
+		EmailVisible:       profile.EmailVisible,
+		OnlineStatus:       utils.Ptr(domain.OnlineStatus(profile.OnlineStatus)),
+		LastSeenAt:         profile.LastSeenAt,
+		ProfileVisibility:  domain.ProfileVisibility(profile.ProfileVisibility),
+		SearchVisibility:   profile.SearchVisibility,
+		IsVerified:         profile.IsVerified,
+		PhoneVerified:      phoneVerified,
+		EmailVerified:      emailVerified,
+		TwoFactorEnabled:   twoFactorEnabled,
+		AccountStatus:      domain.AccountStatus(accountStatus),
+	}, nil
+}
+
 type CreateProfileInput struct {
 	DisplayName       *string
 	FirstName         *string

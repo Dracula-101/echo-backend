@@ -39,10 +39,12 @@ type UserCache interface {
 	DeleteContactPresence(ctx context.Context, userID string) pkgErrors.AppError
 
 	GetBlockedIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError)
+	AddBlockedID(ctx context.Context, userID string, blockedID string) pkgErrors.AppError
 	SetBlockedIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError
 	DeleteBlockedIDs(ctx context.Context, userID string) pkgErrors.AppError
 
 	GetContactIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError)
+	AddContactID(ctx context.Context, userID string, contactID string) pkgErrors.AppError
 	SetContactIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError
 	DeleteContactIDs(ctx context.Context, userID string) pkgErrors.AppError
 
@@ -320,6 +322,25 @@ func (u *userCache) GetBlockedIDs(ctx context.Context, userID string) (*[]string
 	return &ids, nil
 }
 
+func (u *userCache) AddBlockedID(ctx context.Context, userID string, blockedID string) pkgErrors.AppError {
+	idsPtr, err := u.GetBlockedIDs(ctx, userID)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	if idsPtr != nil {
+		ids = *idsPtr
+	}
+	// Check for duplicates before adding
+	for _, id := range ids {
+		if id == blockedID {
+			return nil // Already exists, no need to add
+		}
+	}
+	ids = append(ids, blockedID)
+	return u.SetBlockedIDs(ctx, userID, ids)
+}
+
 func (u *userCache) SetBlockedIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError {
 	return u.setJSON(ctx, BlockedPrefix+userID, ids, TTLBlocked, "blocked IDs")
 }
@@ -341,6 +362,25 @@ func (u *userCache) GetContactIDs(ctx context.Context, userID string) (*[]string
 			WithService("user-service").WithDetail("user_id", userID)
 	}
 	return &ids, nil
+}
+
+func (u *userCache) AddContactID(ctx context.Context, userID string, contactID string) pkgErrors.AppError {
+	idsPtr, err := u.GetContactIDs(ctx, userID)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	if idsPtr != nil {
+		ids = *idsPtr
+	}
+	// Check for duplicates before adding
+	for _, id := range ids {
+		if id == contactID {
+			return nil // Already exists, no need to add
+		}
+	}
+	ids = append(ids, contactID)
+	return u.SetContactIDs(ctx, userID, ids)
 }
 
 func (u *userCache) SetContactIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError {

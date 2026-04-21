@@ -37,7 +37,7 @@ func (h *UserHandler) CreateMyProfile(handler *req.RequestHandler) {
 		return
 	}
 
-	userName, err := h.service.GenerateUsername(ctx, createProfileRequest.DisplayName)
+	userName, err := h.userService.GenerateUsername(ctx, createProfileRequest.DisplayName)
 	h.log.Debug("generated username for user",
 		logger.String("username", userName),
 		logger.String("user_id", userId),
@@ -55,7 +55,7 @@ func (h *UserHandler) CreateMyProfile(handler *req.RequestHandler) {
 		logger.String("country", location.Country),
 		logger.String("ip", handler.GetClientIP()),
 	)
-	profile, err := h.service.CreateProfile(ctx, userId, &domain.CreateProfileInput{
+	profile, err := h.userService.CreateProfile(ctx, userId, &domain.CreateProfileInput{
 		DisplayName:       createProfileRequest.DisplayName,
 		FirstName:         createProfileRequest.FirstName,
 		Bio:               createProfileRequest.Bio,

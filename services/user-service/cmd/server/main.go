@@ -13,11 +13,11 @@ import (
 	repository "user-service/internal/repo"
 	"user-service/internal/repo/blocked_users"
 	"user-service/internal/repo/contacts"
-	"user-service/internal/repo/devices"
 	"user-service/internal/repo/privacy_overrides"
 	"user-service/internal/repo/settings"
 	"user-service/internal/service"
 	userCache "user-service/internal/service/cache"
+	"user-service/internal/service/contact"
 	"user-service/internal/service/location"
 	"user-service/internal/service/search"
 
@@ -269,11 +269,40 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 	})
 
 	// Contact routes
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get("/contacts", request.Adapt(h.ListContacts))
-		r.Post("/contacts", request.Adapt(h.AddContact))
-		r.Put("/contacts/{contact_id}", request.Adapt(h.UpdateContact))
-		r.Delete("/contacts/{contact_id}", request.Adapt(h.RemoveContact))
+	builder = builder.WithRoutesGroup("/me", func(rg *router.RouteGroup) {
+		rg.Get(
+			"/contacts",
+			request.Adapt(h.ListContacts),
+		)
+		rg.Post(
+			"/contacts",
+			request.Adapt(h.AddContact),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return ratelimiter.AllowContactAdd(ctx, key, limit)
+				},
+				func(req request.RequestHandler) string {
+					user, _ := request.GetUserIDFromContext(req.Context())
+					return user
+				},
+				20,
+			),
+		)
+		rg.Put(
+			"/contacts/{contact_id}",
+			request.Adapt(h.UpdateContact),
+		)
+		rg.Delete(
+			"/contacts/{contact_id}",
+			request.Adapt(h.RemoveContact),
+		)
+	})
+
+	builder = builder.WithRoutesGroup("/me/contacts", func(rg *router.RouteGroup) {
+		rg.Post(
+			"/{contact_id}/accept",
+			request.Adapt(h.AcceptContact),
+		)
 	})
 
 	// Contact group routes
@@ -473,21 +502,7 @@ func main() {
 	contactsRepo := contacts.NewContactRepository(dbClient, log)
 	settingsRepo := settings.NewSettingsRepository(dbClient, log)
 	privacyRepo := privacy_overrides.NewPrivacyOverrideRepository(dbClient, log)
-	deviceRepo := devices.NewDeviceRepository(dbClient, log)
-	services, buildErr := service.NewServiceBuilder().
-		WithUserRepo(userRepo).
-		WithBlockedRepo(blockedRepo).
-		WithContactsRepo(contactsRepo).
-		WithSettingsRepo(settingsRepo).
-		WithPrivacyRepo(privacyRepo).
-		WithDeviceRepo(deviceRepo).
-		WithCache(userCache).
-		WithLogger(log).
-		WithLocationEndpoint(cfg.Server.LocationServiceEndpoint).
-		Build()
-	if buildErr != nil {
-		log.Fatal("Failed to build services", logger.Error(buildErr))
-	}
+	// deviceRepo := devices.NewDeviceRepository(dbClient, log)
 
 	consumer, err := createConsumer(cfg, userRepo, log)
 	if err != nil {
@@ -499,20 +514,17 @@ func main() {
 	windowStore := windowStore.NewMemory(log)
 	ratelimiter := ratelimiter.NewRateLimiter(cacheClient, windowStore, log)
 
+	locationService := location.NewLocationService(cfg.Server.LocationServiceEndpoint, log)
+	userService := service.NewUserService(userRepo, blockedRepo, contactsRepo, settingsRepo, privacyRepo, userCache, log)
 	searchService := search.NewSearchService(userRepo, searchClient, userCache, log)
-	go func() {
-		if err := searchService.CreateIndex(context.Background()); err != nil {
-			log.Error("Failed to create search index on startup", logger.Error(err))
-		} else {
-			log.Info("Search index created successfully on startup")
-		}
-	}()
-	userHandler := handler.NewUserHandler(services.User, searchService, services.Location, userCache, tokenService, log)
+	go searchService.CreateIndex(context.Background())
+	contactService := contact.NewContactService(contactsRepo, userRepo, blockedRepo, log)
+	userHandler := handler.NewUserHandler(userService, searchService, contactService, locationService, userCache, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
 
-	routerInstance, err := createRouter(userHandler, services.Location, memCache, ratelimiter, healthHandler, log)
+	routerInstance, err := createRouter(userHandler, locationService, memCache, ratelimiter, healthHandler, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

@@ -20,3 +20,10 @@ func BytesToString(b []byte) string {
 func SanitizeHTMLText(s string) string {
 	return html.EscapeString(s)
 }
+
+func TrimString(s string, maxLength int) string {
+	if len(s) <= maxLength {
+		return s
+	}
+	return s[:maxLength]
+}

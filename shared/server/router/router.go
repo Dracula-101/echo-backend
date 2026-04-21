@@ -186,33 +186,38 @@ func (g *RouteGroup) HandleProxy(handler http.HandlerFunc, methods ...string) *m
 	return route
 }
 
-func (g *RouteGroup) Handle(path string, method string, handler http.HandlerFunc) *mux.Route {
-	route := g.router.Path(path).Methods(method).HandlerFunc(handler)
+func (g *RouteGroup) Handle(path string, method string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
+	wrapped := http.Handler(handler)
+	for _, m := range middlewares {
+		wrapped = m(wrapped)
+	}
+
+	route := g.router.NewRoute().Path(path).Methods(method).Handler(wrapped)
 	g.parent.routes = append(g.parent.routes, RouteInfo{
 		Method:  method,
 		Pattern: g.prefix + path,
-		Type:    RouteTypeExact,
+		Type:    RouteTypePrefix,
 	})
 	return route
 }
 
-func (g *RouteGroup) Get(path string, handler http.HandlerFunc) *mux.Route {
+func (g *RouteGroup) Get(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
 	return g.Handle(path, http.MethodGet, handler)
 }
 
-func (g *RouteGroup) Post(path string, handler http.HandlerFunc) *mux.Route {
+func (g *RouteGroup) Post(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
 	return g.Handle(path, http.MethodPost, handler)
 }
 
-func (g *RouteGroup) Put(path string, handler http.HandlerFunc) *mux.Route {
+func (g *RouteGroup) Put(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
 	return g.Handle(path, http.MethodPut, handler)
 }
 
-func (g *RouteGroup) Delete(path string, handler http.HandlerFunc) *mux.Route {
+func (g *RouteGroup) Delete(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
 	return g.Handle(path, http.MethodDelete, handler)
 }
 
-func (g *RouteGroup) Patch(path string, handler http.HandlerFunc) *mux.Route {
+func (g *RouteGroup) Patch(path string, handler http.HandlerFunc, middlewares ...middleware.Handler) *mux.Route {
 	return g.Handle(path, http.MethodPatch, handler)
 }
 

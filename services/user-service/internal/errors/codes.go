@@ -8,6 +8,7 @@ const (
 const (
 	// User errors
 	ErrCodeUserNotFound        = "USER_NOT_FOUND"
+	ErrCodeUserBlocked         = "USER_BLOCKED"
 	ErrCodeUserAlreadyExists   = "USER_ALREADY_EXISTS"
 	ErrCodeInvalidUserID       = "INVALID_USER_ID"
 	ErrCodeInvalidUserData     = "INVALID_USER_DATA"

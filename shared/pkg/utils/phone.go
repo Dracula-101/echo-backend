@@ -40,3 +40,24 @@ func ValidatePhoneNumber(phone string, countryISO string) (*PhoneInfo, error) {
 		NationalNumber: num.GetNationalNumber(),
 	}, nil
 }
+
+func ValidatePhoneNumberE164(phone string) (*PhoneInfo, error) {
+	if phone == "" {
+		return nil, errors.New("phone number is required")
+	}
+
+	num, err := phonenumbers.Parse(phone, "")
+	if err != nil || !phonenumbers.IsValidNumber(num) {
+		return nil, errors.New("invalid phone number")
+	}
+
+	region := phonenumbers.GetRegionCodeForNumber(num)
+
+	return &PhoneInfo{
+		E164:           phonenumbers.Format(num, phonenumbers.E164),
+		National:       phonenumbers.Format(num, phonenumbers.NATIONAL),
+		CountryISO:     region,
+		CountryCode:    int(num.GetCountryCode()),
+		NationalNumber: num.GetNationalNumber(),
+	}, nil
+}

@@ -3,6 +3,7 @@ package handler
 import (
 	"user-service/internal/service"
 	"user-service/internal/service/cache"
+	"user-service/internal/service/contact"
 	"user-service/internal/service/location"
 	"user-service/internal/service/search"
 
@@ -11,18 +12,20 @@ import (
 )
 
 type UserHandler struct {
-	service         service.UserService
+	userService     service.UserService
 	searchService   search.SearchService
+	contactService  contact.ContactService
 	locationService location.LocationService
 	cache           cache.UserCache
 	tokenService    *token.JWTTokenService
 	log             logger.Logger
 }
 
-func NewUserHandler(service service.UserService, searchService search.SearchService, locationService location.LocationService, cache cache.UserCache, tokenService *token.JWTTokenService, log logger.Logger) *UserHandler {
+func NewUserHandler(service service.UserService, searchService search.SearchService, contactService contact.ContactService, locationService location.LocationService, cache cache.UserCache, tokenService *token.JWTTokenService, log logger.Logger) *UserHandler {
 	return &UserHandler{
-		service:         service,
+		userService:     service,
 		searchService:   searchService,
+		contactService:  contactService,
 		locationService: locationService,
 		cache:           cache,
 		tokenService:    tokenService,
