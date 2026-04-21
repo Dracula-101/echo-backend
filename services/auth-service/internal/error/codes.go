@@ -11,6 +11,7 @@ const (
 	CodeInvalidCredentials      = "AUTH_INVALID_CREDENTIALS"
 	CodeUserNotFound            = "AUTH_USER_NOT_FOUND"
 	CodeEmailAlreadyExists      = "AUTH_EMAIL_EXISTS"
+	CodePhoneAlreadyExists      = "AUTH_PHONE_EXISTS"
 	CodePasswordHashingFailed   = "AUTH_PASSWORD_HASH_FAILED"
 	CodeTokenGenerationFailed   = "AUTH_TOKEN_GEN_FAILED"
 	CodeInvalidToken            = "AUTH_INVALID_TOKEN"
@@ -68,6 +69,7 @@ const (
 	CodeVerificationTokenExpired = "AUTH_VERIFICATION_TOKEN_EXPIRED"
 	CodeVerificationCooldown     = "AUTH_VERIFICATION_COOLDOWN"
 	CodeEmailLocked              = "AUTH_EMAIL_LOCKED"
+	CodePhoneLocked              = "AUTH_PHONE_LOCKED"
 	CodeEmailDeleted             = "AUTH_EMAIL_DELETED"
 	CodeEmailPendingVerification = "AUTH_EMAIL_PENDING_VERIFICATION"
 

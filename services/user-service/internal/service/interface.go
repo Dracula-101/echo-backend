@@ -16,6 +16,7 @@ type UserService interface {
 	// Profile operations
 	GetProfile(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError)
 	GetProfileByUsername(ctx context.Context, currentUserID string, username string) (*domain.Profile, pkgErrors.AppError)
+	GetProfileByPhone(ctx context.Context, currentUserID string, phone string) (*domain.Profile, pkgErrors.AppError)
 	CreateProfile(ctx context.Context, userID string, profile *domain.CreateProfileInput) (*domain.Profile, pkgErrors.AppError)
 	UpdateProfile(ctx context.Context, userID string, input *domain.UpdateProfileInput) (*domain.Profile, pkgErrors.AppError)
 	GenerateUsername(ctx context.Context, displayName string) (string, pkgErrors.AppError)

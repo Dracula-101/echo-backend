@@ -6,6 +6,7 @@ replace shared => ../../shared
 
 require (
 	github.com/go-playground/validator/v10 v10.30.2
+	github.com/google/uuid v1.6.0
 	shared v0.0.0-00010101000000-000000000000
 )
 
@@ -24,7 +25,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect

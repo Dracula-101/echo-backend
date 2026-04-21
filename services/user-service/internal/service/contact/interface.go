@@ -15,6 +15,7 @@ type ContactService interface {
 	CheckContactExists(ctx context.Context, userId string, targetUserId string) (*domain.Contact, error)
 	AddContact(ctx context.Context, requesterUserId string, identifier string, identifierType dto.IdentifierType, message string, source domain.ContactSource) error
 	AcceptContact(ctx context.Context, userId string, contactId string) error
+	RejectContact(ctx context.Context, userId string, contactId string) error
 }
 
 type contactService struct {
@@ -27,6 +28,8 @@ type contactService struct {
 func NewContactService(contactRepo contacts.ContactRepository, userRepo repository.UserRepository, blockedRepo blocked_users.BlockedRepository, log logger.Logger) ContactService {
 	return &contactService{
 		contactRepo: contactRepo,
+		userRepo:    userRepo,
+		blockedRepo: blockedRepo,
 		log:         log,
 	}
 }

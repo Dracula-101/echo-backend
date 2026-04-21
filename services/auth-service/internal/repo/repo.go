@@ -268,6 +268,57 @@ func (r *authRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	}, nil
 }
 
+func (r *authRepository) GetUserByPhone(ctx context.Context, phone string) (*domain.User, pkgErrors.AppError) {
+	r.log.Debug("Fetching user by phone number",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("phone", phone),
+	)
+	query := `SELECT  * FROM auth.users WHERE phone_number = $1 LIMIT 1`
+	row := r.db.QueryRow(ctx, query, phone)
+	var user dbModels.AuthUser
+	err := row.ScanModel(&user)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("User not found by phone number",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("phone", phone),
+			)
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get user by phone number").
+			WithDetail("phone", phone)
+	}
+	r.log.Debug("User fetched successfully by phone number",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("phone", phone),
+		logger.String("user_id", user.ID),
+		logger.Any("account_status", user.AccountStatus),
+	)
+	return &domain.User{
+		ID:                     user.ID,
+		Email:                  user.Email,
+		PhoneNumber:            utils.DerefString(user.PhoneNumber),
+		PhoneCountryCode:       utils.DerefString(user.PhoneCountryCode),
+		PasswordHash:           user.PasswordHash,
+		PasswordSalt:           user.PasswordSalt,
+		PasswordAlgorithm:      user.PasswordAlgorithm,
+		EmailVerified:          user.EmailVerified,
+		PhoneVerified:          user.PhoneVerified,
+		TwoFactorEnabled:       user.TwoFactorEnabled,
+		TwoFactorSecret:        utils.DerefString(user.TwoFactorSecret),
+		AccountStatus:          user.AccountStatus,
+		AccountLockedUntil:     user.AccountLockedUntil,
+		FailedLoginAttempts:    user.FailedLoginAttempts,
+		LastFailedLoginAt:      user.LastFailedLoginAt,
+		RequiresPasswordChange: user.RequiresPasswordChange,
+		PasswordLastChanged:    user.PasswordLastChangedAt,
+		LastSuccessfulLoginAt:  user.LastSuccessfulLoginAt,
+		CreatedAt:              user.CreatedAt,
+		DeletedAt:              user.DeletedAt,
+		UpdatedAt:              user.UpdatedAt,
+	}, nil
+}
+
 func (r *authRepository) GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError) {
 	r.log.Debug("Fetching user by ID",
 		logger.String("service", authErrors.ServiceName),

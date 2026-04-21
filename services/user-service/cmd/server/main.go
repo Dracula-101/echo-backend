@@ -303,6 +303,10 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 			"/{contact_id}/accept",
 			request.Adapt(h.AcceptContact),
 		)
+		rg.Post(
+			"/{contact_id}/reject",
+			request.Adapt(h.RejectContact),
+		)
 	})
 
 	// Contact group routes

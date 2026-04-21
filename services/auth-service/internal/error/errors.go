@@ -18,6 +18,7 @@ var (
 	// User account errors
 	ErrUserNotFound       = errors.New("user not found")
 	ErrEmailAlreadyExists = errors.New("email already registered")
+	ErrPhoneAlreadyExists = errors.New("phone number already registered")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 
 	// Account status errors

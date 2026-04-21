@@ -331,6 +331,22 @@ func applyPrivacy(p *domain.Profile, r *cache.PrivacyResult) {
 	p.IsContact = utils.PtrBool(r.AreContacts)
 }
 
+func (s *userService) GetProfileByPhone(ctx context.Context, viewerID, phone string) (*domain.Profile, pkgErrors.AppError) {
+	s.log.Info("getting profile by phone", logger.String("phone", phone))
+
+	profile, err := s.userRepo.GetProfileByPhone(ctx, phone)
+	if err != nil {
+		s.log.Error("failed to get profile by phone", logger.String("phone", phone), logger.Error(err))
+		return nil, err
+	}
+	if profile == nil {
+		return nil, nil
+	}
+
+	// reuse existing logic to apply privacy etc
+	return s.GetProfileByUsername(ctx, viewerID, *profile.DisplayName)
+}
+
 func (s *userService) CreateProfile(ctx context.Context, userID string, input *domain.CreateProfileInput) (*domain.Profile, pkgErrors.AppError) {
 	s.log.Info("Creating user profile",
 		logger.String("user_id", userID),

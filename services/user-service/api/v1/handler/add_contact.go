@@ -39,17 +39,80 @@ func (h *UserHandler) AddContact(handler *req.RequestHandler) {
 		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User is not authenticated", nil)
 		return
 	}
-	if addContactDto.IdentifierType == dto.IdentifierTypePhone {
-		_, err := utils.ValidatePhoneNumberE164(addContactDto.Identifier)
+	switch addContactDto.IdentifierType {
+	case dto.IdentifierTypeUserID:
+		profile, err := h.userService.GetProfile(ctx, addContactDto.Identifier, &userId)
 		if err != nil {
-			h.log.Info("Invalid phone number format for adding contact",
+			h.log.Error("Failed to find user by user ID",
+				logger.String("request_id", requestId),
+				logger.String("correlation_id", correlationId),
+				logger.String("user_id", addContactDto.Identifier),
+				logger.Error(err),
+			)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process contact request", nil)
+			return
+		}
+		if profile == nil {
+			h.log.Info("No user found with the provided user ID",
+				logger.String("request_id", requestId),
+				logger.String("correlation_id", correlationId),
+				logger.String("user_id", addContactDto.Identifier),
+			)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "User with the provided user ID not found", nil)
+			return
+		}
+	case dto.IdentifierTypePhone:
+		profile, err := h.userService.GetProfileByPhone(ctx, userId, addContactDto.Identifier)
+		if err != nil {
+			h.log.Error("Failed to find user by phone number",
+				logger.String("request_id", requestId),
+				logger.String("correlation_id", correlationId),
+				logger.String("phone_number", addContactDto.Identifier),
+				logger.Error(err),
+			)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process contact request", nil)
+			return
+		}
+		if profile == nil {
+			h.log.Info("No user found with the provided phone number",
 				logger.String("request_id", requestId),
 				logger.String("correlation_id", correlationId),
 				logger.String("phone_number", addContactDto.Identifier),
 			)
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid phone number format", nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "User with the provided phone number not found", nil)
 			return
 		}
+		addContactDto.Identifier = profile.UserID
+	case dto.IdentifierTypeUsername:
+		profile, err := h.userService.GetProfileByUsername(ctx, userId, addContactDto.Identifier)
+		if err != nil {
+			h.log.Error("Failed to find user by username",
+				logger.String("request_id", requestId),
+				logger.String("correlation_id", correlationId),
+				logger.String("username", addContactDto.Identifier),
+				logger.Error(err),
+			)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process contact request", nil)
+			return
+		}
+		if profile == nil {
+			h.log.Info("No user found with the provided username",
+				logger.String("request_id", requestId),
+				logger.String("correlation_id", correlationId),
+				logger.String("username", addContactDto.Identifier),
+			)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "User with the provided username not found", nil)
+			return
+		}
+		addContactDto.Identifier = profile.UserID
+	default:
+		h.log.Info("Invalid identifier type provided",
+			logger.String("request_id", requestId),
+			logger.String("correlation_id", correlationId),
+			logger.String("identifier_type", string(addContactDto.IdentifierType)),
+		)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Invalid identifier type", nil)
+		return
 	}
 	if addContactDto.Identifier == userId {
 		h.log.Info("User attempted to add themselves as a contact",
@@ -144,6 +207,7 @@ func (h *UserHandler) AddContact(handler *req.RequestHandler) {
 				return
 			}
 		}
+	} else {
 	}
 
 	ok, cacheEr := h.cache.AcquireContactLock(ctx, userId, addContactDto.Identifier)
@@ -175,7 +239,14 @@ func (h *UserHandler) AddContact(handler *req.RequestHandler) {
 		}
 	}()
 	trimmedMessage := utils.TrimString(utils.SafeString(addContactDto.Message), 200)
-	err = h.contactService.AddContact(ctx, userId, addContactDto.Identifier, addContactDto.IdentifierType, trimmedMessage, domain.ContactSource(addContactDto.Source))
+	err = h.contactService.AddContact(
+		ctx,
+		userId,
+		addContactDto.Identifier,
+		addContactDto.IdentifierType,
+		trimmedMessage,
+		domain.ContactSource(addContactDto.Source),
+	)
 	if err != nil {
 		h.log.Error("Failed to add contact",
 			logger.String("request_id", requestId),
@@ -190,4 +261,6 @@ func (h *UserHandler) AddContact(handler *req.RequestHandler) {
 		logger.String("request_id", requestId),
 		logger.String("correlation_id", correlationId),
 	)
+
+	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusAccepted, "Contact request sent successfully", nil)
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"user-service/internal/domain"
 	userErrors "user-service/internal/errors"
 
 	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -131,19 +133,31 @@ func (r *contactRepository) GetPendingContactRequests(ctx context.Context, userI
 
 func (r *contactRepository) ContactExists(ctx context.Context, userID, targetID string) (*domain.Contact, pkgErrors.AppError) {
 	c := &dbModels.Contact{}
-	if dbErr := r.db.FindOne(ctx, c, `SELECT * FROM users.contacts WHERE user_id = $1 AND contact_user_id = $2`, userID, targetID); dbErr != nil {
-		return nil, nil
+	dbErr := r.db.FindOne(ctx, c, `SELECT * FROM users.contacts WHERE user_id = $1 AND contact_user_id = $2`, userID, targetID)
+	if dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			return nil, nil
+		}
+		r.log.Error("failed to check if contact exists",
+			logger.String("user_id", userID),
+			logger.String("target_id", targetID),
+			logger.Error(dbErr),
+		)
+		return nil, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to check if contact exists")
 	}
 	return domain.NewContact(*c), nil
 }
 
 func (r *contactRepository) CreateContactRequest(ctx context.Context, userID, targetID, message, source string) (*domain.Contact, pkgErrors.AppError) {
 	c := &dbModels.Contact{
-		UserID:        userID,
-		ContactUserID: targetID,
-		Status:        dbModels.ContactStatusPending,
-		ContactSource: utils.Ptr(source),
-		Notes:         utils.Ptr(message),
+		UserID:           userID,
+		ContactUserID:    targetID,
+		RelationshipType: dbModels.RelationshipTypePending,
+		Status:           dbModels.ContactStatusPending,
+		ContactSource:    utils.Ptr(source),
+		Notes:            utils.Ptr(message),
+		CreatedAt:        utils.Ptr(time.Now()),
+		UpdatedAt:        utils.Ptr(time.Now()),
 	}
 	id, dbErr := r.db.Insert(ctx, c)
 	if dbErr != nil {

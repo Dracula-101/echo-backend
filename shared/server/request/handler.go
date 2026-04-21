@@ -101,6 +101,7 @@ func (h *RequestHandler) ParseAndValidate(req Validator) ([]response.FieldError,
 			}
 			var fieldErrors []response.FieldError
 			for index, err := range validationErrors {
+				detail := validationErrorDetailForIndex(msgs, index, err)
 				var constraints string
 				if env.IsDevelopment() {
 					constraints = fmt.Sprintf("%s has a constraint of %s in %s", err.Field(), err.Tag(), err.Namespace())
@@ -110,8 +111,8 @@ func (h *RequestHandler) ParseAndValidate(req Validator) ([]response.FieldError,
 				fieldErrors = append(fieldErrors, response.FieldError{
 					Field:       err.Field(),
 					Value:       fmt.Sprintf("%v", err.Value()),
-					Message:     msgs[index].Msg,
-					Code:        msgs[index].Code,
+					Message:     detail.Msg,
+					Code:        detail.Code,
 					Constraints: constraints,
 				})
 			}
@@ -121,6 +122,44 @@ func (h *RequestHandler) ParseAndValidate(req Validator) ([]response.FieldError,
 	}
 
 	return nil, nil
+}
+
+func validationErrorDetailForIndex(msgs []ValidationErrorDetail, index int, fieldErr validator.FieldError) ValidationErrorDetail {
+	if index < len(msgs) && msgs[index].Msg != "" {
+		code := msgs[index].Code
+		if code == "" {
+			code = INVALID_FORMAT
+		}
+		return ValidationErrorDetail{Msg: msgs[index].Msg, Code: code}
+	}
+
+	switch fieldErr.Tag() {
+	case "required":
+		return ValidationErrorDetail{
+			Msg:  fmt.Sprintf("%s is required", fieldErr.Field()),
+			Code: REQUIRED_FIELD,
+		}
+	case "oneof":
+		return ValidationErrorDetail{
+			Msg:  fmt.Sprintf("%s must be one of: %s", fieldErr.Field(), fieldErr.Param()),
+			Code: INVALID_FORMAT,
+		}
+	case "min":
+		return ValidationErrorDetail{
+			Msg:  fmt.Sprintf("%s is too short", fieldErr.Field()),
+			Code: TOO_SHORT,
+		}
+	case "max":
+		return ValidationErrorDetail{
+			Msg:  fmt.Sprintf("%s is too long", fieldErr.Field()),
+			Code: TOO_LONG,
+		}
+	default:
+		return ValidationErrorDetail{
+			Msg:  fmt.Sprintf("%s has an invalid value", fieldErr.Field()),
+			Code: INVALID_FORMAT,
+		}
+	}
 }
 
 func (h *RequestHandler) ParseValidateAndSend(req Validator) bool {

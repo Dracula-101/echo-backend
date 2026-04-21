@@ -21,6 +21,7 @@ type AuthRepository interface {
 	LockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)
+	GetUserByPhone(ctx context.Context, phone string) (*domain.User, pkgErrors.AppError)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, pkgErrors.AppError)
 	GetLoginAttempts(ctx context.Context, userID string) (int, pkgErrors.AppError)
 

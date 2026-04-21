@@ -109,7 +109,7 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is pending verification. Please check your inbox for the verification email.", pkgErrors.New(authErrors.CodeEmailPendingVerification, "email is pending verification"))
 			return
 		case models.AccountStatusActive:
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrPhoneAlreadyExists.Error()))
 			return
 		case models.AccountStatusDeactivated:
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Email is already registered but the account is deactivated. Please contact support.", pkgErrors.New(authErrors.CodeEmailAlreadyExists, authErrors.ErrEmailAlreadyExists.Error()))
@@ -119,7 +119,6 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 			return
 		}
 	}
-
 	cacheErr := h.authCache.AcquireRegisterEmailLock(ctx, reqBody.Email)
 	if cacheErr != nil {
 		switch cacheErr.Code {
@@ -139,6 +138,72 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 			)
 			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to acquire email lock", cacheErr.Error)
 		}
+	}
+
+	if reqBody.PhoneNumber != nil && reqBody.PhoneCountryCode != nil {
+		h.log.Debug("Checking if phone number is already registered",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("phone_number", *reqBody.PhoneNumber),
+			logger.String("phone_country_code", *reqBody.PhoneCountryCode),
+		)
+		userInfo, authErr = h.authService.IsPhoneTaken(ctx, *reqBody.PhoneNumber)
+		if authErr != nil {
+			h.log.Error("Failed to check if phone number is taken",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("phone_number", *reqBody.PhoneNumber),
+				logger.String("phone_country_code", *reqBody.PhoneCountryCode),
+				logger.Error(authErr.Error),
+			)
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to check phone number availability", authErr.Error)
+			return
+		}
+		if userInfo != nil {
+			h.log.Debug("Phone number is already registered",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("request_id", requestID),
+				logger.String("phone_number", *reqBody.PhoneNumber),
+				logger.String("phone_country_code", *reqBody.PhoneCountryCode),
+			)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Phone number is already registered", pkgErrors.New(authErrors.CodePhoneAlreadyExists, authErrors.ErrPhoneAlreadyExists.Error()))
+			return
+		}
+
+		cacheErr = h.authCache.AcquireRegisterPhoneLock(ctx, *reqBody.PhoneNumber)
+		if cacheErr != nil {
+			switch cacheErr.Code {
+			case authErrors.CodePhoneAlreadyExists:
+				h.log.Warn("Concurrent registration attempt for the same phone number",
+					logger.String("service", authErrors.ServiceName),
+					logger.String("request_id", requestID),
+					logger.String("phone_number", *reqBody.PhoneNumber),
+					logger.String("phone_country_code", *reqBody.PhoneCountryCode),
+				)
+				response.ConflictError(ctx, handler.Request(), handler.Writer(), "Phone number is already being registered. Please try again later.", pkgErrors.New(authErrors.CodePhoneAlreadyExists, "phone number is already being registered"))
+			case authErrors.CodeCacheError:
+				h.log.Error("Failed to acquire phone lock",
+					logger.String("service", authErrors.ServiceName),
+					logger.String("request_id", requestID),
+					logger.String("phone_number", *reqBody.PhoneNumber),
+					logger.String("phone_country_code", *reqBody.PhoneCountryCode),
+					logger.Error(cacheErr.Error),
+				)
+				response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to acquire phone lock", cacheErr.Error)
+			}
+		}
+		defer func() {
+			cacheErr := h.authCache.ReleaseRegisterPhoneLock(ctx, *reqBody.PhoneNumber)
+			if cacheErr != nil {
+				h.log.Error("Failed to release phone lock",
+					logger.String("service", authErrors.ServiceName),
+					logger.String("request_id", requestID),
+					logger.String("phone_number", *reqBody.PhoneNumber),
+					logger.String("phone_country_code", *reqBody.PhoneCountryCode),
+					logger.Error(cacheErr.Error),
+				)
+			}
+		}()
 	}
 
 	deviceInfo := handler.GetDeviceInfo()

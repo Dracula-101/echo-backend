@@ -171,3 +171,27 @@ func (s *contactService) AcceptContact(ctx context.Context, userId string, conta
 
 	return nil
 }
+
+func (s *contactService) RejectContact(ctx context.Context, userId string, contactId string) error {
+	s.log.Info("Rejecting contact",
+		logger.String("user_id", userId),
+		logger.String("contact_id", contactId),
+	)
+
+	err := s.contactRepo.DeclineContactRequest(ctx, userId, contactId)
+	if err != nil {
+		s.log.Error("Failed to reject contact",
+			logger.String("user_id", userId),
+			logger.String("contact_id", contactId),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	s.log.Info("Contact rejected successfully",
+		logger.String("user_id", userId),
+		logger.String("contact_id", contactId),
+	)
+
+	return nil
+}

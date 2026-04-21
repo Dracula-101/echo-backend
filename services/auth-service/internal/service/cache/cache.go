@@ -14,17 +14,21 @@ import (
 
 var (
 	RegisterEmailLockPrefix = "lock:register:"
+	RegisterPhoneLockPrefix = "lock:register:phone:"
 	IPBlockedPrefix         = "ip_blocked:"
 )
 
 var (
 	RegisterEmailLockTTL = 10 * time.Second
+	RegisterPhoneLockTTL = 10 * time.Second
 	IPBlockDuration      = 15 * time.Minute
 )
 
 type AuthCache interface {
 	AcquireRegisterEmailLock(context context.Context, email string) *authError.AuthError
 	ReleaseRegisterEmailLock(context context.Context, email string) *authError.AuthError
+	AcquireRegisterPhoneLock(context context.Context, phone string) *authError.AuthError
+	ReleaseRegisterPhoneLock(context context.Context, phone string) *authError.AuthError
 	CheckIPBlocked(context context.Context, ip string) *authError.AuthError
 	BlockIP(context context.Context, ip string, duration time.Duration) *authError.AuthError
 }
@@ -83,6 +87,50 @@ func (s *authCache) ReleaseRegisterEmailLock(ctx context.Context, email string) 
 			Error: pkgErrors.FromError(err, authError.CodeCacheError, "failed to release email lock").
 				WithService(authError.ServiceName).
 				WithDetail("email", email),
+		}
+	}
+	return nil
+}
+
+func (s *authCache) AcquireRegisterPhoneLock(ctx context.Context, phone string) *authError.AuthError {
+	s.log.Info("Acquiring phone lock for registration", logger.String("phone", phone))
+	s.log.Info("Locking phone for registration", logger.String("phone", phone))
+
+	locked, err := s.cache.AcquireLock(ctx, RegisterPhoneLockPrefix+phone, RegisterPhoneLockTTL)
+	if err != nil {
+		s.log.Error("Failed to acquire phone lock", logger.String("phone", phone), logger.Error(err))
+		return &authError.AuthError{
+			Message: "Failed to acquire phone lock",
+			Code:    authError.CodeCacheError,
+			Error: pkgErrors.FromError(err, authError.CodeCacheError, "failed to acquire phone lock").
+				WithService(authError.ServiceName).
+				WithDetail("phone", phone),
+		}
+	}
+	if !locked {
+		return &authError.AuthError{
+			Message: "Phone is currently locked for registration",
+			Code:    authError.CodePhoneLocked,
+			Error: pkgErrors.New(authError.CodePhoneLocked, "phone is currently locked for registration").
+				WithService(authError.ServiceName).
+				WithDetail("phone", phone),
+		}
+	}
+	return nil
+}
+
+func (s *authCache) ReleaseRegisterPhoneLock(ctx context.Context, phone string) *authError.AuthError {
+	s.log.Info("Unlocking phone after registration", logger.String("phone", phone))
+
+	err := s.cache.ReleaseLock(ctx, RegisterPhoneLockPrefix+phone)
+	if err != nil {
+		s.log.Error("Failed to release phone lock", logger.String("phone", phone), logger.Error(err))
+		return &authError.AuthError{
+			Message: "Failed to release phone lock",
+			Code:    authError.CodeCacheError,
+			Error: pkgErrors.FromError(err, authError.CodeCacheError, "failed to release phone lock").
+				WithService(authError.ServiceName).
+				WithDetail("phone", phone),
 		}
 	}
 	return nil

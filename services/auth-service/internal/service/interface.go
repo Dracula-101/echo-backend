@@ -15,6 +15,7 @@ import (
 type AuthService interface {
 	// Email validation
 	IsEmailTaken(ctx context.Context, email string) (*domain.User, *error.AuthError)
+	IsPhoneTaken(ctx context.Context, phone string) (*domain.User, *error.AuthError)
 	// User operations
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, *error.AuthError)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError)
