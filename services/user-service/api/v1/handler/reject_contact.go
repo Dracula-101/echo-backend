@@ -1,11 +1,13 @@
 package handler
 
 import (
+	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/server/request"
 	req "shared/server/request"
 	"shared/server/response"
 	"user-service/internal/domain"
+	userErrors "user-service/internal/errors"
 
 	"github.com/google/uuid"
 )
@@ -86,6 +88,16 @@ func (h *UserHandler) RejectContact(handler *req.RequestHandler) {
 		)
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Cannot reject an active contact. Please delete the contact instead.", nil)
 		return
+	case domain.ContactStatusRejected:
+		h.log.Info("Contact is already rejected for rejecting contact",
+			logger.String("request_id", requestId),
+			logger.String("correlation_id", correlationId),
+			logger.String("contact_id", contactIdStr),
+			logger.String("contact_status", string(contact.Status)),
+			logger.String("expected_status", string(domain.ContactStatusRejected)),
+		)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Contact is already rejected", nil)
+		return
 	case domain.ContactStatusBlocked:
 		h.log.Info("Contact is blocked, cannot reject blocked contact",
 			logger.String("request_id", requestId),
@@ -111,7 +123,9 @@ func (h *UserHandler) RejectContact(handler *req.RequestHandler) {
 		return
 	}
 
-	ok, cacheErr := h.cache.AcquireContactLock(ctx, userId.String(), contact.ContactUserID)
+	counterpartyUserID := contact.UserID
+
+	ok, cacheErr := h.cache.AcquireContactLock(ctx, userId.String(), counterpartyUserID)
 	if cacheErr != nil {
 		h.log.Error("Failed to acquire contact lock for rejecting contact",
 			logger.String("request_id", requestId),
@@ -132,7 +146,7 @@ func (h *UserHandler) RejectContact(handler *req.RequestHandler) {
 		return
 	}
 	defer func() {
-		releaseErr := h.cache.ReleaseContactLock(ctx, userId.String(), contact.ContactUserID)
+		releaseErr := h.cache.ReleaseContactLock(ctx, userId.String(), counterpartyUserID)
 		if releaseErr != nil {
 			h.log.Error("Failed to release contact lock for rejecting contact",
 				logger.String("request_id", requestId),
@@ -151,11 +165,15 @@ func (h *UserHandler) RejectContact(handler *req.RequestHandler) {
 			logger.String("contact_id", contactIdStr),
 			logger.Error(err),
 		)
+		if pkgErrors.GetCode(err) == userErrors.ErrCodeInvalidRequest {
+			response.ConflictError(ctx, handler.Request(), handler.Writer(), "Contact request is no longer pending", nil)
+			return
+		}
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to reject contact", nil)
 		return
 	}
 
-	cacheErr = h.cache.AddBlockedID(ctx, userId.String(), contact.ContactUserID)
+	cacheErr = h.cache.AddBlockedID(ctx, userId.String(), counterpartyUserID)
 	if cacheErr != nil {
 		h.log.Error("Failed to add blocked ID to cache after rejecting contact",
 			logger.String("request_id", requestId),

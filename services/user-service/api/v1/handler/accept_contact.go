@@ -84,8 +84,16 @@ func (h *UserHandler) AcceptContact(handler *req.RequestHandler) {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Contact is blocked", nil)
 		return
 	case domain.ContactStatusPending:
-		// continue with rejection
+		// continue with accepting contact
 		break
+	case domain.ContactStatusRejected:
+		h.log.Info("Contact is rejected for accepting contact",
+			logger.String("request_id", requestId),
+			logger.String("correlation_id", correlationId),
+			logger.String("contact_id", contactIdStr),
+		)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Contact is rejected", nil)
+		return
 	case domain.ContactStatusDeleted:
 		h.log.Info("Contact is deleted for accepting contact",
 			logger.String("request_id", requestId),

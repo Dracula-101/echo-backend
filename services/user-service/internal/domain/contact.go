@@ -12,10 +12,11 @@ type RelationshipType string
 type ContactSource string
 
 const (
-	ContactStatusActive  ContactStatus = "active"
-	ContactStatusPending ContactStatus = "pending"
-	ContactStatusBlocked ContactStatus = "blocked"
-	ContactStatusDeleted ContactStatus = "deleted"
+	ContactStatusActive   ContactStatus = "active"
+	ContactStatusPending  ContactStatus = "pending"
+	ContactStatusBlocked  ContactStatus = "blocked"
+	ContactStatusRejected ContactStatus = "rejected"
+	ContactStatusDeleted  ContactStatus = "deleted"
 
 	RelationshipTypeFriend    RelationshipType = "friend"
 	RelationshipTypeBlocked   RelationshipType = "blocked"

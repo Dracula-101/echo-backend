@@ -134,15 +134,16 @@ func (r *RelationshipType) Scan(value interface{}) error {
 type ContactStatus string
 
 const (
-	ContactStatusActive  ContactStatus = "active"
-	ContactStatusPending ContactStatus = "pending"
-	ContactStatusBlocked ContactStatus = "blocked"
-	ContactStatusDeleted ContactStatus = "deleted"
+	ContactStatusActive   ContactStatus = "active"
+	ContactStatusPending  ContactStatus = "pending"
+	ContactStatusBlocked  ContactStatus = "blocked"
+	ContactStatusRejected ContactStatus = "rejected"
+	ContactStatusDeleted  ContactStatus = "deleted"
 )
 
 func (c ContactStatus) IsValid() bool {
 	switch c {
-	case ContactStatusActive, ContactStatusPending, ContactStatusBlocked, ContactStatusDeleted:
+	case ContactStatusActive, ContactStatusPending, ContactStatusBlocked, ContactStatusRejected, ContactStatusDeleted:
 		return true
 	}
 	return false

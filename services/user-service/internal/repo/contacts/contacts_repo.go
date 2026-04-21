@@ -184,7 +184,8 @@ func (r *contactRepository) AcceptContactRequest(ctx context.Context, contactID,
 			SET relationship_type = 'friend',
 				status = 'active',
 				accepted_at = NOW(),
-				updated_at = NOW()
+				updated_at = NOW(),
+				last_interaction_at = NOW()
 			WHERE id = $1 AND contact_user_id = $2 AND status = 'pending'
 			RETURNING user_id, contact_user_id
 		)
@@ -212,13 +213,20 @@ func (r *contactRepository) AcceptContactRequest(ctx context.Context, contactID,
 func (r *contactRepository) DeclineContactRequest(ctx context.Context, contactID, userID string) pkgErrors.AppError {
 	query := `
 		UPDATE users.contacts
-		SET status     = 'deleted',
-		    updated_at = NOW()
+		SET relationship_type = 'pending',
+		    status     = 'rejected',
+		    updated_at = NOW(),
+			last_interaction_at = NOW()
 		WHERE id = $1
 		AND contact_user_id = $2
-		AND status = 'pending'`
+		AND status = 'pending'
+		RETURNING *`
 
-	if _, dbErr := r.db.Exec(ctx, query, contactID, userID); dbErr != nil {
+	c := &dbModels.Contact{}
+	if dbErr := r.db.FindOneAndUpdate(ctx, c, query, contactID, userID); dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			return pkgErrors.New(userErrors.ErrCodeInvalidRequest, "Contact request not found or no longer pending")
+		}
 		r.log.Error("failed to decline contact request",
 			logger.String("contact_id", contactID),
 			logger.Error(dbErr),
