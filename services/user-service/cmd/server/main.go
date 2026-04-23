@@ -288,14 +288,6 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 				20,
 			),
 		)
-		rg.Post(
-			"/{contact_id}/accept",
-			request.Adapt(h.AcceptContact),
-		)
-		rg.Post(
-			"/{contact_id}/reject",
-			request.Adapt(h.RejectContact),
-		)
 		rg.Put(
 			"/{contact_id}",
 			request.Adapt(h.UpdateContact),
@@ -303,6 +295,14 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 		rg.Delete(
 			"/{contact_id}",
 			request.Adapt(h.RemoveContact),
+		)
+		rg.Post(
+			"/{contact_id}/accept",
+			request.Adapt(h.AcceptContact),
+		)
+		rg.Post(
+			"/{contact_id}/reject",
+			request.Adapt(h.RejectContact),
 		)
 	})
 
@@ -530,7 +530,7 @@ func main() {
 	userService := service.NewUserService(userRepo, blockedRepo, contactsRepo, settingsRepo, privacyRepo, userCache, log)
 	searchService := search.NewSearchService(userRepo, searchClient, userCache, log)
 	go searchService.CreateIndex(context.Background())
-	contactService := contact.NewContactService(contactsRepo, userRepo, blockedRepo, log)
+	contactService := contact.NewContactService(contactsRepo, userRepo, blockedRepo, userCache, log)
 	userHandler := handler.NewUserHandler(userService, searchService, contactService, locationService, userCache, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)

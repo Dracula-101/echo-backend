@@ -34,6 +34,7 @@ type ContactRepository interface {
 	GetContactIDs(ctx context.Context, userID string) ([]string, pkgErrors.AppError)
 	GetContacts(ctx context.Context, userID string, params GetContactsParams) ([]*domain.Contact, int, pkgErrors.AppError)
 	GetContact(ctx context.Context, userID, contactID string) (*domain.Contact, pkgErrors.AppError)
+	RemoveContact(ctx context.Context, contactID, userID string) pkgErrors.AppError
 	GetPendingContactRequests(ctx context.Context, userID string) ([]*domain.Contact, pkgErrors.AppError)
 	ContactExists(ctx context.Context, userID, targetID string) (*domain.Contact, pkgErrors.AppError)
 	CreateContactRequest(ctx context.Context, userID, targetID, message, source string) (*domain.Contact, pkgErrors.AppError)

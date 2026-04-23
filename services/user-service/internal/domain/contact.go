@@ -79,3 +79,14 @@ func NewContact(model dbModels.Contact) *Contact {
 		UpdatedAt:     model.UpdatedAt,
 	}
 }
+
+type UpdateContact struct {
+	Nickname      *string    `json:"nickname,omitempty"`
+	Notes         *string    `json:"notes,omitempty"`
+	IsFavorite    *bool      `json:"is_favorite,omitempty"`
+	IsPinned      *bool      `json:"is_pinned,omitempty"`
+	IsArchived    *bool      `json:"is_archived,omitempty"`
+	IsMuted       *bool      `json:"is_muted,omitempty"`
+	MutedUntil    *time.Time `json:"muted_until,omitempty"`
+	ContactGroups *[]string  `json:"contact_groups,omitempty"`
+}

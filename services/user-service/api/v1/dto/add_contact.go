@@ -75,33 +75,3 @@ func (r *AddContactRequest) ValidateErrors(ve validator.ValidationErrors) ([]req
 	}
 	return errors, nil
 }
-
-// UpdateContactRequest represents a request to update a contact
-type UpdateContactRequest struct {
-	Nickname *string `json:"nickname,omitempty" validate:"omitempty,max=50"`
-	IsMuted  *bool   `json:"is_muted,omitempty"`
-}
-
-func NewUpdateContactRequest() *UpdateContactRequest {
-	return &UpdateContactRequest{}
-}
-
-func (r *UpdateContactRequest) GetValue() interface{} {
-	return r
-}
-
-func (r *UpdateContactRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
-	for _, err := range ve {
-		switch err.Field() {
-		case "Nickname":
-			if err.Tag() == "max" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Msg:  "Nickname must be at most 50 characters long",
-					Code: request.INVALID_FORMAT,
-				})
-			}
-		}
-	}
-	return errors, nil
-}

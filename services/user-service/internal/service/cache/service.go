@@ -45,6 +45,7 @@ type UserCache interface {
 
 	GetContactIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError)
 	AddContactID(ctx context.Context, userID string, contactID string) pkgErrors.AppError
+	RemoveContact(ctx context.Context, userID string, contactID string) pkgErrors.AppError
 	SetContactIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError
 	DeleteContactIDs(ctx context.Context, userID string) pkgErrors.AppError
 
@@ -381,6 +382,35 @@ func (u *userCache) AddContactID(ctx context.Context, userID string, contactID s
 	}
 	ids = append(ids, contactID)
 	return u.SetContactIDs(ctx, userID, ids)
+}
+
+func (u *userCache) RemoveContactID(ctx context.Context, userID string, contactID string) pkgErrors.AppError {
+	idsPtr, err := u.GetContactIDs(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if idsPtr == nil {
+		return nil // Nothing to remove
+	}
+	var ids []string
+	for _, id := range *idsPtr {
+		if id != contactID {
+			ids = append(ids, id)
+		}
+	}
+	return u.SetContactIDs(ctx, userID, ids)
+}
+
+func (u *userCache) RemoveContact(ctx context.Context, userID string, contactID string) pkgErrors.AppError {
+	if err := u.RemoveContactID(ctx, userID, contactID); err != nil {
+		return err
+	}
+
+	if _, err := u.IncrPrivacyVersion(ctx, userID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (u *userCache) SetContactIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError {

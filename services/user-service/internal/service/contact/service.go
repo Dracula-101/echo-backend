@@ -7,9 +7,10 @@ import (
 	"user-service/api/v1/dto"
 	"user-service/internal/domain"
 	"user-service/internal/errors"
+	"user-service/internal/repo/contacts"
 )
 
-func (s *contactService) CheckContactById(ctx context.Context, userId string, contactId string) (*domain.Contact, error) {
+func (s *contactService) CheckContactById(ctx context.Context, userId string, contactId string) (*domain.Contact, pkgErrors.AppError) {
 	s.log.Info("Checking contact by ID",
 		logger.String("contact_id", contactId),
 	)
@@ -26,7 +27,7 @@ func (s *contactService) CheckContactById(ctx context.Context, userId string, co
 	return contact, nil
 }
 
-func (s *contactService) CheckContactExists(ctx context.Context, userId string, targetUserId string) (*domain.Contact, error) {
+func (s *contactService) CheckContactExists(ctx context.Context, userId string, targetUserId string) (*domain.Contact, pkgErrors.AppError) {
 	s.log.Info("Checking if contact exists",
 		logger.String("user_id", userId),
 		logger.String("target_user_id", targetUserId),
@@ -45,7 +46,7 @@ func (s *contactService) CheckContactExists(ctx context.Context, userId string, 
 	return contact, nil
 }
 
-func (s *contactService) AddContact(ctx context.Context, requesterUserId string, identifier string, identifierType dto.IdentifierType, message string, source domain.ContactSource) error {
+func (s *contactService) AddContact(ctx context.Context, requesterUserId string, identifier string, identifierType dto.IdentifierType, message string, source domain.ContactSource) pkgErrors.AppError {
 	s.log.Info("Adding contact",
 		logger.String("requester_user_id", requesterUserId),
 	)
@@ -148,7 +149,74 @@ func (s *contactService) AddContact(ctx context.Context, requesterUserId string,
 	return nil
 }
 
-func (s *contactService) AcceptContact(ctx context.Context, userId string, contactId string) error {
+func (s *contactService) UpdateContact(ctx context.Context, userId string, contactId string, update domain.UpdateContact) pkgErrors.AppError {
+	s.log.Info("Updating contact information",
+		logger.String("user_id", userId),
+		logger.String("contact_id", contactId),
+	)
+
+	// For now, we only allow updating the contact's message. In the future, we can extend this to allow updating other fields.
+	_, err := s.contactRepo.UpdateContact(ctx, contactId, userId, contacts.UpdateContactParams{
+		Nickname:      update.Nickname,
+		Notes:         update.Notes,
+		IsFavorite:    update.IsFavorite,
+		IsPinned:      update.IsPinned,
+		IsArchived:    update.IsArchived,
+		IsMuted:       update.IsMuted,
+		MutedUntil:    update.MutedUntil,
+		ContactGroups: update.ContactGroups,
+	})
+	if err != nil {
+		s.log.Error("Failed to update contact information",
+			logger.String("user_id", userId),
+			logger.String("contact_id", contactId),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	s.log.Info("Contact information updated successfully",
+		logger.String("user_id", userId),
+		logger.String("contact_id", contactId),
+	)
+
+	return nil
+}
+
+func (s *contactService) RemoveContact(ctx context.Context, userId string, contactId string) pkgErrors.AppError {
+	s.log.Info("Removing contact",
+		logger.String("user_id", userId),
+		logger.String("contact_id", contactId),
+	)
+	err := s.contactRepo.DeleteContact(ctx, contactId, userId)
+	if err != nil {
+		s.log.Error("Failed to remove contact",
+			logger.String("user_id", userId),
+			logger.String("contact_id", contactId),
+			logger.Error(err),
+		)
+		return err
+	}
+
+	cacheErr := s.userCache.RemoveContact(ctx, userId, contactId)
+	if cacheErr != nil {
+		s.log.Error("Failed to update contact-removal cache state",
+			logger.String("user_id", userId),
+			logger.String("contact_id", contactId),
+			logger.Error(cacheErr),
+		)
+	}
+
+	// TODO: Publish user.contact.removed to Kafka: message-service will mark any shared DMs as contact_removed
+
+	s.log.Info("Contact removed successfully",
+		logger.String("user_id", userId),
+		logger.String("contact_id", contactId),
+	)
+	return nil
+}
+
+func (s *contactService) AcceptContact(ctx context.Context, userId string, contactId string) pkgErrors.AppError {
 	s.log.Info("Accepting contact",
 		logger.String("user_id", userId),
 		logger.String("contact_id", contactId),
@@ -172,7 +240,7 @@ func (s *contactService) AcceptContact(ctx context.Context, userId string, conta
 	return nil
 }
 
-func (s *contactService) RejectContact(ctx context.Context, userId string, contactId string) error {
+func (s *contactService) RejectContact(ctx context.Context, userId string, contactId string) pkgErrors.AppError {
 	s.log.Info("Rejecting contact",
 		logger.String("user_id", userId),
 		logger.String("contact_id", contactId),

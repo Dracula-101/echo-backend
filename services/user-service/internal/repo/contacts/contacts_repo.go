@@ -108,6 +108,60 @@ func (r *contactRepository) GetContact(ctx context.Context, userID, contactID st
 	return domain.NewContact(*c), nil
 }
 
+func (r *contactRepository) RemoveContact(ctx context.Context, contactID, userID string) pkgErrors.AppError {
+	r.log.Info("Removing contact",
+		logger.String("user_id", userID),
+		logger.String("contact_id", contactID),
+	)
+	query := `SELECT id, user_id, contact_user_id FROM users.contacts WHERE id = $1 AND user_id = $2`
+	c := &dbModels.Contact{}
+	if dbErr := r.db.FindOne(ctx, c, query, contactID, userID); dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			r.log.Info("Contact not found for removal",
+				logger.String("user_id", userID),
+				logger.String("contact_id", contactID),
+			)
+			return pkgErrors.New(userErrors.ErrCodeInvalidRequest, "Contact not found")
+		}
+		r.log.Error("Failed to find contact for removal",
+			logger.String("user_id", userID),
+			logger.String("contact_id", contactID),
+			logger.Error(dbErr),
+		)
+		return pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to find contact for removal")
+	}
+
+	deleteQuery := `DELETE FROM users.contacts WHERE id = $1`
+	if _, dbErr := r.db.Exec(ctx, deleteQuery, contactID); dbErr != nil {
+		r.log.Error("Failed to delete contact",
+			logger.String("user_id", userID),
+			logger.String("contact_id", contactID),
+			logger.Error(dbErr),
+		)
+		return pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to delete contact")
+	}
+
+	updateReciprocalQuery := `
+		UPDATE users.contacts
+		SET status = 'removed', updated_at = NOW()
+		WHERE user_id = $1 AND contact_user_id = $2 AND status = 'active'`
+
+	if _, dbErr := r.db.Exec(ctx, updateReciprocalQuery, c.ContactUserID, c.UserID); dbErr != nil {
+		r.log.Error("Failed to update reciprocal contact relationship",
+			logger.String("user_id", userID),
+			logger.String("contact_id", contactID),
+			logger.Error(dbErr),
+		)
+		return pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "Failed to update reciprocal contact relationship")
+	}
+
+	r.log.Info("Contact removed successfully",
+		logger.String("user_id", userID),
+		logger.String("contact_id", contactID),
+	)
+	return nil
+}
+
 func (r *contactRepository) GetPendingContactRequests(ctx context.Context, userID string) ([]*domain.Contact, pkgErrors.AppError) {
 	query := `
 		SELECT
@@ -284,6 +338,9 @@ func (r *contactRepository) UpdateContact(ctx context.Context, contactID, userID
 
 	c := &dbModels.Contact{}
 	if dbErr := r.db.FindOneAndUpdate(ctx, c, query, args...); dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			return nil, pkgErrors.New(userErrors.ErrCodeInvalidRequest, "Contact not found or not in active state")
+		}
 		r.log.Error("failed to update contact",
 			logger.String("contact_id", contactID),
 			logger.Error(dbErr),
