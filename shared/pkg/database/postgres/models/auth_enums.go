@@ -9,12 +9,13 @@ import (
 type AccountStatus string
 
 const (
-	AccountStatusActive      AccountStatus = "active"
-	AccountStatusPending     AccountStatus = "pending"
-	AccountStatusSuspended   AccountStatus = "suspended"
-	AccountStatusLocked      AccountStatus = "locked"
-	AccountStatusDeactivated AccountStatus = "deactivated"
-	AccountStatusDeleted     AccountStatus = "deleted"
+	AccountStatusActive              AccountStatus = "active"
+	AccountStatusPending             AccountStatus = "pending"
+	AccountStatusPendingVerification AccountStatus = "pending_verification"
+	AccountStatusSuspended           AccountStatus = "suspended"
+	AccountStatusLocked              AccountStatus = "locked"
+	AccountStatusDeactivated         AccountStatus = "deactivated"
+	AccountStatusDeleted             AccountStatus = "deleted"
 )
 
 func (s AccountStatus) String() string {
@@ -22,8 +23,8 @@ func (s AccountStatus) String() string {
 }
 func (s AccountStatus) IsValid() bool {
 	switch s {
-	case AccountStatusActive, AccountStatusPending, AccountStatusSuspended,
-		AccountStatusLocked, AccountStatusDeactivated, AccountStatusDeleted:
+	case AccountStatusActive, AccountStatusPending, AccountStatusPendingVerification,
+		AccountStatusSuspended, AccountStatusLocked, AccountStatusDeactivated, AccountStatusDeleted:
 		return true
 	}
 	return false
@@ -56,6 +57,7 @@ func (s *AccountStatus) Scan(value interface{}) error {
 type SessionType string
 
 const (
+	SessionTypeUser    SessionType = "user"
 	SessionTypeWeb     SessionType = "web"
 	SessionTypeMobile  SessionType = "mobile"
 	SessionTypeDesktop SessionType = "desktop"
@@ -65,7 +67,7 @@ const (
 
 func (s SessionType) IsValid() bool {
 	switch s {
-	case SessionTypeWeb, SessionTypeMobile, SessionTypeDesktop, SessionTypeAPI, SessionTypeService:
+	case SessionTypeUser, SessionTypeWeb, SessionTypeMobile, SessionTypeDesktop, SessionTypeAPI, SessionTypeService:
 		return true
 	}
 	return false
@@ -230,10 +232,13 @@ const (
 	SecurityEventLogin                   SecurityEventType = "login"
 	SecurityEventLogout                  SecurityEventType = "logout"
 	SecurityEventLoginFailed             SecurityEventType = "login_failed"
+	SecurityEventFailedLogin             SecurityEventType = "failed_login"
 	SecurityEventPasswordChange          SecurityEventType = "password_change"
 	SecurityEventPasswordReset           SecurityEventType = "password_reset"
 	SecurityEventTwoFactorEnabled        SecurityEventType = "two_factor_enabled"
 	SecurityEventTwoFactorDisabled       SecurityEventType = "two_factor_disabled"
+	SecurityEvent2FAEnable               SecurityEventType = "2fa_enable"
+	SecurityEvent2FADisable              SecurityEventType = "2fa_disable"
 	SecurityEventAccountLocked           SecurityEventType = "account_locked"
 	SecurityEventAccountUnlocked         SecurityEventType = "account_unlocked"
 	SecurityEventSuspiciousActivity      SecurityEventType = "suspicious_activity"
@@ -247,9 +252,11 @@ const (
 
 func (s SecurityEventType) IsValid() bool {
 	switch s {
-	case SecurityEventRegistration, SecurityEventLogin, SecurityEventLogout, SecurityEventLoginFailed,
+	case SecurityEventRegistration, SecurityEventLogin, SecurityEventLogout,
+		SecurityEventLoginFailed, SecurityEventFailedLogin,
 		SecurityEventPasswordChange, SecurityEventPasswordReset,
 		SecurityEventTwoFactorEnabled, SecurityEventTwoFactorDisabled,
+		SecurityEvent2FAEnable, SecurityEvent2FADisable,
 		SecurityEventAccountLocked, SecurityEventAccountUnlocked,
 		SecurityEventSuspiciousActivity, SecurityEventUnauthorizedAccess,
 		SecurityEventSessionRevoked, SecurityEventEmailVerified,
@@ -287,6 +294,8 @@ func (s *SecurityEventType) Scan(value interface{}) error {
 type SecuritySeverity string
 
 const (
+	SecuritySeverityInfo     SecuritySeverity = "info"
+	SecuritySeverityWarning  SecuritySeverity = "warning"
 	SecuritySeverityLow      SecuritySeverity = "low"
 	SecuritySeverityMedium   SecuritySeverity = "medium"
 	SecuritySeverityHigh     SecuritySeverity = "high"
@@ -295,7 +304,8 @@ const (
 
 func (s SecuritySeverity) IsValid() bool {
 	switch s {
-	case SecuritySeverityLow, SecuritySeverityMedium, SecuritySeverityHigh, SecuritySeverityCritical:
+	case SecuritySeverityInfo, SecuritySeverityWarning,
+		SecuritySeverityLow, SecuritySeverityMedium, SecuritySeverityHigh, SecuritySeverityCritical:
 		return true
 	}
 	return false

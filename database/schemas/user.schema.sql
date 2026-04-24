@@ -58,7 +58,7 @@ CREATE TABLE users.contacts (
     muted_until TIMESTAMPTZ,
     custom_notifications JSONB,
     contact_source VARCHAR(50), -- phone_contacts, search, suggestion, qr_code, link
-    contact_groups TEXT[],
+    contact_groups UUID[],
     last_interaction_at TIMESTAMPTZ,
     interaction_count INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -294,8 +294,26 @@ CREATE TABLE users.reports (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Transactional Outbox
+CREATE TABLE users.outbox (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type   VARCHAR(100) NOT NULL,
+    user_id      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    payload      JSONB NOT NULL,
+    status       VARCHAR(20) DEFAULT 'pending', -- pending, processed, failed
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TIMESTAMPTZ,
+    failed_at    TIMESTAMPTZ,
+    attempts     INTEGER DEFAULT 0,
+    last_error   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_outbox_status ON users.outbox(status) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_users_outbox_created ON users.outbox(created_at);
+
 -- Comments
 COMMENT ON TABLE users.profiles IS 'Public user profile information';
+COMMENT ON TABLE users.outbox   IS 'Transactional outbox for reliable Kafka event publishing via CDC';
 COMMENT ON TABLE users.contacts IS 'User relationships and contacts';
 COMMENT ON TABLE users.settings IS 'User application settings and preferences';
 COMMENT ON TABLE users.blocked_users IS 'Users that have been blocked';

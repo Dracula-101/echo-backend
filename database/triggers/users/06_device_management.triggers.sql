@@ -16,12 +16,14 @@
 -- =====================================================
 
 
--- Bump last_active_at to NOW() on every device update.
--- This ensures the device activity timestamp stays current
--- without requiring the application layer to set it explicitly.
+-- Bump last_active_at to NOW() when the application explicitly changes it.
+-- The WHEN condition prevents the trigger from firing on administrative
+-- updates (e.g. deactivation, push-token refresh) that should not imply
+-- device activity, and avoids any recursive-trigger edge cases.
 CREATE TRIGGER trigger_users_devices_last_active
     BEFORE UPDATE ON users.devices
     FOR EACH ROW
+    WHEN (OLD.last_active_at IS DISTINCT FROM NEW.last_active_at)
     EXECUTE FUNCTION users.update_device_last_active();
 
 -- When a new device is registered, deactivate any of the

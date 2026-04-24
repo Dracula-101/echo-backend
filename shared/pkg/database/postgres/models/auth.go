@@ -150,10 +150,11 @@ func (o *OAuthProvider) PrimaryKey() interface{} {
 type PasswordResetToken struct {
 	ID            string     `db:"id" json:"id" pk:"true"`
 	UserID        string     `db:"user_id" json:"user_id"`
-	Token         string     `db:"token" json:"-"`
 	TokenHash     string     `db:"token_hash" json:"-"`
 	ExpiresAt     time.Time  `db:"expires_at" json:"expires_at"`
 	UsedAt        *time.Time `db:"used_at" json:"used_at,omitempty"`
+	Attempts      int        `db:"attempts" json:"attempts"`
+	MaxAttempts   int        `db:"max_attempts" json:"max_attempts"`
 	CreatedAt     time.Time  `db:"created_at" json:"created_at"`
 	IPAddress     *string    `db:"ip_address" json:"ip_address,omitempty"`
 	UserAgent     *string    `db:"user_agent" json:"user_agent,omitempty"`
@@ -272,5 +273,25 @@ func (a *APIKey) TableName() string {
 }
 
 func (a *APIKey) PrimaryKey() interface{} {
+	return a.ID
+}
+
+type AuthOutbox struct {
+	ID          string          `db:"id" json:"id" pk:"true"`
+	EventType   string          `db:"event_type" json:"event_type"`
+	UserID      *string         `db:"user_id" json:"user_id,omitempty"`
+	Payload     json.RawMessage `db:"payload" json:"payload"`
+	CreatedAt   time.Time       `db:"created_at" json:"created_at"`
+	PublishedAt *time.Time      `db:"published_at" json:"published_at,omitempty"`
+	FailedAt    *time.Time      `db:"failed_at" json:"failed_at,omitempty"`
+	Attempts    int             `db:"attempts" json:"attempts"`
+	LastError   *string         `db:"last_error" json:"last_error,omitempty"`
+}
+
+func (a *AuthOutbox) TableName() string {
+	return "auth.outbox"
+}
+
+func (a *AuthOutbox) PrimaryKey() interface{} {
 	return a.ID
 }

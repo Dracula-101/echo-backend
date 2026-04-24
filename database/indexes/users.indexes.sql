@@ -35,6 +35,9 @@ CREATE INDEX IF NOT EXISTS idx_users_contacts_source ON users.contacts(contact_s
 CREATE INDEX IF NOT EXISTS idx_users_contacts_last_interaction ON users.contacts(last_interaction_at);
 CREATE INDEX IF NOT EXISTS idx_users_contacts_created ON users.contacts(created_at);
 
+-- GIN index for UUID[] membership queries on contacts.contact_groups
+CREATE INDEX IF NOT EXISTS idx_users_contacts_groups_gin ON users.contacts USING GIN(contact_groups);
+
 -- Contact groups table indexes
 CREATE INDEX IF NOT EXISTS idx_users_contact_groups_user ON users.contact_groups(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_contact_groups_name ON users.contact_groups(user_id, group_name);

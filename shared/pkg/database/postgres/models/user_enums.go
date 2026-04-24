@@ -95,16 +95,19 @@ func (p *ProfileVisibility) Scan(value interface{}) error {
 type RelationshipType string
 
 const (
-	RelationshipTypeFriend    RelationshipType = "friend"
-	RelationshipTypeBlocked   RelationshipType = "blocked"
-	RelationshipTypePending   RelationshipType = "pending"
-	RelationshipTypeFollower  RelationshipType = "follower"
+	RelationshipTypeContact  RelationshipType = "contact"
+	RelationshipTypeFriend   RelationshipType = "friend"
+	RelationshipTypeFollow   RelationshipType = "follow"
+	RelationshipTypeBlocked  RelationshipType = "blocked"
+	RelationshipTypePending  RelationshipType = "pending"
+	RelationshipTypeFollower RelationshipType = "follower"
 	RelationshipTypeFollowing RelationshipType = "following"
 )
 
 func (r RelationshipType) IsValid() bool {
 	switch r {
-	case RelationshipTypeFriend, RelationshipTypeBlocked, RelationshipTypePending,
+	case RelationshipTypeContact, RelationshipTypeFriend, RelationshipTypeFollow,
+		RelationshipTypeBlocked, RelationshipTypePending,
 		RelationshipTypeFollower, RelationshipTypeFollowing:
 		return true
 	}
@@ -138,16 +141,18 @@ func (r *RelationshipType) Scan(value interface{}) error {
 type ContactStatus string
 
 const (
-	ContactStatusActive   ContactStatus = "active"
 	ContactStatusPending  ContactStatus = "pending"
-	ContactStatusBlocked  ContactStatus = "blocked"
+	ContactStatusAccepted ContactStatus = "accepted"
 	ContactStatusRejected ContactStatus = "rejected"
+	ContactStatusBlocked  ContactStatus = "blocked"
+	ContactStatusActive   ContactStatus = "active"
 	ContactStatusDeleted  ContactStatus = "deleted"
 )
 
 func (c ContactStatus) IsValid() bool {
 	switch c {
-	case ContactStatusActive, ContactStatusPending, ContactStatusBlocked, ContactStatusRejected, ContactStatusDeleted:
+	case ContactStatusPending, ContactStatusAccepted, ContactStatusRejected,
+		ContactStatusBlocked, ContactStatusActive, ContactStatusDeleted:
 		return true
 	}
 	return false
@@ -180,14 +185,14 @@ func (c *ContactStatus) Scan(value interface{}) error {
 type BlockType string
 
 const (
-	BlockTypeUser   BlockType = "user"
-	BlockTypeDomain BlockType = "domain"
-	BlockTypeIP     BlockType = "ip"
+	BlockTypeFull         BlockType = "full"
+	BlockTypeMessagesOnly BlockType = "messages_only"
+	BlockTypeCallsOnly    BlockType = "calls_only"
 )
 
 func (b BlockType) IsValid() bool {
 	switch b {
-	case BlockTypeUser, BlockTypeDomain, BlockTypeIP:
+	case BlockTypeFull, BlockTypeMessagesOnly, BlockTypeCallsOnly:
 		return true
 	}
 	return false
@@ -220,14 +225,15 @@ func (b *BlockType) Scan(value interface{}) error {
 type StatusPrivacy string
 
 const (
-	StatusPrivacyPublic   StatusPrivacy = "public"
-	StatusPrivacyContacts StatusPrivacy = "contacts"
-	StatusPrivacyPrivate  StatusPrivacy = "private"
+	StatusPrivacyPublic       StatusPrivacy = "public"
+	StatusPrivacyContacts     StatusPrivacy = "contacts"
+	StatusPrivacyCloseFriends StatusPrivacy = "close_friends"
+	StatusPrivacyPrivate      StatusPrivacy = "private"
 )
 
 func (s StatusPrivacy) IsValid() bool {
 	switch s {
-	case StatusPrivacyPublic, StatusPrivacyContacts, StatusPrivacyPrivate:
+	case StatusPrivacyPublic, StatusPrivacyContacts, StatusPrivacyCloseFriends, StatusPrivacyPrivate:
 		return true
 	}
 	return false

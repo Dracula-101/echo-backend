@@ -362,3 +362,24 @@ func (u *UserReport) TableName() string {
 func (u *UserReport) PrimaryKey() interface{} {
 	return u.ID
 }
+
+type UserOutbox struct {
+	ID          string          `db:"id" json:"id" pk:"true"`
+	EventType   string          `db:"event_type" json:"event_type"`
+	UserID      *string         `db:"user_id" json:"user_id,omitempty"`
+	Payload     json.RawMessage `db:"payload" json:"payload"`
+	Status      string          `db:"status" json:"status"`
+	CreatedAt   time.Time       `db:"created_at" json:"created_at"`
+	ProcessedAt *time.Time      `db:"processed_at" json:"processed_at,omitempty"`
+	FailedAt    *time.Time      `db:"failed_at" json:"failed_at,omitempty"`
+	Attempts    int             `db:"attempts" json:"attempts"`
+	LastError   *string         `db:"last_error" json:"last_error,omitempty"`
+}
+
+func (u *UserOutbox) TableName() string {
+	return "users.outbox"
+}
+
+func (u *UserOutbox) PrimaryKey() interface{} {
+	return u.ID
+}
