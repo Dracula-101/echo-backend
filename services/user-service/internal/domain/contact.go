@@ -32,24 +32,32 @@ const (
 )
 
 type Contact struct {
-	ID               string
-	UserID           string
-	ContactUserID    string
-	Status           ContactStatus
-	RelationshipType RelationshipType
-	Nickname         *string
-	Notes            *string
-	IsFavorite       bool
-	IsPinned         bool
-	IsArchived       bool
-	IsMuted          bool
-	MutedUntil       *time.Time
-	ContactSource    *ContactSource
-	ContactGroups    []string
-	AcceptedAt       *time.Time
-	BlockedAt        *time.Time
-	CreatedAt        *time.Time
-	UpdatedAt        *time.Time
+	ID                string
+	UserID            string
+	ContactUserID     string
+	Status            ContactStatus
+	RelationshipType  RelationshipType
+	Nickname          *string
+	Notes             *string
+	IsFavorite        bool
+	IsPinned          bool
+	IsArchived        bool
+	IsMuted           bool
+	MutedUntil        *time.Time
+	ContactSource     *ContactSource
+	ContactGroups     []string
+	LastInteractionAt *time.Time
+	AcceptedAt        *time.Time
+	BlockedAt         *time.Time
+	CreatedAt         *time.Time
+	UpdatedAt         *time.Time
+
+	// Join fields
+	AvatarURL              *string
+	Username               *string
+	DisplayName            *string
+	OnlineStatus           *string
+	OnlineStatusVisibility *string
 }
 
 func NewContact(model dbModels.Contact) *Contact {
@@ -72,11 +80,12 @@ func NewContact(model dbModels.Contact) *Contact {
 			}
 			return utils.Ptr(ContactSource(*model.ContactSource))
 		}(),
-		ContactGroups: []string(model.ContactGroups),
-		AcceptedAt:    model.AcceptedAt,
-		BlockedAt:     model.BlockedAt,
-		CreatedAt:     model.CreatedAt,
-		UpdatedAt:     model.UpdatedAt,
+		ContactGroups:     []string(model.ContactGroups),
+		LastInteractionAt: model.LastInteractionAt,
+		AcceptedAt:        model.AcceptedAt,
+		BlockedAt:         model.BlockedAt,
+		CreatedAt:         model.CreatedAt,
+		UpdatedAt:         model.UpdatedAt,
 	}
 }
 

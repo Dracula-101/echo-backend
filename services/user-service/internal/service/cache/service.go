@@ -30,7 +30,12 @@ type UserCache interface {
 	SetSettings(ctx context.Context, userID string, s *Settings) pkgErrors.AppError
 	DeleteSettings(ctx context.Context, userID string) pkgErrors.AppError
 
+	GetFullSettings(ctx context.Context, userID string) (*domain.Settings, pkgErrors.AppError)
+	SetFullSettings(ctx context.Context, userID string, s *domain.Settings) pkgErrors.AppError
+	DeleteFullSettings(ctx context.Context, userID string) pkgErrors.AppError
+
 	GetPresence(ctx context.Context, userID string) (*Presence, pkgErrors.AppError)
+	GetPresences(ctx context.Context, userIDs []string) (map[string]*Presence, pkgErrors.AppError)
 	SetPresence(ctx context.Context, userID string, p *Presence) pkgErrors.AppError
 	DeletePresence(ctx context.Context, userID string) pkgErrors.AppError
 
@@ -40,6 +45,7 @@ type UserCache interface {
 
 	GetBlockedIDs(ctx context.Context, userID string) (*[]string, pkgErrors.AppError)
 	AddBlockedID(ctx context.Context, userID string, blockedID string) pkgErrors.AppError
+	RemoveBlockedID(ctx context.Context, userID string, blockedID string) pkgErrors.AppError
 	SetBlockedIDs(ctx context.Context, userID string, ids []string) pkgErrors.AppError
 	DeleteBlockedIDs(ctx context.Context, userID string) pkgErrors.AppError
 
@@ -262,6 +268,29 @@ func (u *userCache) DeleteSettings(ctx context.Context, userID string) pkgErrors
 	return u.del(ctx, SettingsPrefix+userID, "settings")
 }
 
+// ── full settings ─────────────────────────────────────────────────────────────
+
+func (u *userCache) GetFullSettings(ctx context.Context, userID string) (*domain.Settings, pkgErrors.AppError) {
+	data, appErr := u.getJSON(ctx, SettingsFullPrefix+userID, "full settings")
+	if appErr != nil || data == nil {
+		return nil, appErr
+	}
+	s, err := unmarshal[domain.Settings](data)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to unmarshal full settings").
+			WithService("user-service").WithDetail("user_id", userID)
+	}
+	return s, nil
+}
+
+func (u *userCache) SetFullSettings(ctx context.Context, userID string, s *domain.Settings) pkgErrors.AppError {
+	return u.setJSON(ctx, SettingsFullPrefix+userID, s, TTLSettings, "full settings")
+}
+
+func (u *userCache) DeleteFullSettings(ctx context.Context, userID string) pkgErrors.AppError {
+	return u.del(ctx, SettingsFullPrefix+userID, "full settings")
+}
+
 // ── presence ──────────────────────────────────────────────────────────────────
 
 func (u *userCache) GetPresence(ctx context.Context, userID string) (*Presence, pkgErrors.AppError) {
@@ -279,6 +308,43 @@ func (u *userCache) GetPresence(ctx context.Context, userID string) (*Presence, 
 
 func (u *userCache) SetPresence(ctx context.Context, userID string, p *Presence) pkgErrors.AppError {
 	return u.setJSON(ctx, PresencePrefix+userID, p, TTLPresence, "presence")
+}
+
+func (u *userCache) GetPresences(ctx context.Context, userIDs []string) (map[string]*Presence, pkgErrors.AppError) {
+	if len(userIDs) == 0 {
+		return map[string]*Presence{}, nil
+	}
+
+	keys := make([]string, 0, len(userIDs))
+	keyToUserID := make(map[string]string, len(userIDs))
+	for _, userID := range userIDs {
+		key := PresencePrefix + userID
+		keys = append(keys, key)
+		keyToUserID[key] = userID
+	}
+
+	items, err := u.cache.GetMulti(ctx, keys)
+	if err != nil {
+		u.log.Error("cache get multi presence failed", logger.Error(err))
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeCacheError, "failed to get presence in batch").
+			WithService("user-service")
+	}
+
+	result := make(map[string]*Presence, len(items))
+	for key, raw := range items {
+		presence, unmarshalErr := unmarshal[Presence](raw)
+		if unmarshalErr != nil {
+			u.log.Warn("failed to unmarshal cached presence entry",
+				logger.String("key", key),
+				logger.Error(unmarshalErr),
+			)
+			continue
+		}
+		userID := keyToUserID[key]
+		result[userID] = presence
+	}
+
+	return result, nil
 }
 
 func (u *userCache) DeletePresence(ctx context.Context, userID string) pkgErrors.AppError {
@@ -321,6 +387,23 @@ func (u *userCache) GetBlockedIDs(ctx context.Context, userID string) (*[]string
 			WithService("user-service").WithDetail("user_id", userID)
 	}
 	return &ids, nil
+}
+
+func (u *userCache) RemoveBlockedID(ctx context.Context, userID string, blockedID string) pkgErrors.AppError {
+	idsPtr, err := u.GetBlockedIDs(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if idsPtr == nil {
+		return nil
+	}
+	var ids []string
+	for _, id := range *idsPtr {
+		if id != blockedID {
+			ids = append(ids, id)
+		}
+	}
+	return u.SetBlockedIDs(ctx, userID, ids)
 }
 
 func (u *userCache) AddBlockedID(ctx context.Context, userID string, blockedID string) pkgErrors.AppError {

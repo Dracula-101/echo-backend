@@ -15,11 +15,29 @@ import (
 type ContactService interface {
 	CheckContactById(ctx context.Context, userId string, contactId string) (*domain.Contact, pkgErrors.AppError)
 	CheckContactExists(ctx context.Context, userId string, targetUserId string) (*domain.Contact, pkgErrors.AppError)
+	GetContacts(ctx context.Context, userId string, params GetContactsParams) (*GetContactsResult, pkgErrors.AppError)
 	AddContact(ctx context.Context, requesterUserId string, identifier string, identifierType dto.IdentifierType, message string, source domain.ContactSource) pkgErrors.AppError
 	UpdateContact(ctx context.Context, userId string, contactId string, update domain.UpdateContact) pkgErrors.AppError
 	RemoveContact(ctx context.Context, userId string, contactId string) pkgErrors.AppError
 	AcceptContact(ctx context.Context, userId string, contactId string) pkgErrors.AppError
 	RejectContact(ctx context.Context, userId string, contactId string) pkgErrors.AppError
+}
+
+type GetContactsParams struct {
+	Status       string
+	Relationship string
+	GroupID      *string
+	Search       *string
+	Page         int
+	Limit        int
+}
+
+type GetContactsResult struct {
+	Contacts            []*domain.Contact
+	Total               int
+	Page                int
+	Limit               int
+	UnreadRequestsCount *int
 }
 
 type contactService struct {

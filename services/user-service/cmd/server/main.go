@@ -13,6 +13,7 @@ import (
 	repository "user-service/internal/repo"
 	"user-service/internal/repo/blocked_users"
 	"user-service/internal/repo/contacts"
+	"user-service/internal/repo/devices"
 	"user-service/internal/repo/privacy_overrides"
 	"user-service/internal/repo/settings"
 	"user-service/internal/service"
@@ -224,17 +225,17 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 	log.Debug("Registering user routes")
 
 	// Profile routes
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get(
-			"/me",
+	builder = builder.WithRoutesGroup("/me", func(rg *router.RouteGroup) {
+		rg.Get(
+			"",
 			request.Adapt(h.GetMyProfile),
 		)
-		r.Post(
-			"/me",
+		rg.Post(
+			"",
 			request.Adapt(h.CreateMyProfile),
 		)
-		r.Put(
-			"/me",
+		rg.Put(
+			"",
 			request.Adapt(h.UpdateMyProfile),
 			middleware.RateLimit(
 				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
@@ -247,6 +248,16 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 				10,
 			),
 		)
+		rg.Post(
+			"/block",
+			request.Adapt(h.BlockUser),
+		)
+		rg.Delete(
+			"/block/{user_id}",
+			request.Adapt(h.UnblockUser),
+		)
+	})
+	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get(
 			"/@{username}",
 			request.Adapt(h.GetProfile),
@@ -306,17 +317,6 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 		)
 	})
 
-	builder = builder.WithRoutesGroup("/me/contacts", func(rg *router.RouteGroup) {
-		rg.Post(
-			"/{contact_id}/accept",
-			request.Adapt(h.AcceptContact),
-		)
-		rg.Post(
-			"/{contact_id}/reject",
-			request.Adapt(h.RejectContact),
-		)
-	})
-
 	// Contact group routes
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/contacts/groups", request.Adapt(h.ListContactGroups))
@@ -334,8 +334,18 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 	// Blocked users routes
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/blocked", request.Adapt(h.ListBlocked))
-		r.Post("/blocked", request.Adapt(h.BlockUser))
-		r.Delete("/blocked/{user_id}", request.Adapt(h.UnblockUser))
+		r.Post("/blocked", request.Adapt(h.BlockUser),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return ratelimiter.AllowBlockAction(ctx, key, limit)
+				},
+				func(req request.RequestHandler) string {
+					userID, _ := request.GetUserIDFromContext(req.Context())
+					return userID
+				},
+				10,
+			),
+		)
 	})
 
 	// Status routes
@@ -349,8 +359,8 @@ func setupRoutes(builder *router.Builder, h *handler.UserHandler, ratelimiter ra
 	// Device routes
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Get("/devices", request.Adapt(h.ListDevices))
-		r.Put("/devices/{device_id}", request.Adapt(h.UpdateDevice))
 		r.Delete("/devices/{device_id}", request.Adapt(h.RemoveDevice))
+		r.Put("/devices/{device_id}/push-token", request.Adapt(h.UpdateDevice))
 	})
 
 	// Preferences routes
@@ -514,7 +524,7 @@ func main() {
 	contactsRepo := contacts.NewContactRepository(dbClient, log)
 	settingsRepo := settings.NewSettingsRepository(dbClient, log)
 	privacyRepo := privacy_overrides.NewPrivacyOverrideRepository(dbClient, log)
-	// deviceRepo := devices.NewDeviceRepository(dbClient, log)
+	deviceRepo := devices.NewDeviceRepository(dbClient, log)
 
 	consumer, err := createConsumer(cfg, userRepo, log)
 	if err != nil {
@@ -531,7 +541,7 @@ func main() {
 	searchService := search.NewSearchService(userRepo, searchClient, userCache, log)
 	go searchService.CreateIndex(context.Background())
 	contactService := contact.NewContactService(contactsRepo, userRepo, blockedRepo, userCache, log)
-	userHandler := handler.NewUserHandler(userService, searchService, contactService, locationService, userCache, tokenService, log)
+	userHandler := handler.NewUserHandler(userService, searchService, contactService, locationService, blockedRepo, settingsRepo, deviceRepo, userCache, tokenService, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)

@@ -2,15 +2,45 @@ package blocked_users
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"user-service/internal/domain"
 	userErrors "user-service/internal/errors"
 
 	"shared/pkg/database"
+	"shared/pkg/database/postgres"
 	dbModels "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 )
+
+// blockedUserRow is a local scan struct that uses plain string for block_type
+// to avoid the shared BlockType enum rejecting DB values like "full"/"messages_only".
+type blockedUserRow struct {
+	ID            string     `db:"id"`
+	UserID        string     `db:"user_id"`
+	BlockedUserID string     `db:"blocked_user_id"`
+	BlockReason   *string    `db:"block_reason"`
+	BlockedAt     time.Time  `db:"blocked_at"`
+	UnblockedAt   *time.Time `db:"unblocked_at"`
+	BlockType     string     `db:"block_type"`
+}
+
+func (r *blockedUserRow) TableName() string    { return "users.blocked_users" }
+func (r *blockedUserRow) PrimaryKey() interface{} { return r.ID }
+
+func rowToDomain(row blockedUserRow) *domain.BlockedUser {
+	return &domain.BlockedUser{
+		ID:            row.ID,
+		UserID:        row.UserID,
+		BlockedUserID: row.BlockedUserID,
+		BlockType:     domain.BlockType(row.BlockType),
+		Reason:        row.BlockReason,
+		BlockedAt:     row.BlockedAt,
+		UnblockedAt:   row.UnblockedAt,
+	}
+}
 
 type blockedRepository struct {
 	db  database.Database
@@ -73,46 +103,59 @@ func (r *blockedRepository) GetBlockedUserIDs(ctx context.Context, userID string
 	return ids, nil
 }
 
-func (r *blockedRepository) BlockUser(ctx context.Context, userID, targetID string, reason *string, blockType string) pkgErrors.AppError {
-	model := &dbModels.BlockedUser{
-		UserID:        userID,
-		BlockedUserID: targetID,
-		BlockReason:   reason,
-		BlockType:     dbModels.BlockType(blockType),
+func (r *blockedRepository) BlockUser(ctx context.Context, userID, targetID string, reason *string, blockType string) (string, pkgErrors.AppError) {
+	if blockType == "" {
+		blockType = "full"
 	}
-	if dbErr := r.db.Upsert(ctx, model); dbErr != nil {
+
+	var blockID string
+	row := r.db.QueryRow(ctx, `SELECT users.block_user($1::UUID, $2::UUID, $3, $4)`, userID, targetID, reason, blockType)
+	if dbErr := row.Scan(&blockID); dbErr != nil {
 		r.log.Error("failed to block user",
 			logger.String("user_id", userID),
 			logger.String("target_id", targetID),
 			logger.Error(dbErr),
 		)
-		return pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to block user")
+		if strings.Contains(dbErr.Error(), "already blocked") {
+			return "", pkgErrors.New(userErrors.ErrCodeUserAlreadyBlocked, "user is already blocked")
+		}
+		return "", pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to block user")
 	}
-	return nil
+	return blockID, nil
 }
 
 func (r *blockedRepository) GetBlockedUser(ctx context.Context, userID, targetID string) (*domain.BlockedUser, pkgErrors.AppError) {
 	query := `
-		SELECT * FROM users.blocked_users
-		WHERE user_id = $1
-		AND blocked_user_id = $2
+		SELECT id, user_id, blocked_user_id, block_reason, blocked_at, unblocked_at, block_type
+		FROM users.blocked_users
+		WHERE user_id = $1::UUID
+		AND blocked_user_id = $2::UUID
 		AND unblocked_at IS NULL`
 
-	var model dbModels.BlockedUser
-	if dbErr := r.db.FindOne(ctx, &model, query, userID, targetID); dbErr != nil {
-		return nil, nil
+	var row blockedUserRow
+	if dbErr := r.db.FindOne(ctx, &row, query, userID, targetID); dbErr != nil {
+		if postgres.IsNotFoundError(dbErr) {
+			return nil, nil
+		}
+		r.log.Error("failed to get blocked user",
+			logger.String("user_id", userID),
+			logger.String("target_id", targetID),
+			logger.Error(dbErr),
+		)
+		return nil, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to get blocked user")
 	}
-	return domain.NewBlockedUser(model), nil
+	return rowToDomain(row), nil
 }
 
 func (r *blockedRepository) GetBlockedUsers(ctx context.Context, userID string) ([]*domain.BlockedUser, pkgErrors.AppError) {
 	query := `
-		SELECT * FROM users.blocked_users
-		WHERE user_id = $1
+		SELECT id, user_id, blocked_user_id, block_reason, blocked_at, unblocked_at, block_type
+		FROM users.blocked_users
+		WHERE user_id = $1::UUID
 		AND unblocked_at IS NULL
 		ORDER BY blocked_at DESC`
 
-	var rows []dbModels.BlockedUser
+	var rows []blockedUserRow
 	if dbErr := r.db.FindMany(ctx, &rows, query, userID); dbErr != nil {
 		r.log.Error("failed to get blocked users",
 			logger.String("user_id", userID),
@@ -123,21 +166,13 @@ func (r *blockedRepository) GetBlockedUsers(ctx context.Context, userID string) 
 
 	list := make([]*domain.BlockedUser, len(rows))
 	for i, row := range rows {
-		list[i] = domain.NewBlockedUser(row)
+		list[i] = rowToDomain(row)
 	}
 	return list, nil
 }
 
 func (r *blockedRepository) UnblockUser(ctx context.Context, userID, targetID string) pkgErrors.AppError {
-	query := `
-		UPDATE users.blocked_users
-		SET unblocked_at = NOW(),
-		    updated_at   = NOW()
-		WHERE user_id = $1
-		AND blocked_user_id = $2
-		AND unblocked_at IS NULL`
-
-	if _, dbErr := r.db.Exec(ctx, query, userID, targetID); dbErr != nil {
+	if _, dbErr := r.db.Exec(ctx, `SELECT users.unblock_user($1::UUID, $2::UUID)`, userID, targetID); dbErr != nil {
 		r.log.Error("failed to unblock user",
 			logger.String("user_id", userID),
 			logger.String("target_id", targetID),

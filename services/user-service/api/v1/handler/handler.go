@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"user-service/internal/repo/blocked_users"
+	"user-service/internal/repo/devices"
+	repoSettings "user-service/internal/repo/settings"
 	"user-service/internal/service"
 	"user-service/internal/service/cache"
 	"user-service/internal/service/contact"
@@ -16,17 +19,34 @@ type UserHandler struct {
 	searchService   search.SearchService
 	contactService  contact.ContactService
 	locationService location.LocationService
+	blockedRepo     blocked_users.BlockedRepository
+	settingsRepo    repoSettings.SettingsRepository
+	deviceRepo      devices.DeviceRepository
 	cache           cache.UserCache
 	tokenService    *token.JWTTokenService
 	log             logger.Logger
 }
 
-func NewUserHandler(service service.UserService, searchService search.SearchService, contactService contact.ContactService, locationService location.LocationService, cache cache.UserCache, tokenService *token.JWTTokenService, log logger.Logger) *UserHandler {
+func NewUserHandler(
+	service service.UserService,
+	searchService search.SearchService,
+	contactService contact.ContactService,
+	locationService location.LocationService,
+	blockedRepo blocked_users.BlockedRepository,
+	settingsRepo repoSettings.SettingsRepository,
+	deviceRepo devices.DeviceRepository,
+	cache cache.UserCache,
+	tokenService *token.JWTTokenService,
+	log logger.Logger,
+) *UserHandler {
 	return &UserHandler{
 		userService:     service,
 		searchService:   searchService,
 		contactService:  contactService,
 		locationService: locationService,
+		blockedRepo:     blockedRepo,
+		settingsRepo:    settingsRepo,
+		deviceRepo:      deviceRepo,
 		cache:           cache,
 		tokenService:    tokenService,
 		log:             log,

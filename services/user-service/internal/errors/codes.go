@@ -41,6 +41,9 @@ const (
 	ErrCodeConsumerStartFailed = "CONSUMER_START_FAILED"
 	ErrCodeConsumerCloseFailed = "CONSUMER_CLOSE_FAILED"
 
-	ErrCodeUsernameGenerationFailed = "USERNAME_GENERATION_FAILED"
-	ErrCodeProfileBlocked           = "PROFILE_BLOCKED"
+	ErrCodeUsernameGenerationFailed  = "USERNAME_GENERATION_FAILED"
+	ErrCodeProfileBlocked            = "PROFILE_BLOCKED"
+	ErrCodeUserAlreadyBlocked        = "USER_ALREADY_BLOCKED"
+	ErrCodeCannotBlockSelf           = "CANNOT_BLOCK_SELF"
+	ErrCodeCannotRemoveCurrentDevice = "CANNOT_REMOVE_CURRENT_DEVICE"
 )

@@ -10,7 +10,7 @@ import (
 )
 
 type GetContactsParams struct {
-	Status       string
+	Status       domain.ContactStatus
 	Relationship string
 	GroupID      *string
 	Sort         string
@@ -33,6 +33,7 @@ type UpdateContactParams struct {
 type ContactRepository interface {
 	GetContactIDs(ctx context.Context, userID string) ([]string, pkgErrors.AppError)
 	GetContacts(ctx context.Context, userID string, params GetContactsParams) ([]*domain.Contact, int, pkgErrors.AppError)
+	GetPendingIncomingRequestsCount(ctx context.Context, userID string) (int, pkgErrors.AppError)
 	GetContact(ctx context.Context, userID, contactID string) (*domain.Contact, pkgErrors.AppError)
 	RemoveContact(ctx context.Context, contactID, userID string) pkgErrors.AppError
 	GetPendingContactRequests(ctx context.Context, userID string) ([]*domain.Contact, pkgErrors.AppError)

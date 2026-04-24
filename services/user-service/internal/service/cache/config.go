@@ -7,6 +7,7 @@ const (
 	ProfileUsernamePrefix = "profile:username:"
 	ProfilePhonePrefix    = "profile:phone:"
 	SettingsPrefix        = "settings:"
+	SettingsFullPrefix    = "settings:full:"
 	PresencePrefix        = "presence:"
 	PresenceContactPrefix = "presence:contacts:"
 	BlockedPrefix         = "blocked:"

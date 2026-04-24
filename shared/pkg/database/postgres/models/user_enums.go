@@ -51,14 +51,18 @@ func (o *OnlineStatus) Scan(value interface{}) error {
 type ProfileVisibility string
 
 const (
-	ProfileVisibilityPublic  ProfileVisibility = "public"
-	ProfileVisibilityFriends ProfileVisibility = "friends"
-	ProfileVisibilityPrivate ProfileVisibility = "private"
+	ProfileVisibilityPublic   ProfileVisibility = "public"
+	ProfileVisibilityFriends  ProfileVisibility = "friends"
+	ProfileVisibilityPrivate  ProfileVisibility = "private"
+	ProfileVisibilityEveryone ProfileVisibility = "everyone"
+	ProfileVisibilityContacts ProfileVisibility = "contacts"
+	ProfileVisibilityNobody   ProfileVisibility = "nobody"
 )
 
 func (p ProfileVisibility) IsValid() bool {
 	switch p {
-	case ProfileVisibilityPublic, ProfileVisibilityFriends, ProfileVisibilityPrivate:
+	case ProfileVisibilityPublic, ProfileVisibilityFriends, ProfileVisibilityPrivate,
+		ProfileVisibilityEveryone, ProfileVisibilityContacts, ProfileVisibilityNobody:
 		return true
 	}
 	return false
@@ -258,12 +262,20 @@ type NotificationSound string
 const (
 	NotificationSoundDefault NotificationSound = "default"
 	NotificationSoundSilent  NotificationSound = "silent"
+	NotificationSoundVibrate NotificationSound = "vibrate"
 	NotificationSoundCustom  NotificationSound = "custom"
+	NotificationSoundCustom1 NotificationSound = "custom_1"
+	NotificationSoundCustom2 NotificationSound = "custom_2"
+	NotificationSoundCustom3 NotificationSound = "custom_3"
+	NotificationSoundCustom4 NotificationSound = "custom_4"
+	NotificationSoundCustom5 NotificationSound = "custom_5"
 )
 
 func (n NotificationSound) IsValid() bool {
 	switch n {
-	case NotificationSoundDefault, NotificationSoundSilent, NotificationSoundCustom:
+	case NotificationSoundDefault, NotificationSoundSilent, NotificationSoundVibrate,
+		NotificationSoundCustom, NotificationSoundCustom1, NotificationSoundCustom2,
+		NotificationSoundCustom3, NotificationSoundCustom4, NotificationSoundCustom5:
 		return true
 	}
 	return false
@@ -296,14 +308,15 @@ func (n *NotificationSound) Scan(value interface{}) error {
 type NotificationPreview string
 
 const (
-	NotificationPreviewFull NotificationPreview = "full"
-	NotificationPreviewName NotificationPreview = "name"
-	NotificationPreviewNone NotificationPreview = "none"
+	NotificationPreviewFull     NotificationPreview = "full"
+	NotificationPreviewName     NotificationPreview = "name"
+	NotificationPreviewNameOnly NotificationPreview = "name_only"
+	NotificationPreviewNone     NotificationPreview = "none"
 )
 
 func (n NotificationPreview) IsValid() bool {
 	switch n {
-	case NotificationPreviewFull, NotificationPreviewName, NotificationPreviewNone:
+	case NotificationPreviewFull, NotificationPreviewName, NotificationPreviewNameOnly, NotificationPreviewNone:
 		return true
 	}
 	return false
@@ -417,14 +430,15 @@ func (t *Theme) Scan(value interface{}) error {
 type FontSize string
 
 const (
-	FontSizeSmall  FontSize = "small"
-	FontSizeMedium FontSize = "medium"
-	FontSizeLarge  FontSize = "large"
+	FontSizeSmall      FontSize = "small"
+	FontSizeMedium     FontSize = "medium"
+	FontSizeLarge      FontSize = "large"
+	FontSizeExtraLarge FontSize = "extra_large"
 )
 
 func (f FontSize) IsValid() bool {
 	switch f {
-	case FontSizeSmall, FontSizeMedium, FontSizeLarge:
+	case FontSizeSmall, FontSizeMedium, FontSizeLarge, FontSizeExtraLarge:
 		return true
 	}
 	return false

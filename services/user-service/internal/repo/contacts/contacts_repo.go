@@ -15,6 +15,8 @@ import (
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
+
+	"github.com/lib/pq"
 )
 
 type contactRepository struct {
@@ -57,24 +59,97 @@ func (r *contactRepository) GetContactIDs(ctx context.Context, userID string) ([
 }
 
 func (r *contactRepository) GetContacts(ctx context.Context, userID string, params GetContactsParams) ([]*domain.Contact, int, pkgErrors.AppError) {
-	query := `
+	whereClauses := []string{"c.user_id = $1", "c.status = $2"}
+	args := []any{userID, params.Status}
+	argIdx := 3
+
+	if params.Relationship != "" {
+		switch strings.ToLower(params.Relationship) {
+		case "favorite":
+			whereClauses = append(whereClauses, "c.is_favorite = true")
+		case "pinned":
+			whereClauses = append(whereClauses, "c.is_pinned = true")
+		case "archived":
+			whereClauses = append(whereClauses, "c.is_archived = true")
+		case "muted":
+			whereClauses = append(whereClauses, "c.is_muted = true")
+		default:
+			whereClauses = append(whereClauses, fmt.Sprintf("c.relationship_type = $%d", argIdx))
+			args = append(args, params.Relationship)
+			argIdx++
+		}
+	}
+
+	if params.GroupID != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("$%d = ANY(c.contact_groups)", argIdx))
+		args = append(args, *params.GroupID)
+		argIdx++
+	}
+
+	if params.Search != nil && strings.TrimSpace(*params.Search) != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(`(
+			LOWER(c.nickname) LIKE '%%' || LOWER($%d) || '%%'
+			OR EXISTS (
+				SELECT 1 FROM users.profiles p
+				WHERE p.user_id = c.contact_user_id
+				AND (
+					LOWER(p.display_name) LIKE '%%' || LOWER($%d) || '%%'
+					OR LOWER(p.username) LIKE '%%' || LOWER($%d) || '%%'
+				)
+			)
+		)`, argIdx, argIdx, argIdx))
+		args = append(args, strings.TrimSpace(*params.Search))
+		argIdx++
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
-			id, user_id, contact_user_id, status, relationship_type,
-			nickname, notes, is_favorite, is_pinned, is_archived,
-			is_muted, muted_until, contact_source, contact_groups,
-			accepted_at, blocked_at, created_at, updated_at,
-			COUNT(*) OVER() AS total
-		FROM users.contacts
-		WHERE user_id = $1
-		AND status = $2
-		ORDER BY is_pinned DESC, is_favorite DESC, last_interaction_at DESC NULLS LAST
-		LIMIT $3 OFFSET $4`
+			c.id, c.user_id, c.contact_user_id, c.status, c.relationship_type,
+			c.nickname, c.notes, c.is_favorite, c.is_pinned, c.is_archived,
+			c.is_muted, c.muted_until, c.contact_source, c.contact_groups,
+			c.last_interaction_at, c.accepted_at, c.blocked_at, c.created_at, c.updated_at,
+			p.display_name, p.username, p.avatar_url,
+			us.online_status_visibility
+		FROM users.contacts c
+		JOIN users.profiles p ON p.user_id = c.contact_user_id
+		LEFT JOIN users.settings us ON us.user_id = c.contact_user_id
+		WHERE %s
+		ORDER BY c.is_pinned DESC, c.is_favorite DESC, c.last_interaction_at DESC NULLS LAST, p.display_name ASC
+		LIMIT $%d OFFSET $%d`,
+		strings.Join(whereClauses, " AND "),
+		argIdx,
+		argIdx+1,
+	)
+
+	queryArgs := append([]any{}, args...)
+	queryArgs = append(queryArgs, params.Limit, params.Offset)
 
 	var rows []struct {
-		dbModels.Contact
-		Total int `db:"total"`
+		ID                     string                    `db:"id"`
+		UserID                 string                    `db:"user_id"`
+		ContactUserID          string                    `db:"contact_user_id"`
+		Status                 dbModels.ContactStatus    `db:"status"`
+		RelationshipType       dbModels.RelationshipType `db:"relationship_type"`
+		Nickname               *string                   `db:"nickname"`
+		Notes                  *string                   `db:"notes"`
+		IsFavorite             bool                      `db:"is_favorite"`
+		IsPinned               bool                      `db:"is_pinned"`
+		IsArchived             bool                      `db:"is_archived"`
+		IsMuted                bool                      `db:"is_muted"`
+		MutedUntil             *time.Time                `db:"muted_until"`
+		ContactSource          *string                   `db:"contact_source"`
+		ContactGroups          pq.StringArray            `db:"contact_groups"`
+		LastInteractionAt      *time.Time                `db:"last_interaction_at"`
+		AcceptedAt             *time.Time                `db:"accepted_at"`
+		BlockedAt              *time.Time                `db:"blocked_at"`
+		CreatedAt              *time.Time                `db:"created_at"`
+		UpdatedAt              *time.Time                `db:"updated_at"`
+		DisplayName            *string                   `db:"display_name"`
+		Username               *string                   `db:"username"`
+		AvatarURL              *string                   `db:"avatar_url"`
+		OnlineStatusVisibility *string                   `db:"online_status_visibility"`
 	}
-	if dbErr := r.db.FindMany(ctx, &rows, query, userID, params.Status, params.Limit, params.Offset); dbErr != nil {
+	if dbErr := r.db.FindMany(ctx, &rows, query, queryArgs...); dbErr != nil {
 		r.log.Error("failed to get contacts",
 			logger.String("user_id", userID),
 			logger.Error(dbErr),
@@ -82,13 +157,72 @@ func (r *contactRepository) GetContacts(ctx context.Context, userID string, para
 		return nil, 0, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to get contacts")
 	}
 
-	total := 0
-	list := make([]*domain.Contact, len(rows))
-	for i, row := range rows {
-		list[i] = domain.NewContact(row.Contact)
-		total = row.Total
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM users.contacts c
+		WHERE %s`, strings.Join(whereClauses, " AND "))
+
+	var total int
+	if dbErr := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); dbErr != nil {
+		r.log.Error("failed to count contacts",
+			logger.String("user_id", userID),
+			logger.Error(dbErr),
+		)
+		return nil, 0, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to count contacts")
 	}
-	return list, total, nil
+
+	contacts := make([]*domain.Contact, len(rows))
+	for i, row := range rows {
+		model := dbModels.Contact{
+			ID:                row.ID,
+			UserID:            row.UserID,
+			ContactUserID:     row.ContactUserID,
+			Status:            row.Status,
+			RelationshipType:  row.RelationshipType,
+			Nickname:          row.Nickname,
+			Notes:             row.Notes,
+			IsFavorite:        row.IsFavorite,
+			IsPinned:          row.IsPinned,
+			IsArchived:        row.IsArchived,
+			IsMuted:           row.IsMuted,
+			MutedUntil:        row.MutedUntil,
+			ContactSource:     row.ContactSource,
+			ContactGroups:     row.ContactGroups,
+			LastInteractionAt: row.LastInteractionAt,
+			AcceptedAt:        row.AcceptedAt,
+			BlockedAt:         row.BlockedAt,
+			CreatedAt:         row.CreatedAt,
+			UpdatedAt:         row.UpdatedAt,
+		}
+
+		c := domain.NewContact(model)
+		c.DisplayName = row.DisplayName
+		c.Username = row.Username
+		c.AvatarURL = row.AvatarURL
+		c.OnlineStatusVisibility = row.OnlineStatusVisibility
+		contacts[i] = c
+	}
+
+	return contacts, total, nil
+}
+
+func (r *contactRepository) GetPendingIncomingRequestsCount(ctx context.Context, userID string) (int, pkgErrors.AppError) {
+	query := `
+		SELECT COUNT(*)
+		FROM users.contacts
+		WHERE contact_user_id = $1
+		AND status = 'pending'`
+
+	var total int
+	if dbErr := r.db.QueryRow(ctx, query, userID).Scan(&total); dbErr != nil {
+		r.log.Error("failed to count pending incoming contact requests",
+			logger.String("user_id", userID),
+			logger.Error(dbErr),
+		)
+		return 0, pkgErrors.FromError(dbErr, userErrors.ErrCodeDatabaseError, "failed to count pending incoming contact requests")
+	}
+
+	return total, nil
 }
 
 func (r *contactRepository) GetContact(ctx context.Context, userID, contactID string) (*domain.Contact, pkgErrors.AppError) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"strings"
 	"user-service/api/v1/dto"
 	"user-service/internal/domain"
 	"user-service/internal/errors"
@@ -147,6 +148,165 @@ func (s *contactService) AddContact(ctx context.Context, requesterUserId string,
 	)
 
 	return nil
+}
+
+func (s *contactService) GetContacts(ctx context.Context, userId string, params GetContactsParams) (*GetContactsResult, pkgErrors.AppError) {
+	s.log.Info("Retrieving contacts for user",
+		logger.String("user_id", userId),
+	)
+
+	status := domain.ContactStatus(params.Status)
+	if status == "" {
+		status = domain.ContactStatusActive
+	}
+	if strings.EqualFold(string(status), "accepted") {
+		status = domain.ContactStatusActive
+	}
+
+	page := params.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset := (page - 1) * limit
+
+	repoParams := contacts.GetContactsParams{
+		Status:       status,
+		Relationship: strings.TrimSpace(params.Relationship),
+		GroupID:      params.GroupID,
+		Search:       params.Search,
+		Limit:        limit,
+		Offset:       offset,
+	}
+
+	list, total, err := s.contactRepo.GetContacts(ctx, userId, repoParams)
+	if err != nil {
+		s.log.Error("Failed to retrieve contacts for user",
+			logger.String("user_id", userId),
+			logger.Error(err),
+		)
+		return nil, err
+	}
+
+	isDefaultAcceptedView := status == domain.ContactStatusActive &&
+		repoParams.Relationship == "" &&
+		repoParams.GroupID == nil &&
+		repoParams.Search == nil
+
+	membership := map[string]bool{}
+	if isDefaultAcceptedView {
+		cachedIDs, cacheErr := s.userCache.GetContactIDs(ctx, userId)
+		if cacheErr != nil {
+			s.log.Error("Failed to get cached contact IDs",
+				logger.String("user_id", userId),
+				logger.Error(cacheErr),
+			)
+		}
+
+		contactIDs := []string{}
+		if cachedIDs != nil {
+			contactIDs = *cachedIDs
+		} else {
+			ids, idsErr := s.contactRepo.GetContactIDs(ctx, userId)
+			if idsErr != nil {
+				s.log.Error("Failed to get contact IDs from repository",
+					logger.String("user_id", userId),
+					logger.Error(idsErr),
+				)
+				return nil, idsErr
+			}
+			contactIDs = ids
+			if setErr := s.userCache.SetContactIDs(ctx, userId, ids); setErr != nil {
+				s.log.Error("Failed to cache contact IDs",
+					logger.String("user_id", userId),
+					logger.Error(setErr),
+				)
+			}
+		}
+
+		for _, id := range contactIDs {
+			membership[id] = true
+		}
+	}
+
+	contactUserIDs := make([]string, 0, len(list))
+	for _, c := range list {
+		contactUserIDs = append(contactUserIDs, c.ContactUserID)
+	}
+
+	presenceByUserID, presenceErr := s.userCache.GetPresences(ctx, contactUserIDs)
+	if presenceErr != nil {
+		s.log.Error("Failed to batch load contact presences",
+			logger.String("user_id", userId),
+			logger.Error(presenceErr),
+		)
+	}
+
+	for _, c := range list {
+		areContacts := membership[c.ContactUserID] || status == domain.ContactStatusActive
+		canSeeOnline := canViewOnlineStatus(c.OnlineStatusVisibility, areContacts)
+		if !canSeeOnline {
+			c.OnlineStatus = nil
+			continue
+		}
+
+		if presence, ok := presenceByUserID[c.ContactUserID]; ok && presence != nil {
+			statusVal := presence.Status
+			c.OnlineStatus = &statusVal
+		}
+	}
+
+	var unreadRequestsCount *int
+	if status == domain.ContactStatusActive {
+		count, countErr := s.contactRepo.GetPendingIncomingRequestsCount(ctx, userId)
+		if countErr != nil {
+			s.log.Error("Failed to count pending incoming contact requests",
+				logger.String("user_id", userId),
+				logger.Error(countErr),
+			)
+			return nil, countErr
+		}
+		unreadRequestsCount = &count
+	}
+
+	s.log.Info("Contacts retrieved successfully",
+		logger.String("user_id", userId),
+		logger.Int("contact_count", len(list)),
+	)
+
+	return &GetContactsResult{
+		Contacts:            list,
+		Total:               total,
+		Page:                page,
+		Limit:               limit,
+		UnreadRequestsCount: unreadRequestsCount,
+	}, nil
+}
+
+func canViewOnlineStatus(visibility *string, areContacts bool) bool {
+	if visibility == nil {
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(*visibility)) {
+	case "public":
+		return true
+	case "friends":
+		return areContacts
+	case "private":
+		return false
+	default:
+		return false
+	}
 }
 
 func (s *contactService) UpdateContact(ctx context.Context, userId string, contactId string, update domain.UpdateContact) pkgErrors.AppError {
