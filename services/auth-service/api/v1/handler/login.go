@@ -51,6 +51,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	browserInfo := handler.GetBrowserInfo()
 	userAgent := handler.GetUserAgent()
 	locationInfo, _ := req.GetIPAddressInfoFromContext(ctx)
+	locationInfo.IP = handler.GetClientIP()
 
 	user, authErr := h.authService.GetUserByEmail(ctx, loginRequest.Email)
 	if authErr != nil {
