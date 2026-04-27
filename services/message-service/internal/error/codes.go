@@ -1,6 +1,36 @@
 package error
 
+type MessageErrorCode string
+
 const (
+	CodeCacheError    = "MSG_CACHE_ERROR"
+	CodeDBError       = "MSG_DB_ERROR"
+	CodeInternalError = "MSG_INTERNAL_ERROR"
+	CodeInvalidInput  = "MSG_INVALID_INPUT"
+
+	CodeRateLimited = "MSG_RATE_LIMITED"
+
+	CodeConversationAlreadyExists      = "MSG_CONVERSATION_ALREADY_EXISTS"
+	CodeConversationCreationInProgress = "MSG_CONVERSATION_CREATION_IN_PROGRESS"
+	CodeParticipantBlockedByOtherUser  = "MSG_PARTICIPANT_BLOCKED_BY_OTHER_USER"
+	CodeNotParticipant                 = "MSG_NOT_PARTICIPANT"
+
+	CodeMessageAlreadySent = "MSG_MESSAGE_ALREADY_SENT"
+	CodeMessageTooLarge    = "MSG_MESSAGE_TOO_LARGE"
+	CodeMessageDeleted     = "MSG_MESSAGE_DELETED"
+
+	CodeReactionAlreadyExists = "MSG_REACTION_ALREADY_EXISTS"
+	CodeReactionNotFound      = "MSG_REACTION_NOT_FOUND"
+
+	CodeParticipantAlreadyExists = "MSG_PARTICIPANT_ALREADY_EXISTS"
+	CodeParticipantNotFound      = "MSG_PARTICIPANT_NOT_FOUND"
+
+	CodePinLimitExceeded = "MSG_PIN_LIMIT_EXCEEDED"
+
+	CodeValidationError = "MSG_VALIDATION_ERROR"
+	CodeUnauthorized    = "MSG_UNAUTHORIZED"
+	CodeForbidden       = "MSG_FORBIDDEN"
+
 	// User Errors
 	CodeUserBlocked         MessageErrorCode = "USER_BLOCKED"
 	CodeBlockedUserNotFound MessageErrorCode = "BLOCK_USER_NOT_FOUND"
@@ -48,3 +78,7 @@ const (
 	CodeMaxMembersExceeded       MessageErrorCode = "MAX_MEMBERS_EXCEEDED"
 	CodeCannotRemoveOwner        MessageErrorCode = "CANNOT_REMOVE_OWNER"
 )
+
+func (c MessageErrorCode) String() string {
+	return string(c)
+}

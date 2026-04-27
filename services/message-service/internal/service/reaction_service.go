@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"echo-backend/services/message-service/internal/domain"
+	"echo-backend/services/message-service/internal/messaging"
 	"echo-backend/services/message-service/internal/repo"
 	dbModel "shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
@@ -23,7 +24,7 @@ type reactionService struct {
 	reactionRepo     repo.ReactionRepository
 	messageRepo      repo.MessageRepository
 	conversationRepo repo.ConversationRepository
-	eventPublisher   EventPublisher
+	eventPublisher   messaging.EventPublisher
 	logger           logger.Logger
 }
 
@@ -31,7 +32,7 @@ func NewReactionService(
 	reactionRepo repo.ReactionRepository,
 	messageRepo repo.MessageRepository,
 	conversationRepo repo.ConversationRepository,
-	eventPublisher EventPublisher,
+	eventPublisher messaging.EventPublisher,
 	log logger.Logger,
 ) ReactionServiceInterface {
 	return &reactionService{

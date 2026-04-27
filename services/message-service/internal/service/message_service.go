@@ -8,12 +8,12 @@ import (
 
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
+	"echo-backend/services/message-service/internal/messaging"
 	"echo-backend/services/message-service/internal/repo"
-	"shared/pkg/cache"
+	"echo-backend/services/message-service/internal/service/cache"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/utils"
 	"shared/server/common/hashing"
-	"shared/server/env"
 	"shared/server/request"
 
 	"shared/pkg/logger"
@@ -24,23 +24,23 @@ import (
 // MessageServiceInterface defines the contract for message service operations
 type MessageServiceInterface interface {
 	// Core message operations
-	SendMessage(ctx context.Context, req *domain.SendMessageInput, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MessageError)
-	GetMessages(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MessageError)
-	GetMessagesAfter(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*domain.Message, bool, *msgError.MessageError)
-	GetMessageByID(ctx context.Context, messageID string) (*domain.Message, *msgError.MessageError)
+	SendMessage(ctx context.Context, req *domain.SendMessageInput, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MsgError)
+	GetMessages(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MsgError)
+	GetMessagesAfter(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*domain.Message, bool, *msgError.MsgError)
+	GetMessageByID(ctx context.Context, messageID string) (*domain.Message, *msgError.MsgError)
 
 	// Message mutations
-	EditMessage(ctx context.Context, messageID string, userID string, newContent string) (*domain.Message, *msgError.MessageError)
-	DeleteMessage(ctx context.Context, messageID string, userID string, deleteForEveryone bool) *msgError.MessageError
-	ForwardMessage(ctx context.Context, messageID string, userID string, targetConversationID string, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MessageError)
-	PinMessage(ctx context.Context, messageID string, userID string) *msgError.MessageError
-	UnpinMessage(ctx context.Context, messageID string, userID string) *msgError.MessageError
-	GetPinnedMessages(ctx context.Context, conversationID string) ([]*domain.Message, *msgError.MessageError)
-	MarkAsRead(ctx context.Context, messageID string, userID string) *msgError.MessageError
-	GetDeliveryStatus(ctx context.Context, messageID string, userID string) (*domain.DeliveryStatusSummary, *msgError.MessageError)
-	SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MessageError)
-	SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MessageError)
-	GetThread(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MessageError)
+	EditMessage(ctx context.Context, messageID string, userID string, newContent string) (*domain.Message, *msgError.MsgError)
+	DeleteMessage(ctx context.Context, messageID string, userID string, deleteForEveryone bool) *msgError.MsgError
+	ForwardMessage(ctx context.Context, messageID string, userID string, targetConversationID string, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MsgError)
+	PinMessage(ctx context.Context, messageID string, userID string) *msgError.MsgError
+	UnpinMessage(ctx context.Context, messageID string, userID string) *msgError.MsgError
+	GetPinnedMessages(ctx context.Context, conversationID string) ([]*domain.Message, *msgError.MsgError)
+	MarkAsRead(ctx context.Context, messageID string, userID string) *msgError.MsgError
+	GetDeliveryStatus(ctx context.Context, messageID string, userID string) (*domain.DeliveryStatusSummary, *msgError.MsgError)
+	SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MsgError)
+	SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MsgError)
+	GetThread(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MsgError)
 
 	// Event processing
 	ProcessChatMessage(ctx context.Context, event *domain.ChatMessageEvent) pkgErrors.AppError
@@ -52,8 +52,8 @@ type messageService struct {
 	deliveryRepo     repo.DeliveryRepository
 	conversationRepo repo.ConversationRepository
 	userRepo         repo.UserRepository
-	eventPublisher   EventPublisher
-	cache            cache.Cache
+	eventPublisher   messaging.EventPublisher
+	cache            cache.MessageCache
 	hashing          hashing.HashingService
 	logger           logger.Logger
 }
@@ -63,8 +63,8 @@ func NewMessageService(
 	deliveryRepo repo.DeliveryRepository,
 	conversationRepo repo.ConversationRepository,
 	userRepo repo.UserRepository,
-	eventPublisher EventPublisher,
-	cache cache.Cache,
+	eventPublisher messaging.EventPublisher,
+	cache cache.MessageCache,
 	log logger.Logger,
 ) MessageServiceInterface {
 	hashing, err := hashing.DefaultService()
@@ -84,7 +84,7 @@ func NewMessageService(
 }
 
 // SendMessage handles the complete flow of sending a message
-func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessageInput, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MessageError) {
+func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessageInput, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MsgError) {
 	dbErr := s.conversationRepo.ValidateConversationParticipant(req.ConversationID, req.SenderUserID)
 	if dbErr != nil {
 		s.logger.Error("Conversation participant validation failed",
@@ -103,7 +103,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 			logger.String("user_id", req.SenderUserID.String()),
 			logger.Error(dbErr),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to check if user is blocked",
 			Code:    msgError.CodeBlockedUserNotFound,
 			Error:   dbErr,
@@ -114,40 +114,40 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 			logger.String("service", msgError.ServiceName),
 			logger.String("user_id", req.SenderUserID.String()),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "User is blocked from sending messages",
 			Code:    msgError.CodeUserBlocked,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "user is blocked"),
 		}
 	}
-	rateLimitKey := fmt.Sprintf("rate:msg:%s", req.SenderUserID.String())
-	rateLimit, cacheErr := s.cache.GetInt(ctx, rateLimitKey)
-	if cacheErr != nil {
-		s.logger.Warn("Failed to get rate limit from cache, allowing message",
-			logger.String("service", msgError.ServiceName),
-			logger.String("user_id", req.SenderUserID.String()),
-			logger.Error(cacheErr),
-		)
-		rateLimit = 0
-	}
-	if rateLimit > 100 && !env.IsDevelopment() {
-		s.logger.Warn("Rate limit exceeded for sending messages",
-			logger.String("service", msgError.ServiceName),
-			logger.String("user_id", req.SenderUserID.String()),
-		)
-		return nil, &msgError.MessageError{
-			Message: "Rate limit exceeded for sending messages",
-			Code:    msgError.CodeRateLimitExceeded,
-			Error:   pkgErrors.New(pkgErrors.CodeResourceExhausted, "rate limit exceeded"),
-		}
-	} else {
-		s.logger.Debug("Incrementing message send rate limit counter",
-			logger.String("service", msgError.ServiceName),
-			logger.String("user_id", req.SenderUserID.String()),
-			logger.Int("current_rate", int(rateLimit)),
-		)
-		s.cache.Increment(ctx, rateLimitKey, 60)
-	}
+	// rateLimitKey := fmt.Sprintf("rate:msg:%s", req.SenderUserID.String())
+	// rateLimit, cacheErr := s.cache.GetInt(ctx, rateLimitKey)
+	// if cacheErr != nil {
+	// 	s.logger.Warn("Failed to get rate limit from cache, allowing message",
+	// 		logger.String("service", msgError.ServiceName),
+	// 		logger.String("user_id", req.SenderUserID.String()),
+	// 		logger.Error(cacheErr),
+	// 	)
+	// 	rateLimit = 0
+	// }
+	// if rateLimit > 100 && !env.IsDevelopment() {
+	// 	s.logger.Warn("Rate limit exceeded for sending messages",
+	// 		logger.String("service", msgError.ServiceName),
+	// 		logger.String("user_id", req.SenderUserID.String()),
+	// 	)
+	// 	return nil, &msgError.MsgError{
+	// 		Message: "Rate limit exceeded for sending messages",
+	// 		Code:    msgError.CodeRateLimitExceeded,
+	// 		Error:   pkgErrors.New(pkgErrors.CodeResourceExhausted, "rate limit exceeded"),
+	// 	}
+	// } else {
+	// 	s.logger.Debug("Incrementing message send rate limit counter",
+	// 		logger.String("service", msgError.ServiceName),
+	// 		logger.String("user_id", req.SenderUserID.String()),
+	// 		logger.Int("current_rate", int(rateLimit)),
+	// 	)
+	// 	s.cache.Increment(ctx, rateLimitKey, 60)
+	// }
 
 	validationErr := s.validateMessage(string(req.MessageType), req.Metadata)
 	if validationErr != nil {
@@ -209,7 +209,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 			logger.String("sender_user_id", req.SenderUserID.String()),
 			logger.Error(publishErr),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to publish chat message event",
 			Code:    msgError.CodeMessageEventPublishFailed,
 			Error:   pkgErrors.FromError(publishErr, pkgErrors.CodeInternal, "failed to publish chat message event"),

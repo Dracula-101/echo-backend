@@ -4,7 +4,9 @@ import (
 	"context"
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
+	"echo-backend/services/message-service/internal/messaging"
 	"echo-backend/services/message-service/internal/repo"
+	"echo-backend/services/message-service/internal/service/cache"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 
@@ -12,34 +14,38 @@ import (
 )
 
 type ConversationService interface {
-	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MessageError)
-	GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MessageError)
-	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MessageError)
-	UpdateConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input domain.UpdateConversationInput) (*domain.Conversation, *msgError.MessageError)
-	DeleteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError
-	AddParticipants(ctx context.Context, input domain.AddParticipantsInput) *msgError.MessageError
-	RemoveParticipant(ctx context.Context, input domain.RemoveParticipantInput) *msgError.MessageError
-	UpdateParticipantRole(ctx context.Context, input domain.UpdateParticipantRoleInput) *msgError.MessageError
-	MuteConversation(ctx context.Context, input domain.MuteConversationInput) *msgError.MessageError
-	UnmuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError
-	GetUnreadCount(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (int, *msgError.MessageError)
+	CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MsgError)
+	GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MsgError)
+	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MsgError)
+	UpdateConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input domain.UpdateConversationInput) (*domain.Conversation, *msgError.MsgError)
+	DeleteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MsgError
+	AddParticipants(ctx context.Context, input domain.AddParticipantsInput) *msgError.MsgError
+	RemoveParticipant(ctx context.Context, input domain.RemoveParticipantInput) *msgError.MsgError
+	UpdateParticipantRole(ctx context.Context, input domain.UpdateParticipantRoleInput) *msgError.MsgError
+	MuteConversation(ctx context.Context, input domain.MuteConversationInput) *msgError.MsgError
+	UnmuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MsgError
+	GetUnreadCount(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (int, *msgError.MsgError)
 }
 
 type conversationService struct {
 	conversationRepo repo.ConversationRepository
-	eventPublisher   EventPublisher
+	userRepo         repo.UserRepository
+	eventPublisher   messaging.EventPublisher
+	cache            cache.MessageCache
 	logger           logger.Logger
 }
 
-func NewConversationService(conversationRepo repo.ConversationRepository, eventPublisher EventPublisher, log logger.Logger) ConversationService {
+func NewConversationService(conversationRepo repo.ConversationRepository, userRepo repo.UserRepository, eventPublisher messaging.EventPublisher, cache cache.MessageCache, log logger.Logger) ConversationService {
 	return &conversationService{
 		conversationRepo: conversationRepo,
+		userRepo:         userRepo,
 		eventPublisher:   eventPublisher,
+		cache:            cache,
 		logger:           log,
 	}
 }
 
-func (s *conversationService) CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MessageError) {
+func (s *conversationService) CreateConversation(ctx context.Context, input domain.CreateConversationInput) (*domain.Conversation, *msgError.MsgError) {
 	conversation, err := s.conversationRepo.CreateConversation(ctx, input)
 	if err != nil {
 		s.logger.Error("Failed to create conversation",
@@ -49,7 +55,7 @@ func (s *conversationService) CreateConversation(ctx context.Context, input doma
 			logger.Bool("is_public", input.IsPublic),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to create conversation",
 			Code:    msgError.CodeConversationCreationFailed,
 			Error:   err,
@@ -58,7 +64,7 @@ func (s *conversationService) CreateConversation(ctx context.Context, input doma
 	return conversation, nil
 }
 
-func (s *conversationService) GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MessageError) {
+func (s *conversationService) GetConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*domain.Conversation, *msgError.MsgError) {
 	exists, err := s.conversationRepo.ConversationExists(ctx, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to check conversation existence",
@@ -66,7 +72,7 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 			logger.Any("conversation_id", conversationID),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to check conversation existence",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   err,
@@ -77,7 +83,7 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 			logger.String("service", msgError.ServiceName),
 			logger.Any("conversation_id", conversationID),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Conversation not found",
 			Code:    msgError.CodeConversationNotFound,
 			Error:   pkgErrors.New(msgError.CodeConversationNotFound.String(), "conversation does not exist"),
@@ -91,7 +97,7 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 			logger.Any("conversation_id", conversationID),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get conversation",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   err,
@@ -100,7 +106,7 @@ func (s *conversationService) GetConversation(ctx context.Context, conversationI
 	return conversation, nil
 }
 
-func (s *conversationService) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MessageError) {
+func (s *conversationService) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]domain.Conversation, *msgError.MsgError) {
 	conversations, err := s.conversationRepo.GetUserConversations(ctx, userID)
 	if err != nil {
 		s.logger.Error("Failed to get user conversations",
@@ -108,7 +114,7 @@ func (s *conversationService) GetUserConversations(ctx context.Context, userID u
 			logger.Any("user_id", userID),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get user conversations",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   err,

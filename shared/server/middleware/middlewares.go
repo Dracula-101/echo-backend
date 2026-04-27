@@ -1014,12 +1014,14 @@ func InterceptUserId(skipPaths ...string) Handler {
 				}
 			}
 
-			userID := r.Header.Get(headers.XUserID)
-			if userID != "" {
-				ctx := SetUserID(r.Context(), userID)
-				next.ServeHTTP(w, r.WithContext(ctx))
+			userID, err := uuid.Parse(r.Header.Get(headers.XUserID))
+			if err != nil {
+				response.UnauthorizedError(r.Context(), r, w, "Invalid Auth Token", errors.New("invalid user id in header"))
 				return
 			}
+			ctx := context.WithValue(r.Context(), sContext.UserIDKey, userID.String())
+			r.Header.Set(headers.XUserID, userID.String())
+			next.ServeHTTP(w, r.WithContext(ctx))
 
 			response.UnauthorizedError(r.Context(), r, w, "Missing or Invalid Auth Token", errors.New("missing user id in header"))
 		})

@@ -74,15 +74,15 @@ func NewConnectionError(clientID string, err error, message string) *ConnectionE
 	}
 }
 
-// MessageError represents a message-related error
-type MessageError struct {
+// MsgError represents a message-related error
+type MsgError struct {
 	ClientID    string
 	MessageType string
 	Err         error
 	Message     string
 }
 
-func (e *MessageError) Error() string {
+func (e *MsgError) Error() string {
 	if e.Message != "" {
 		return fmt.Sprintf("message error for client %s (type: %s): %s: %v",
 			e.ClientID, e.MessageType, e.Message, e.Err)
@@ -91,13 +91,13 @@ func (e *MessageError) Error() string {
 		e.ClientID, e.MessageType, e.Err)
 }
 
-func (e *MessageError) Unwrap() error {
+func (e *MsgError) Unwrap() error {
 	return e.Err
 }
 
-// NewMessageError creates a new message error
-func NewMessageError(clientID, messageType string, err error, message string) *MessageError {
-	return &MessageError{
+// NewMsgError creates a new message error
+func NewMsgError(clientID, messageType string, err error, message string) *MsgError {
+	return &MsgError{
 		ClientID:    clientID,
 		MessageType: messageType,
 		Err:         err,
@@ -149,9 +149,9 @@ func IsConnectionError(err error) bool {
 	return errors.As(err, &connErr)
 }
 
-// IsMessageError checks if error is a message error
-func IsMessageError(err error) bool {
-	var msgErr *MessageError
+// IsMsgError checks if error is a message error
+func IsMsgError(err error) bool {
+	var msgErr *MsgError
 	return errors.As(err, &msgErr)
 }
 

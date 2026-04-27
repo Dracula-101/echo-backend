@@ -27,8 +27,8 @@ type ConversationSettingsResponse struct {
 
 // ConversationSettingsServiceInterface defines methods for managing conversation settings.
 type ConversationSettingsServiceInterface interface {
-	GetSettings(ctx context.Context, conversationID uuid.UUID) (*ConversationSettingsResponse, *msgError.MessageError)
-	UpdateSettings(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input repo.ConversationSettingsInput) *msgError.MessageError
+	GetSettings(ctx context.Context, conversationID uuid.UUID) (*ConversationSettingsResponse, *msgError.MsgError)
+	UpdateSettings(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input repo.ConversationSettingsInput) *msgError.MsgError
 }
 
 type conversationSettingsService struct {
@@ -43,7 +43,7 @@ func NewConversationSettingsService(settingsRepo repo.ConversationSettingsReposi
 	}
 }
 
-func (s *conversationSettingsService) GetSettings(ctx context.Context, conversationID uuid.UUID) (*ConversationSettingsResponse, *msgError.MessageError) {
+func (s *conversationSettingsService) GetSettings(ctx context.Context, conversationID uuid.UUID) (*ConversationSettingsResponse, *msgError.MsgError) {
 	settings, err := s.settingsRepo.GetSettings(ctx, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to get conversation settings",
@@ -51,7 +51,7 @@ func (s *conversationSettingsService) GetSettings(ctx context.Context, conversat
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get conversation settings",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to get conversation settings"),
@@ -76,7 +76,7 @@ func (s *conversationSettingsService) GetSettings(ctx context.Context, conversat
 	}, nil
 }
 
-func (s *conversationSettingsService) UpdateSettings(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input repo.ConversationSettingsInput) *msgError.MessageError {
+func (s *conversationSettingsService) UpdateSettings(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input repo.ConversationSettingsInput) *msgError.MsgError {
 	err := s.settingsRepo.UpdateSettings(ctx, conversationID, input)
 	if err != nil {
 		s.logger.Error("Failed to update conversation settings",
@@ -85,7 +85,7 @@ func (s *conversationSettingsService) UpdateSettings(ctx context.Context, conver
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to update conversation settings",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to update conversation settings"),

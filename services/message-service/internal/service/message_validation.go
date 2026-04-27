@@ -6,41 +6,41 @@ import (
 	pkgErrors "shared/pkg/errors"
 )
 
-// handleValidationError maps conversation participant validation errors to MessageError codes.
-func (s *messageService) handleValidationError(dbErr pkgErrors.AppError) *msgError.MessageError {
+// handleValidationError maps conversation participant validation errors to MsgError codes.
+func (s *messageService) handleValidationError(dbErr pkgErrors.AppError) *msgError.MsgError {
 	switch dbErr.Code() {
 	case msgError.CodeBlockedUserNotFound.String():
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Participant not in conversation",
 			Code:    msgError.CodeParticipantNotInConversation,
 			Error:   dbErr,
 		}
 	case msgError.CodeParticipantLeftConversation.String():
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Participant has left the conversation",
 			Code:    msgError.CodeParticipantLeftConversation,
 			Error:   dbErr,
 		}
 	case msgError.CodeParticipantRemovedFromConversation.String():
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Participant has been removed from the conversation",
 			Code:    msgError.CodeParticipantRemovedFromConversation,
 			Error:   dbErr,
 		}
 	case msgError.CodeConversationInactive.String():
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Conversation is inactive",
 			Code:    msgError.CodeConversationInactive,
 			Error:   dbErr,
 		}
 	case msgError.CodeParticipantNotAllowedToSendMessages.String():
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Participant is not allowed to send messages",
 			Code:    msgError.CodeParticipantNotAllowedToSendMessages,
 			Error:   dbErr,
 		}
 	default:
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to validate conversation participant",
 			Code:    msgError.CodeConversationValidationFailed,
 			Error:   dbErr,
@@ -49,12 +49,12 @@ func (s *messageService) handleValidationError(dbErr pkgErrors.AppError) *msgErr
 }
 
 // validateMessage checks that the message type has the required metadata fields.
-func (s *messageService) validateMessage(rawMsgType string, metadata *domain.MessageMetadata) *msgError.MessageError {
+func (s *messageService) validateMessage(rawMsgType string, metadata *domain.MessageMetadata) *msgError.MsgError {
 	msgType := domain.MessageType(rawMsgType)
 	switch msgType {
 	case domain.MessageTypeImage:
 		if metadata == nil || metadata.MediaURL == "" {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Metadata with valid URL is required for image messages",
 				Code:    msgError.CodeMissingMessageMetadata,
 				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for image message"),
@@ -62,7 +62,7 @@ func (s *messageService) validateMessage(rawMsgType string, metadata *domain.Mes
 		}
 	case domain.MessageTypeVideo:
 		if metadata == nil || metadata.MediaURL == "" {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Metadata with valid URL is required for video messages",
 				Code:    msgError.CodeMissingMessageMetadata,
 				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for video message"),
@@ -70,7 +70,7 @@ func (s *messageService) validateMessage(rawMsgType string, metadata *domain.Mes
 		}
 	case domain.MessageTypeFile:
 		if metadata == nil || metadata.MediaURL == "" || metadata.FileName == "" {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Metadata with valid URL and filename is required for file messages",
 				Code:    msgError.CodeMissingMessageMetadata,
 				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for file message"),
@@ -80,7 +80,7 @@ func (s *messageService) validateMessage(rawMsgType string, metadata *domain.Mes
 		// No specific metadata validation for text messages
 	case domain.MessageTypeAudio:
 		if metadata == nil || metadata.MediaURL == "" {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Metadata with valid URL is required for audio messages",
 				Code:    msgError.CodeMissingMessageMetadata,
 				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for audio message"),
@@ -88,14 +88,14 @@ func (s *messageService) validateMessage(rawMsgType string, metadata *domain.Mes
 		}
 	case domain.MessageTypeLocation:
 		if metadata == nil || metadata.Latitude == 0 || metadata.Longitude == 0 {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Metadata with valid latitude and longitude is required for location messages",
 				Code:    msgError.CodeMissingMessageMetadata,
 				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for location message"),
 			}
 		}
 	default:
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Unsupported message type",
 			Code:    msgError.CodeMissingMessageMetadata,
 			Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "unsupported message type"),

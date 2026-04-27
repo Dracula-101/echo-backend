@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"time"
 
+	ratelimiter "echo-backend/services/message-service/api/rate_limiter"
 	conversationHandler "echo-backend/services/message-service/api/v1/handler/conversation"
 	messageHandler "echo-backend/services/message-service/api/v1/handler/message"
+	"echo-backend/services/message-service/api/v1/middleware"
 	"echo-backend/services/message-service/internal/config"
 	"echo-backend/services/message-service/internal/consumer"
 	"echo-backend/services/message-service/internal/health"
 	healthCheckers "echo-backend/services/message-service/internal/health/checkers"
+	msgPublisher "echo-backend/services/message-service/internal/messaging"
 	"echo-backend/services/message-service/internal/repo"
 	"echo-backend/services/message-service/internal/service"
+	cacheSvc "echo-backend/services/message-service/internal/service/cache"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -24,7 +28,7 @@ import (
 	"shared/pkg/messaging/kafka"
 	prommetrics "shared/pkg/monitoring/metrics/prometheus"
 	env "shared/server/env"
-	"shared/server/middleware"
+	coreMiddleware "shared/server/middleware"
 	"shared/server/request"
 	"shared/server/response"
 	"shared/server/router"
@@ -226,71 +230,29 @@ func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *messageHandler.MessageHandler,
 	conversationHandler *conversationHandler.ConversationHandler,
+	ratelimiter ratelimiter.RateLimiter,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
 
 	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/", request.Adapt(messageHandler.SendMessage))
-		r.Get("/", request.Adapt(messageHandler.GetMessages))
-		r.Post("/search", request.Adapt(messageHandler.SearchMessages))
-		r.Get("/sync", request.Adapt(messageHandler.SyncMessages))
-		r.Get("/{id}", request.Adapt(messageHandler.GetMessageByID))
-		r.Put("/{id}", request.Adapt(messageHandler.EditMessage))
-		r.Delete("/{id}", request.Adapt(messageHandler.DeleteMessage))
-		r.Post("/{id}/reactions", request.Adapt(messageHandler.AddReaction))
-		r.Delete("/{id}/reactions/{reaction_id}", request.Adapt(messageHandler.RemoveReaction))
-		r.Get("/{id}/reactions", request.Adapt(messageHandler.GetReactions))
-		r.Post("/{id}/read", request.Adapt(messageHandler.MarkAsRead))
-		r.Get("/{id}/delivery", request.Adapt(messageHandler.GetDeliveryStatus))
-		r.Post("/{id}/forward", request.Adapt(messageHandler.ForwardMessage))
-		r.Post("/{id}/pin", request.Adapt(messageHandler.PinMessage))
-		r.Delete("/{id}/pin", request.Adapt(messageHandler.UnpinMessage))
-		r.Get("/{id}/thread", request.Adapt(messageHandler.GetThread))
-		r.Post("/{id}/bookmark", request.Adapt(messageHandler.BookmarkMessage))
-		r.Delete("/{id}/bookmark", request.Adapt(messageHandler.RemoveBookmark))
-		r.Get("/bookmarks", request.Adapt(messageHandler.GetBookmarks))
-		r.Post("/{id}/report", request.Adapt(messageHandler.ReportMessage))
+		r.Post(
+			"/conversations",
+			request.Adapt(conversationHandler.CreateConversation),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return ratelimiter.CheckCreateConvRateLimit(ctx, key) == nil, 0, nil
+				},
+				func(req request.RequestHandler) string {
+					userID, _ := request.GetUserIDUUIDFromContext(req.Context())
+					return userID.String()
+				},
+				20,
+			),
+		)
 	})
 
-	// Poll endpoints
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/polls", request.Adapt(messageHandler.CreatePoll))
-		r.Post("/polls/{id}/vote", request.Adapt(messageHandler.VotePoll))
-		r.Get("/polls/{id}/results", request.Adapt(messageHandler.GetPollResults))
-	})
-
-	// Conversation endpoints
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/conversations", request.Adapt(conversationHandler.CreateConversation))
-		r.Get("/conversations/me", request.Adapt(conversationHandler.GetUserConversations))
-		r.Get("/conversations/{id}", request.Adapt(conversationHandler.GetConversationByID))
-		r.Put("/conversations/{id}", request.Adapt(conversationHandler.UpdateConversation))
-		r.Delete("/conversations/{id}", request.Adapt(conversationHandler.DeleteConversation))
-		r.Post("/conversations/{id}/participants", request.Adapt(conversationHandler.AddParticipants))
-		r.Delete("/conversations/{id}/participants/{user_id}", request.Adapt(conversationHandler.RemoveParticipant))
-		r.Put("/conversations/{id}/participants/{user_id}", request.Adapt(conversationHandler.UpdateParticipantRole))
-		r.Get("/conversations/{id}/pinned", request.Adapt(conversationHandler.GetPinnedMessages))
-		r.Post("/conversations/{id}/mute", request.Adapt(conversationHandler.MuteConversation))
-		r.Delete("/conversations/{id}/mute", request.Adapt(conversationHandler.UnmuteConversation))
-		r.Get("/conversations/{id}/unread", request.Adapt(conversationHandler.GetUnreadCount))
-		r.Post("/conversations/{id}/typing", request.Adapt(conversationHandler.SetTypingIndicator))
-		r.Get("/conversations/{id}/typing", request.Adapt(conversationHandler.GetTypingUsers))
-		r.Put("/conversations/{id}/draft", request.Adapt(conversationHandler.SaveDraft))
-		r.Get("/conversations/{id}/draft", request.Adapt(conversationHandler.GetDraft))
-		r.Delete("/conversations/{id}/draft", request.Adapt(conversationHandler.DeleteDraft))
-		r.Get("/conversations/{id}/settings", request.Adapt(conversationHandler.GetSettings))
-		r.Put("/conversations/{id}/settings", request.Adapt(conversationHandler.UpdateSettings))
-		r.Post("/conversations/{id}/invites", request.Adapt(conversationHandler.CreateInvite))
-		r.Get("/conversations/{id}/invites", request.Adapt(conversationHandler.GetConversationInvites))
-		r.Delete("/conversations/{id}/invites/{invite_id}", request.Adapt(conversationHandler.RevokeInvite))
-	})
-
-	// Invite accept endpoint (separate from conversation routes)
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/invites/{code}/accept", request.Adapt(conversationHandler.AcceptInvite))
-	})
 	log.Debug("API routes registered successfully")
 	return builder
 }
@@ -299,6 +261,7 @@ func createRouter(
 	messageHandler *messageHandler.MessageHandler,
 	conversationHandler *conversationHandler.ConversationHandler,
 	healthHandler *health.Handler,
+	rateLimiter ratelimiter.RateLimiter,
 	cfg *config.Config,
 	log logger.Logger,
 ) (*router.Router, error) {
@@ -317,23 +280,23 @@ func createRouter(
 			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
 		}).
 		WithEarlyMiddleware(
-			router.Middleware(middleware.Timeout(30*time.Second)),
-			router.Middleware(middleware.BodyLimit(10*1024*1024)),
-			router.Middleware(middleware.RequestReceivedLogger(log)),
-			router.Middleware(middleware.RateLimit(middleware.RateLimitConfig{
+			router.Middleware(coreMiddleware.Timeout(30*time.Second)),
+			router.Middleware(coreMiddleware.BodyLimit(10*1024*1024)),
+			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
+			router.Middleware(coreMiddleware.RateLimit(coreMiddleware.RateLimitConfig{
 				RequestsPerWindow: 100,
 				Window:            time.Minute,
 			})),
-			router.Middleware(middleware.InterceptUserId()),
-			router.Middleware(middleware.InterceptSessionId()),
-			router.Middleware(middleware.InterceptSessionToken()),
+			router.Middleware(coreMiddleware.InterceptUserId()),
+			router.Middleware(coreMiddleware.InterceptSessionId()),
+			router.Middleware(coreMiddleware.InterceptSessionToken()),
 		).
 		WithLateMiddleware(
-			router.Middleware(middleware.Recovery(log)),
-			router.Middleware(middleware.RequestCompletedLogger(log)),
+			router.Middleware(coreMiddleware.Recovery(log)),
+			router.Middleware(coreMiddleware.RequestCompletedLogger(log)),
 		)
 
-	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, log)
+	builder = setupAPIRoutes(builder, messageHandler, conversationHandler, rateLimiter, log)
 
 	r := builder.Build()
 	return r, nil
@@ -498,6 +461,8 @@ func main() {
 	}
 	log.Info("Health checks registered")
 
+	messageCache := cacheSvc.NewMessageCache(cacheClient, log)
+
 	// Initialize repositories
 	messageRepo := repo.NewMessageRepository(dbClient, cacheClient, log)
 	deliveryRepo := repo.NewDeliveryRepository(dbClient, cacheClient, log)
@@ -513,15 +478,15 @@ func main() {
 	reportRepo := repo.NewReportRepository(dbClient, log)
 
 	// Initialize event publisher
-	eventPublisher := service.NewKafkaEventPublisher(kafkaProducer, log)
+	publisher := msgPublisher.NewKafkaEventPublisher(kafkaProducer, log)
 
 	// Initialize services
-	messageService := service.NewMessageService(messageRepo, deliveryRepo, conversationRepo, userRepo, eventPublisher, cacheClient, log)
-	conversationService := service.NewConversationService(conversationRepo, eventPublisher, log)
+	messageService := service.NewMessageService(messageRepo, deliveryRepo, conversationRepo, userRepo, publisher, messageCache, log)
+	conversationService := service.NewConversationService(conversationRepo, userRepo, publisher, messageCache, log)
 	deliveryService := service.NewDeliveryService(deliveryRepo, log)
-	reactionService := service.NewReactionService(reactionRepo, messageRepo, conversationRepo, eventPublisher, log)
-	pollService := service.NewPollService(pollRepo, messageRepo, conversationRepo, eventPublisher, log)
-	typingService := service.NewTypingService(typingRepo, eventPublisher, log)
+	reactionService := service.NewReactionService(reactionRepo, messageRepo, conversationRepo, publisher, log)
+	pollService := service.NewPollService(pollRepo, messageRepo, conversationRepo, publisher, log)
+	typingService := service.NewTypingService(typingRepo, publisher, log)
 	draftService := service.NewDraftService(draftRepo, log)
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, log)
 	settingsService := service.NewConversationSettingsService(settingsRepo, log)
@@ -535,7 +500,8 @@ func main() {
 	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)
 	deliveryEventConsumer := consumer.NewDeliveryEventConsumer(deliveryService, log)
 
-	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, cfg, log)
+	rateLimiter := ratelimiter.NewRateLimiter(cacheClient, log)
+	routerInstance, err := createRouter(messageHandler, conversationHandler, healthHandler, rateLimiter, cfg, log)
 	if err != nil {
 		log.Fatal("Failed to create router", logger.Error(err))
 	}

@@ -8,14 +8,15 @@ import (
 	msgError "echo-backend/services/message-service/internal/error"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
+	"shared/pkg/utils"
 
 	"github.com/google/uuid"
 )
 
 // UpdateConversation updates a conversation's details
-func (s *conversationService) UpdateConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input domain.UpdateConversationInput) (*domain.Conversation, *msgError.MessageError) {
+func (s *conversationService) UpdateConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, input domain.UpdateConversationInput) (*domain.Conversation, *msgError.MsgError) {
 	if !input.HasChanges() {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "No fields to update",
 			Code:    msgError.CodeConversationValidationFailed,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "no fields provided"),
@@ -25,7 +26,7 @@ func (s *conversationService) UpdateConversation(ctx context.Context, conversati
 	// Verify user has edit permission
 	participants, partErr := s.conversationRepo.GetConversationParticipants(ctx, conversationID)
 	if partErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to verify permissions",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   partErr,
@@ -40,7 +41,7 @@ func (s *conversationService) UpdateConversation(ctx context.Context, conversati
 		}
 	}
 	if !hasPermission {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "You don't have permission to update this conversation",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized"),
@@ -50,7 +51,7 @@ func (s *conversationService) UpdateConversation(ctx context.Context, conversati
 	// Check if direct conversation (cannot change title)
 	convType, _ := s.conversationRepo.GetConversationType(ctx, conversationID)
 	if convType == string(domain.ConversationTypeDirect) && input.Title != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Cannot change title of a direct conversation",
 			Code:    msgError.CodeDirectConversationLimit,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "direct conversation title change not allowed"),
@@ -63,7 +64,7 @@ func (s *conversationService) UpdateConversation(ctx context.Context, conversati
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to update conversation",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   err,
@@ -76,12 +77,16 @@ func (s *conversationService) UpdateConversation(ctx context.Context, conversati
 		ConversationID: conversationID,
 		UserID:         userID,
 		Timestamp:      time.Now(),
+		Payload: map[string]interface{}{
+			"title":  utils.DerefString(input.Title),
+			"avatar": utils.DerefString(input.AvatarURL),
+		},
 	})
 
 	// Return updated conversation
 	conv, fetchErr := s.conversationRepo.GetConversationByID(ctx, conversationID, &userID)
 	if fetchErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Conversation updated but failed to fetch result",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   fetchErr,
@@ -91,11 +96,11 @@ func (s *conversationService) UpdateConversation(ctx context.Context, conversati
 }
 
 // DeleteConversation soft-deletes a conversation (owner only)
-func (s *conversationService) DeleteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError {
+func (s *conversationService) DeleteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MsgError {
 	// Verify user is owner
 	participants, partErr := s.conversationRepo.GetConversationParticipants(ctx, conversationID)
 	if partErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to verify permissions",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   partErr,
@@ -110,7 +115,7 @@ func (s *conversationService) DeleteConversation(ctx context.Context, conversati
 		}
 	}
 	if !isOwner {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Only the conversation owner can delete it",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not the owner"),
@@ -123,7 +128,7 @@ func (s *conversationService) DeleteConversation(ctx context.Context, conversati
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to delete conversation",
 			Code:    msgError.CodeConversationDeleteFailed,
 			Error:   err,
@@ -141,18 +146,18 @@ func (s *conversationService) DeleteConversation(ctx context.Context, conversati
 }
 
 // AddParticipants adds participants to a conversation
-func (s *conversationService) AddParticipants(ctx context.Context, input domain.AddParticipantsInput) *msgError.MessageError {
+func (s *conversationService) AddParticipants(ctx context.Context, input domain.AddParticipantsInput) *msgError.MsgError {
 	// Check conversation type - cannot add to direct conversations
 	convType, typeErr := s.conversationRepo.GetConversationType(ctx, input.ConversationID)
 	if typeErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to get conversation type",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   typeErr,
 		}
 	}
 	if convType == string(domain.ConversationTypeDirect) {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Cannot add participants to a direct conversation",
 			Code:    msgError.CodeDirectConversationLimit,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "direct conversation"),
@@ -162,7 +167,7 @@ func (s *conversationService) AddParticipants(ctx context.Context, input domain.
 	// Verify caller has add_members permission
 	participants, partErr := s.conversationRepo.GetConversationParticipants(ctx, input.ConversationID)
 	if partErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to verify permissions",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   partErr,
@@ -177,7 +182,7 @@ func (s *conversationService) AddParticipants(ctx context.Context, input domain.
 		}
 	}
 	if !hasPermission {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "You don't have permission to add participants",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized to add members"),
@@ -190,7 +195,7 @@ func (s *conversationService) AddParticipants(ctx context.Context, input domain.
 			logger.String("conversation_id", input.ConversationID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to add participants",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   err,
@@ -202,25 +207,25 @@ func (s *conversationService) AddParticipants(ctx context.Context, input domain.
 		ConversationID: input.ConversationID,
 		UserID:         input.UserID,
 		Timestamp:      time.Now(),
-		Payload:        map[string]interface{}{"participant_ids": input.ParticipantIDs},
+		Payload:        map[string]interface{}{"added_user_ids": input.ParticipantIDs},
 	})
 
 	return nil
 }
 
 // RemoveParticipant removes a participant from a conversation
-func (s *conversationService) RemoveParticipant(ctx context.Context, input domain.RemoveParticipantInput) *msgError.MessageError {
+func (s *conversationService) RemoveParticipant(ctx context.Context, input domain.RemoveParticipantInput) *msgError.MsgError {
 	// Check conversation type
 	convType, typeErr := s.conversationRepo.GetConversationType(ctx, input.ConversationID)
 	if typeErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to get conversation type",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   typeErr,
 		}
 	}
 	if convType == string(domain.ConversationTypeDirect) {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Cannot remove participants from a direct conversation",
 			Code:    msgError.CodeDirectConversationLimit,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "direct conversation"),
@@ -230,7 +235,7 @@ func (s *conversationService) RemoveParticipant(ctx context.Context, input domai
 	// Check if trying to remove the owner
 	participants, partErr := s.conversationRepo.GetConversationParticipants(ctx, input.ConversationID)
 	if partErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to verify permissions",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   partErr,
@@ -239,7 +244,7 @@ func (s *conversationService) RemoveParticipant(ctx context.Context, input domai
 
 	for _, p := range participants {
 		if p.UserID == input.ParticipantID && p.Role == domain.ParticipantRoleOwner {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Cannot remove the conversation owner",
 				Code:    msgError.CodeCannotRemoveOwner,
 				Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "cannot remove owner"),
@@ -257,7 +262,7 @@ func (s *conversationService) RemoveParticipant(ctx context.Context, input domai
 			}
 		}
 		if !hasPermission {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "You don't have permission to remove participants",
 				Code:    msgError.CodePermissionDenied,
 				Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized"),
@@ -271,7 +276,7 @@ func (s *conversationService) RemoveParticipant(ctx context.Context, input domai
 			logger.String("conversation_id", input.ConversationID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to remove participant",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   err,
@@ -281,19 +286,20 @@ func (s *conversationService) RemoveParticipant(ctx context.Context, input domai
 	s.eventPublisher.PublishConversationEvent(ctx, &domain.ConversationEvent{
 		EventType:      domain.ConversationEventTypeParticipantLeft,
 		ConversationID: input.ConversationID,
-		UserID:         input.ParticipantID,
+		UserID:         input.UserID,
 		Timestamp:      time.Now(),
+		Payload:        map[string]interface{}{"removed_user_id": input.ParticipantID},
 	})
 
 	return nil
 }
 
 // UpdateParticipantRole updates a participant's role
-func (s *conversationService) UpdateParticipantRole(ctx context.Context, input domain.UpdateParticipantRoleInput) *msgError.MessageError {
+func (s *conversationService) UpdateParticipantRole(ctx context.Context, input domain.UpdateParticipantRoleInput) *msgError.MsgError {
 	// Verify caller is owner or admin
 	participants, partErr := s.conversationRepo.GetConversationParticipants(ctx, input.ConversationID)
 	if partErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to verify permissions",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   partErr,
@@ -306,7 +312,7 @@ func (s *conversationService) UpdateParticipantRole(ctx context.Context, input d
 			if p.Role == domain.ParticipantRoleOwner {
 				callerIsOwner = true
 			} else if !p.HasPermissionToManage() {
-				return &msgError.MessageError{
+				return &msgError.MsgError{
 					Message: "You don't have permission to change roles",
 					Code:    msgError.CodePermissionDenied,
 					Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized"),
@@ -318,7 +324,7 @@ func (s *conversationService) UpdateParticipantRole(ctx context.Context, input d
 
 	// Only owner can promote to admin
 	if input.NewRole == "admin" && !callerIsOwner {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Only the owner can promote to admin",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "owner only"),
@@ -326,7 +332,7 @@ func (s *conversationService) UpdateParticipantRole(ctx context.Context, input d
 	}
 
 	if err := s.conversationRepo.UpdateParticipantRole(ctx, input.ConversationID, input.TargetUserID, input.NewRole); err != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to update participant role",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   err,
@@ -345,9 +351,9 @@ func (s *conversationService) UpdateParticipantRole(ctx context.Context, input d
 }
 
 // MuteConversation mutes a conversation for a user
-func (s *conversationService) MuteConversation(ctx context.Context, input domain.MuteConversationInput) *msgError.MessageError {
+func (s *conversationService) MuteConversation(ctx context.Context, input domain.MuteConversationInput) *msgError.MsgError {
 	if err := s.conversationRepo.MuteConversation(ctx, input.ConversationID, input.UserID, input.MuteUntil); err != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to mute conversation",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   err,
@@ -357,9 +363,9 @@ func (s *conversationService) MuteConversation(ctx context.Context, input domain
 }
 
 // UnmuteConversation unmutes a conversation for a user
-func (s *conversationService) UnmuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError {
+func (s *conversationService) UnmuteConversation(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MsgError {
 	if err := s.conversationRepo.UnmuteConversation(ctx, conversationID, userID); err != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to unmute conversation",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   err,
@@ -369,10 +375,10 @@ func (s *conversationService) UnmuteConversation(ctx context.Context, conversati
 }
 
 // GetUnreadCount returns unread count for a user in a conversation
-func (s *conversationService) GetUnreadCount(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (int, *msgError.MessageError) {
+func (s *conversationService) GetUnreadCount(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (int, *msgError.MsgError) {
 	count, err := s.conversationRepo.GetUnreadCount(ctx, conversationID, userID)
 	if err != nil {
-		return 0, &msgError.MessageError{
+		return 0, &msgError.MsgError{
 			Message: "Failed to get unread count",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   err,

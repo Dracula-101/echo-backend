@@ -10,6 +10,7 @@ import (
 
 type UserRepository interface {
 	CheckForBlockedUser(userID uuid.UUID) (bool, pkgErrors.AppError)
+	CheckIfUserBlockedBy(creatorUserID uuid.UUID, otherParticipantID uuid.UUID) (bool, pkgErrors.AppError)
 }
 
 type userRepository struct {
@@ -29,6 +30,20 @@ func (r *userRepository) CheckForBlockedUser(userID uuid.UUID) (bool, pkgErrors.
 	err := r.db.QueryRow(context.Background(), query, userID).Scan(&isBlocked)
 	if err != nil {
 		return false, pkgErrors.FromError(err, pkgErrors.CodeInternal, "Failed to check for blocked user")
+	}
+
+	return isBlocked, nil
+}
+
+func (r *userRepository) CheckIfUserBlockedBy(creatorUserID uuid.UUID, otherParticipantID uuid.UUID) (bool, pkgErrors.AppError) {
+	var isBlocked bool
+	query := `SELECT EXISTS (
+		SELECT 1 FROM users.blocked_users
+		WHERE blocked_user_id = $1 AND blocker_user_id = $2
+	)`
+	err := r.db.QueryRow(context.Background(), query, creatorUserID, otherParticipantID).Scan(&isBlocked)
+	if err != nil {
+		return false, pkgErrors.FromError(err, pkgErrors.CodeInternal, "Failed to check if user is blocked by other participant")
 	}
 
 	return isBlocked, nil

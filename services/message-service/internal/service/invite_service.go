@@ -27,10 +27,10 @@ type InviteResponse struct {
 
 // InviteServiceInterface defines methods for managing conversation invites.
 type InviteServiceInterface interface {
-	CreateInvite(ctx context.Context, conversationID, userID uuid.UUID, maxUses int, expiresAt *time.Time) (*InviteResponse, *msgError.MessageError)
-	AcceptInvite(ctx context.Context, inviteCode string, userID uuid.UUID) *msgError.MessageError
-	GetConversationInvites(ctx context.Context, conversationID uuid.UUID) ([]InviteResponse, *msgError.MessageError)
-	RevokeInvite(ctx context.Context, inviteID uuid.UUID, userID uuid.UUID) *msgError.MessageError
+	CreateInvite(ctx context.Context, conversationID, userID uuid.UUID, maxUses int, expiresAt *time.Time) (*InviteResponse, *msgError.MsgError)
+	AcceptInvite(ctx context.Context, inviteCode string, userID uuid.UUID) *msgError.MsgError
+	GetConversationInvites(ctx context.Context, conversationID uuid.UUID) ([]InviteResponse, *msgError.MsgError)
+	RevokeInvite(ctx context.Context, inviteID uuid.UUID, userID uuid.UUID) *msgError.MsgError
 }
 
 type inviteService struct {
@@ -53,7 +53,7 @@ func generateInviteCode() string {
 	return hex.EncodeToString(b)
 }
 
-func (s *inviteService) CreateInvite(ctx context.Context, conversationID, userID uuid.UUID, maxUses int, expiresAt *time.Time) (*InviteResponse, *msgError.MessageError) {
+func (s *inviteService) CreateInvite(ctx context.Context, conversationID, userID uuid.UUID, maxUses int, expiresAt *time.Time) (*InviteResponse, *msgError.MsgError) {
 	inviteCode := generateInviteCode()
 
 	invite, err := s.inviteRepo.CreateInvite(ctx, conversationID, userID, inviteCode, maxUses, expiresAt)
@@ -64,7 +64,7 @@ func (s *inviteService) CreateInvite(ctx context.Context, conversationID, userID
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to create invite",
 			Code:    msgError.CodeConversationCreationFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to create invite"),
@@ -83,7 +83,7 @@ func (s *inviteService) CreateInvite(ctx context.Context, conversationID, userID
 	}, nil
 }
 
-func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, userID uuid.UUID) *msgError.MessageError {
+func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, userID uuid.UUID) *msgError.MsgError {
 	invite, err := s.inviteRepo.GetInviteByCode(ctx, inviteCode)
 	if err != nil {
 		s.logger.Error("Failed to get invite by code",
@@ -91,7 +91,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 			logger.String("invite_code", inviteCode),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Invite not found",
 			Code:    msgError.CodeConversationNotFound,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeNotFound, "Invite not found"),
@@ -99,7 +99,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 	}
 
 	if invite == nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Invite not found",
 			Code:    msgError.CodeConversationNotFound,
 			Error:   pkgErrors.New(pkgErrors.CodeNotFound, "Invite not found"),
@@ -107,7 +107,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 	}
 
 	if invite.Status == "revoked" {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Invite has been revoked",
 			Code:    msgError.CodeConversationValidationFailed,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "Invite has been revoked"),
@@ -115,7 +115,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 	}
 
 	if invite.ExpiresAt != nil && time.Now().After(*invite.ExpiresAt) {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Invite has expired",
 			Code:    msgError.CodeConversationValidationFailed,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "Invite has expired"),
@@ -123,7 +123,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 	}
 
 	if invite.UseCount >= invite.MaxUses {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Invite has reached maximum uses",
 			Code:    msgError.CodeConversationValidationFailed,
 			Error:   pkgErrors.New(pkgErrors.CodeBadRequest, "Invite has reached maximum uses"),
@@ -136,7 +136,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 			logger.String("invite_id", invite.ID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to accept invite",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to increment invite use count"),
@@ -146,7 +146,7 @@ func (s *inviteService) AcceptInvite(ctx context.Context, inviteCode string, use
 	return nil
 }
 
-func (s *inviteService) GetConversationInvites(ctx context.Context, conversationID uuid.UUID) ([]InviteResponse, *msgError.MessageError) {
+func (s *inviteService) GetConversationInvites(ctx context.Context, conversationID uuid.UUID) ([]InviteResponse, *msgError.MsgError) {
 	invites, err := s.inviteRepo.GetConversationInvites(ctx, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to get conversation invites",
@@ -154,7 +154,7 @@ func (s *inviteService) GetConversationInvites(ctx context.Context, conversation
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get conversation invites",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to get conversation invites"),
@@ -178,7 +178,7 @@ func (s *inviteService) GetConversationInvites(ctx context.Context, conversation
 	return responses, nil
 }
 
-func (s *inviteService) RevokeInvite(ctx context.Context, inviteID uuid.UUID, userID uuid.UUID) *msgError.MessageError {
+func (s *inviteService) RevokeInvite(ctx context.Context, inviteID uuid.UUID, userID uuid.UUID) *msgError.MsgError {
 	if err := s.inviteRepo.RevokeInvite(ctx, inviteID); err != nil {
 		s.logger.Error("Failed to revoke invite",
 			logger.String("service", msgError.ServiceName),
@@ -186,7 +186,7 @@ func (s *inviteService) RevokeInvite(ctx context.Context, inviteID uuid.UUID, us
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to revoke invite",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to revoke invite"),

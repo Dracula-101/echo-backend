@@ -13,7 +13,7 @@ const (
 	// Message events
 	EventMessageReceived = "message.received"
 	EventMessageSent     = "message.sent"
-	EventMessageError    = "message.error"
+	EventMsgError        = "message.error"
 
 	// State events
 	EventStateChange = "state.change"

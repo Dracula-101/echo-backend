@@ -21,9 +21,9 @@ type BookmarkResponse struct {
 
 // BookmarkServiceInterface defines the interface for bookmark operations.
 type BookmarkServiceInterface interface {
-	CreateBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, notes *string) *msgError.MessageError
-	DeleteBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) *msgError.MessageError
-	GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]BookmarkResponse, int, *msgError.MessageError)
+	CreateBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, notes *string) *msgError.MsgError
+	DeleteBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) *msgError.MsgError
+	GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]BookmarkResponse, int, *msgError.MsgError)
 }
 
 type bookmarkService struct {
@@ -40,14 +40,14 @@ func NewBookmarkService(bookmarkRepo repo.BookmarkRepository, log logger.Logger)
 }
 
 // CreateBookmark adds a bookmark for the given message and user.
-func (s *bookmarkService) CreateBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, notes *string) *msgError.MessageError {
+func (s *bookmarkService) CreateBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, notes *string) *msgError.MsgError {
 	if err := s.bookmarkRepo.CreateBookmark(ctx, userID, messageID, notes); err != nil {
 		s.logger.Error("Failed to create bookmark",
 			logger.String("message_id", messageID.String()),
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Code:    msgError.CodeConversationUpdateFailed,
 			Message: "Failed to create bookmark",
 		}
@@ -57,14 +57,14 @@ func (s *bookmarkService) CreateBookmark(ctx context.Context, messageID uuid.UUI
 }
 
 // DeleteBookmark removes a bookmark for the given message and user.
-func (s *bookmarkService) DeleteBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) *msgError.MessageError {
+func (s *bookmarkService) DeleteBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) *msgError.MsgError {
 	if err := s.bookmarkRepo.DeleteBookmark(ctx, userID, messageID); err != nil {
 		s.logger.Error("Failed to delete bookmark",
 			logger.String("message_id", messageID.String()),
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Code:    msgError.CodeConversationUpdateFailed,
 			Message: "Failed to delete bookmark",
 		}
@@ -74,14 +74,14 @@ func (s *bookmarkService) DeleteBookmark(ctx context.Context, messageID uuid.UUI
 }
 
 // GetBookmarks retrieves bookmarks for a user with pagination.
-func (s *bookmarkService) GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]BookmarkResponse, int, *msgError.MessageError) {
+func (s *bookmarkService) GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]BookmarkResponse, int, *msgError.MsgError) {
 	bookmarks, total, err := s.bookmarkRepo.GetBookmarks(ctx, userID, limit, offset)
 	if err != nil {
 		s.logger.Error("Failed to fetch bookmarks",
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return nil, 0, &msgError.MessageError{
+		return nil, 0, &msgError.MsgError{
 			Code:    msgError.CodeConversationFetchFailed,
 			Message: "Failed to fetch bookmarks",
 		}

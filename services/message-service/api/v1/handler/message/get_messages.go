@@ -125,7 +125,7 @@ func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 	// Fetch messages from service
 	var messages []*domain.Message
 	var hasMore bool
-	var msgErr *msgError.MessageError
+	var msgErr *msgError.MsgError
 
 	if afterCursor != "" {
 		messages, hasMore, msgErr = h.messageService.GetMessagesAfter(ctx, conversationID, afterCursor, limit)

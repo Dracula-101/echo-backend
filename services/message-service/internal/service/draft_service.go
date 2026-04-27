@@ -25,9 +25,9 @@ type DraftResponse struct {
 
 // DraftServiceInterface defines the interface for draft business logic.
 type DraftServiceInterface interface {
-	UpsertDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, content string, replyToMessageID *uuid.UUID) *msgError.MessageError
-	GetDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*DraftResponse, *msgError.MessageError)
-	DeleteDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError
+	UpsertDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, content string, replyToMessageID *uuid.UUID) *msgError.MsgError
+	GetDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*DraftResponse, *msgError.MsgError)
+	DeleteDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MsgError
 }
 
 type draftService struct {
@@ -44,7 +44,7 @@ func NewDraftService(draftRepo repo.DraftRepository, log logger.Logger) DraftSer
 }
 
 // UpsertDraft creates or updates a draft for the given user and conversation.
-func (s *draftService) UpsertDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, content string, replyToMessageID *uuid.UUID) *msgError.MessageError {
+func (s *draftService) UpsertDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, content string, replyToMessageID *uuid.UUID) *msgError.MsgError {
 	err := s.draftRepo.UpsertDraft(ctx, userID, conversationID, content, replyToMessageID)
 	if err != nil {
 		s.logger.Error("Failed to upsert draft",
@@ -52,7 +52,7 @@ func (s *draftService) UpsertDraft(ctx context.Context, conversationID uuid.UUID
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to upsert draft",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to upsert draft"),
@@ -63,7 +63,7 @@ func (s *draftService) UpsertDraft(ctx context.Context, conversationID uuid.UUID
 }
 
 // GetDraft retrieves a draft for the given user and conversation. Returns nil DraftResponse if not found.
-func (s *draftService) GetDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*DraftResponse, *msgError.MessageError) {
+func (s *draftService) GetDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) (*DraftResponse, *msgError.MsgError) {
 	draft, err := s.draftRepo.GetDraft(ctx, userID, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to get draft",
@@ -71,7 +71,7 @@ func (s *draftService) GetDraft(ctx context.Context, conversationID uuid.UUID, u
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get draft",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to get draft"),
@@ -99,7 +99,7 @@ func (s *draftService) GetDraft(ctx context.Context, conversationID uuid.UUID, u
 }
 
 // DeleteDraft removes a draft for the given user and conversation.
-func (s *draftService) DeleteDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MessageError {
+func (s *draftService) DeleteDraft(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID) *msgError.MsgError {
 	err := s.draftRepo.DeleteDraft(ctx, userID, conversationID)
 	if err != nil {
 		s.logger.Error("Failed to delete draft",
@@ -107,7 +107,7 @@ func (s *draftService) DeleteDraft(ctx context.Context, conversationID uuid.UUID
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to delete draft",
 			Code:    msgError.CodeConversationUpdateFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to delete draft"),

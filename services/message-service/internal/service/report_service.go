@@ -13,7 +13,7 @@ import (
 
 // ReportServiceInterface defines the interface for message report operations.
 type ReportServiceInterface interface {
-	ReportMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, reportType, description string) *msgError.MessageError
+	ReportMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, reportType, description string) *msgError.MsgError
 }
 
 type reportService struct {
@@ -30,7 +30,7 @@ func NewReportService(reportRepo repo.ReportRepository, log logger.Logger) Repor
 }
 
 // ReportMessage checks if the user has already reported the message and creates a new report.
-func (s *reportService) ReportMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, reportType, description string) *msgError.MessageError {
+func (s *reportService) ReportMessage(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, reportType, description string) *msgError.MsgError {
 	// Check if the user has already reported this message
 	alreadyReported, err := s.reportRepo.HasUserReported(ctx, messageID, userID)
 	if err != nil {
@@ -39,7 +39,7 @@ func (s *reportService) ReportMessage(ctx context.Context, messageID uuid.UUID, 
 			logger.String("user_id", userID.String()),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Code:    msgError.CodeConversationValidationFailed,
 			Message: "Failed to check existing report",
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "Failed to check existing report"),
@@ -47,7 +47,7 @@ func (s *reportService) ReportMessage(ctx context.Context, messageID uuid.UUID, 
 	}
 
 	if alreadyReported {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Code:    msgError.CodeConversationValidationFailed,
 			Message: "You have already reported this message",
 		}
@@ -61,7 +61,7 @@ func (s *reportService) ReportMessage(ctx context.Context, messageID uuid.UUID, 
 			logger.String("user_id", userID.String()),
 			logger.Error(createErr),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Code:    msgError.CodeConversationUpdateFailed,
 			Message: "Failed to create message report",
 			Error:   pkgErrors.FromError(createErr, pkgErrors.CodeDatabaseError, "Failed to create message report"),

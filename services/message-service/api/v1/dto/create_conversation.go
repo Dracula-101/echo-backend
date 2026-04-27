@@ -7,21 +7,41 @@ import (
 	"github.com/google/uuid"
 )
 
+type ConversationType string
+
+const (
+	ConversationTypeDirect    ConversationType = "direct"
+	ConversationTypeGroup     ConversationType = "group"
+	ConversationTypeChannel   ConversationType = "channel"
+	ConversationTypeBroadcast ConversationType = "broadcast"
+)
+
+type AccessPermission string
+
+const (
+	AccessPermissionAll        AccessPermission = "all"
+	AccessPermissionAdminsOnly AccessPermission = "admins"
+)
+
+func (ct AccessPermission) String() string {
+	return string(ct)
+}
+
 // CreateConversationRequest represents the request to create a new conversation
 type CreateConversationRequest struct {
-	ConversationType     string   `json:"conversation_type" validate:"required,oneof=direct group channel broadcast"`
-	ParticipantIDs       []string `json:"participant_ids" validate:"required,min=1,dive,uuid4"`
-	Title                string   `json:"title,omitempty" validate:"omitempty,max=255"`
-	Description          string   `json:"description,omitempty" validate:"omitempty,max=1000"`
-	MaxMembers           *int     `json:"max_members,omitempty" validate:"omitempty,gt=0"`
-	JoinApprovalRequired bool     `json:"join_approval_required"`
-	WhoCanSendMessages   string   `json:"who_can_send_messages,omitempty" validate:"omitempty,oneof=all admins only"`
-	WhoCanAddMembers     string   `json:"who_can_add_members,omitempty" validate:"omitempty,oneof=all admins only"`
-	WhoCanEditInfo       string   `json:"who_can_edit_info,omitempty" validate:"omitempty,oneof=all admins only"`
-	WhoCanPinMessages    string   `json:"who_can_pin_messages,omitempty" validate:"omitempty,oneof=all admins only"`
-	IsEncrypted          bool     `json:"is_encrypted"`
-	AvatarURL            *string  `json:"avatar_url,omitempty"`
-	IsPublic             bool     `json:"is_public"`
+	ConversationType     ConversationType `json:"conversation_type" validate:"required,oneof=direct group channel broadcast"`
+	ParticipantIDs       []string         `json:"participant_ids" validate:"required,min=1,dive,uuid4"`
+	Title                string           `json:"title,omitempty" validate:"omitempty,max=255"`
+	Description          string           `json:"description,omitempty" validate:"omitempty,max=1000"`
+	MaxMembers           *int             `json:"max_members,omitempty" validate:"omitempty,gt=0,lte=256"`
+	JoinApprovalRequired bool             `json:"join_approval_required"`
+	WhoCanSendMessages   AccessPermission `json:"who_can_send_messages,omitempty" validate:"omitempty,oneof=all admins"`
+	WhoCanAddMembers     AccessPermission `json:"who_can_add_members,omitempty" validate:"omitempty,oneof=all admins"`
+	WhoCanEditInfo       AccessPermission `json:"who_can_edit_info,omitempty" validate:"omitempty,oneof=all admins"`
+	WhoCanPinMessages    AccessPermission `json:"who_can_pin_messages,omitempty" validate:"omitempty,oneof=all admins"`
+	IsEncrypted          bool             `json:"is_encrypted"`
+	AvatarURL            *string          `json:"avatar_url,omitempty"`
+	IsPublic             bool             `json:"is_public"`
 }
 
 func NewCreateConversationRequest() *CreateConversationRequest {
@@ -61,6 +81,18 @@ func (r *CreateConversationRequest) ValidateErrors(ve validator.ValidationErrors
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.INVALID_FORMAT,
 					Msg:  "At least one participant is required",
+				})
+			}
+		case "MaxMembers":
+			if fieldErr.Tag() == "gt" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.INVALID_FORMAT,
+					Msg:  "Max members must be greater than 0",
+				})
+			} else if fieldErr.Tag() == "lte" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.INVALID_FORMAT,
+					Msg:  "Max members must be less than or equal to 256",
 				})
 			}
 		case "Title":

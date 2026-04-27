@@ -7,6 +7,7 @@ import (
 
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
+	internalMsg "echo-backend/services/message-service/internal/messaging"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -17,11 +18,11 @@ import (
 )
 
 // EditMessage handles editing an existing message
-func (s *messageService) EditMessage(ctx context.Context, messageID string, userID string, newContent string) (*domain.Message, *msgError.MessageError) {
+func (s *messageService) EditMessage(ctx context.Context, messageID string, userID string, newContent string) (*domain.Message, *msgError.MsgError) {
 	// Fetch message
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -33,14 +34,14 @@ func (s *messageService) EditMessage(ctx context.Context, messageID string, user
 	// Check if user can edit
 	parsedUserID := uuid.MustParse(userID)
 	if msg.IsDeleted {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Cannot edit a deleted message",
 			Code:    msgError.CodeMessageNotEditable,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "message is deleted"),
 		}
 	}
 	if msg.SenderUserID != parsedUserID {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Only the sender can edit this message",
 			Code:    msgError.CodeMessageNotEditable,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not the sender"),
@@ -48,7 +49,7 @@ func (s *messageService) EditMessage(ctx context.Context, messageID string, user
 	}
 	editDeadline := msg.CreatedAt.Add(24 * time.Hour)
 	if time.Now().After(editDeadline) {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Edit window has expired (24 hours)",
 			Code:    msgError.CodeMessageEditExpired,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "edit window expired"),
@@ -62,7 +63,7 @@ func (s *messageService) EditMessage(ctx context.Context, messageID string, user
 			logger.String("message_id", messageID),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to edit message",
 			Code:    msgError.CodeMessageEditFailed,
 			Error:   err,
@@ -88,10 +89,10 @@ func (s *messageService) EditMessage(ctx context.Context, messageID string, user
 }
 
 // DeleteMessage handles soft-deleting a message
-func (s *messageService) DeleteMessage(ctx context.Context, messageID string, userID string, deleteForEveryone bool) *msgError.MessageError {
+func (s *messageService) DeleteMessage(ctx context.Context, messageID string, userID string, deleteForEveryone bool) *msgError.MsgError {
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -117,7 +118,7 @@ func (s *messageService) DeleteMessage(ctx context.Context, messageID string, us
 			}
 		}
 		if !hasPermission {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "You don't have permission to delete this message",
 				Code:    msgError.CodeMessageNotDeletable,
 				Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized to delete"),
@@ -131,7 +132,7 @@ func (s *messageService) DeleteMessage(ctx context.Context, messageID string, us
 			logger.String("message_id", messageID),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to delete message",
 			Code:    msgError.CodeMessageDeleteFailed,
 			Error:   err,
@@ -151,11 +152,11 @@ func (s *messageService) DeleteMessage(ctx context.Context, messageID string, us
 }
 
 // ForwardMessage forwards a message to another conversation
-func (s *messageService) ForwardMessage(ctx context.Context, messageID string, userID string, targetConversationID string, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MessageError) {
+func (s *messageService) ForwardMessage(ctx context.Context, messageID string, userID string, targetConversationID string, deviceInfo request.DeviceInfo, clientIP string) (*domain.Message, *msgError.MsgError) {
 	// Fetch original message
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Original message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -164,7 +165,7 @@ func (s *messageService) ForwardMessage(ctx context.Context, messageID string, u
 
 	originalMsg := domain.NewMessage(*dbMsg)
 	if originalMsg.IsDeleted {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Cannot forward a deleted message",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   pkgErrors.New(pkgErrors.CodeNotFound, "message is deleted"),
@@ -177,7 +178,7 @@ func (s *messageService) ForwardMessage(ctx context.Context, messageID string, u
 	// Validate user is participant in target conversation
 	targetErr := s.conversationRepo.ValidateConversationParticipant(parsedTargetID, parsedUserID)
 	if targetErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "You are not a participant in the target conversation",
 			Code:    msgError.CodeTargetConversationNotFound,
 			Error:   targetErr,
@@ -223,7 +224,7 @@ func (s *messageService) ForwardMessage(ctx context.Context, messageID string, u
 
 	publishErr := s.eventPublisher.PublishChatMessage(ctx, &messageEvent)
 	if publishErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to forward message",
 			Code:    msgError.CodeForwardFailed,
 			Error:   pkgErrors.FromError(publishErr, pkgErrors.CodeInternal, "failed to publish forwarded message"),
@@ -254,10 +255,10 @@ func (s *messageService) ForwardMessage(ctx context.Context, messageID string, u
 }
 
 // PinMessage pins a message
-func (s *messageService) PinMessage(ctx context.Context, messageID string, userID string) *msgError.MessageError {
+func (s *messageService) PinMessage(ctx context.Context, messageID string, userID string) *msgError.MsgError {
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -277,7 +278,7 @@ func (s *messageService) PinMessage(ctx context.Context, messageID string, userI
 		}
 	}
 	if !hasPermission {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "You don't have permission to pin messages",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized to pin"),
@@ -286,13 +287,13 @@ func (s *messageService) PinMessage(ctx context.Context, messageID string, userI
 
 	if err := s.messageRepo.PinMessage(ctx, msg.ConversationID.String(), messageID, userID); err != nil {
 		if err.Code() == pkgErrors.CodeAlreadyExists {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Message is already pinned",
 				Code:    msgError.CodeAlreadyPinned,
 				Error:   err,
 			}
 		}
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to pin message",
 			Code:    msgError.CodePinFailed,
 			Error:   err,
@@ -311,10 +312,10 @@ func (s *messageService) PinMessage(ctx context.Context, messageID string, userI
 }
 
 // UnpinMessage unpins a message
-func (s *messageService) UnpinMessage(ctx context.Context, messageID string, userID string) *msgError.MessageError {
+func (s *messageService) UnpinMessage(ctx context.Context, messageID string, userID string) *msgError.MsgError {
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -334,7 +335,7 @@ func (s *messageService) UnpinMessage(ctx context.Context, messageID string, use
 		}
 	}
 	if !hasPermission {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "You don't have permission to unpin messages",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not authorized to unpin"),
@@ -343,13 +344,13 @@ func (s *messageService) UnpinMessage(ctx context.Context, messageID string, use
 
 	if err := s.messageRepo.UnpinMessage(ctx, msg.ConversationID.String(), messageID); err != nil {
 		if err.Code() == pkgErrors.CodeNotFound {
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Message is not pinned",
 				Code:    msgError.CodeNotPinned,
 				Error:   err,
 			}
 		}
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to unpin message",
 			Code:    msgError.CodePinFailed,
 			Error:   err,
@@ -368,10 +369,10 @@ func (s *messageService) UnpinMessage(ctx context.Context, messageID string, use
 }
 
 // GetPinnedMessages retrieves pinned messages for a conversation
-func (s *messageService) GetPinnedMessages(ctx context.Context, conversationID string) ([]*domain.Message, *msgError.MessageError) {
+func (s *messageService) GetPinnedMessages(ctx context.Context, conversationID string) ([]*domain.Message, *msgError.MsgError) {
 	dbMessages, dbErr := s.messageRepo.GetPinnedMessages(ctx, conversationID)
 	if dbErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get pinned messages",
 			Code:    msgError.CodeMessageRetrievalFailed,
 			Error:   dbErr,
@@ -387,11 +388,11 @@ func (s *messageService) GetPinnedMessages(ctx context.Context, conversationID s
 }
 
 // MarkAsRead marks messages up to a given message as read
-func (s *messageService) MarkAsRead(ctx context.Context, messageID string, userID string) *msgError.MessageError {
+func (s *messageService) MarkAsRead(ctx context.Context, messageID string, userID string) *msgError.MsgError {
 	// Fetch message to get conversation_id
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -404,7 +405,7 @@ func (s *messageService) MarkAsRead(ctx context.Context, messageID string, userI
 	// Validate participant
 	valErr := s.conversationRepo.ValidateConversationParticipant(conversationID, parsedUserID)
 	if valErr != nil {
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "You are not a participant in this conversation",
 			Code:    msgError.CodeParticipantNotInConversation,
 			Error:   valErr,
@@ -419,7 +420,7 @@ func (s *messageService) MarkAsRead(ctx context.Context, messageID string, userI
 			logger.String("user_id", userID),
 			logger.Error(err),
 		)
-		return &msgError.MessageError{
+		return &msgError.MsgError{
 			Message: "Failed to mark messages as read",
 			Code:    msgError.CodeMarkAsReadFailed,
 			Error:   err,
@@ -428,8 +429,8 @@ func (s *messageService) MarkAsRead(ctx context.Context, messageID string, userI
 
 	// Publish delivery event
 	msgID := uuid.MustParse(messageID)
-	s.eventPublisher.PublishDeliveryEvent(ctx, &DeliveryEvent{
-		EventType:      DeliveryEventRead,
+	s.eventPublisher.PublishDeliveryEvent(ctx, &internalMsg.DeliveryEvent{
+		EventType:      internalMsg.DeliveryEventRead,
 		MessageIDs:     []uuid.UUID{msgID},
 		UserID:         parsedUserID,
 		ConversationID: conversationID,
@@ -440,11 +441,11 @@ func (s *messageService) MarkAsRead(ctx context.Context, messageID string, userI
 }
 
 // GetDeliveryStatus returns delivery status summary for a message
-func (s *messageService) GetDeliveryStatus(ctx context.Context, messageID string, userID string) (*domain.DeliveryStatusSummary, *msgError.MessageError) {
+func (s *messageService) GetDeliveryStatus(ctx context.Context, messageID string, userID string) (*domain.DeliveryStatusSummary, *msgError.MsgError) {
 	// Fetch message
 	dbMsg, dbErr := s.messageRepo.GetMessageByID(ctx, messageID)
 	if dbErr != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Message not found",
 			Code:    msgError.CodeMessageNotFound,
 			Error:   dbErr,
@@ -453,7 +454,7 @@ func (s *messageService) GetDeliveryStatus(ctx context.Context, messageID string
 
 	// Only the sender should see detailed delivery status
 	if dbMsg.SenderUserID != userID {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Only the sender can view delivery status",
 			Code:    msgError.CodePermissionDenied,
 			Error:   pkgErrors.New(pkgErrors.CodePermissionDenied, "not the sender"),
@@ -462,7 +463,7 @@ func (s *messageService) GetDeliveryStatus(ctx context.Context, messageID string
 
 	statuses, err := s.deliveryRepo.GetDeliveryStatuses(ctx, messageID)
 	if err != nil {
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get delivery status",
 			Code:    msgError.CodeDeliveryStatusFailed,
 			Error:   err,
@@ -504,10 +505,10 @@ func (s *messageService) GetDeliveryStatus(ctx context.Context, messageID string
 }
 
 // SearchMessages searches for messages matching a query
-func (s *messageService) SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MessageError) {
+func (s *messageService) SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MsgError) {
 	dbMessages, totalCount, dbErr := s.messageRepo.SearchMessages(ctx, query, userID, conversationID, limit, offset)
 	if dbErr != nil {
-		return nil, 0, &msgError.MessageError{
+		return nil, 0, &msgError.MsgError{
 			Message: "Failed to search messages",
 			Code:    msgError.CodeSearchFailed,
 			Error:   dbErr,
@@ -523,16 +524,16 @@ func (s *messageService) SearchMessages(ctx context.Context, userID string, quer
 }
 
 // SyncMessages retrieves messages after a given message ID for client sync
-func (s *messageService) SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MessageError) {
+func (s *messageService) SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MsgError) {
 	return s.GetMessagesAfter(ctx, conversationID, lastMessageID, limit)
 }
 
 // GetThread retrieves thread/reply messages for a parent message
-func (s *messageService) GetThread(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MessageError) {
+func (s *messageService) GetThread(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MsgError) {
 	// Fetch limit+1 to determine hasMore
 	dbMessages, dbErr := s.messageRepo.GetThreadMessages(ctx, parentMessageID, limit+1, beforeMessageID)
 	if dbErr != nil {
-		return nil, false, &msgError.MessageError{
+		return nil, false, &msgError.MsgError{
 			Message: "Failed to get thread messages",
 			Code:    msgError.CodeMessageRetrievalFailed,
 			Error:   dbErr,

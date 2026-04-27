@@ -4,16 +4,11 @@ import (
 	pkgErrors "shared/pkg/errors"
 )
 
-const ServiceName = "message_service"
-
-type MessageErrorCode string
-
-func (c MessageErrorCode) String() string {
-	return string(c)
-}
-
-type MessageError struct {
-	Code    MessageErrorCode
+type MsgError struct {
 	Message string
+	Code    MessageErrorCode
 	Error   pkgErrors.AppError
+	Detail  map[string]interface{}
 }
+
+const ServiceName = "messaging-service"

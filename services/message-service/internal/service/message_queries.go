@@ -11,7 +11,7 @@ import (
 )
 
 // GetMessages retrieves messages for a conversation with cursor-based pagination.
-func (s *messageService) GetMessages(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MessageError) {
+func (s *messageService) GetMessages(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MsgError) {
 	s.logger.Debug("retrieving messages for conversation",
 		logger.String("service", msgError.ServiceName),
 		logger.String("conversation_id", conversationID),
@@ -27,7 +27,7 @@ func (s *messageService) GetMessages(ctx context.Context, conversationID string,
 			logger.String("conversation_id", conversationID),
 			logger.Error(dbErr),
 		)
-		return nil, false, &msgError.MessageError{
+		return nil, false, &msgError.MsgError{
 			Message: "Failed to retrieve messages",
 			Code:    msgError.CodeMessageRetrievalFailed,
 			Error:   pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to retrieve messages"),
@@ -59,7 +59,7 @@ func (s *messageService) GetMessages(ctx context.Context, conversationID string,
 }
 
 // GetMessagesAfter retrieves messages created after a specific message ID, in chronological order.
-func (s *messageService) GetMessagesAfter(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*domain.Message, bool, *msgError.MessageError) {
+func (s *messageService) GetMessagesAfter(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*domain.Message, bool, *msgError.MsgError) {
 	s.logger.Debug("retrieving messages after cursor",
 		logger.String("service", msgError.ServiceName),
 		logger.String("conversation_id", conversationID),
@@ -77,7 +77,7 @@ func (s *messageService) GetMessagesAfter(ctx context.Context, conversationID st
 			logger.String("after_message_id", afterMessageID),
 			logger.Error(dbErr),
 		)
-		return nil, false, &msgError.MessageError{
+		return nil, false, &msgError.MsgError{
 			Message: "Failed to retrieve messages",
 			Code:    msgError.CodeMessageRetrievalFailed,
 			Error:   pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to retrieve messages"),
@@ -106,7 +106,7 @@ func (s *messageService) GetMessagesAfter(ctx context.Context, conversationID st
 }
 
 // GetMessageByID retrieves a single message by ID.
-func (s *messageService) GetMessageByID(ctx context.Context, messageID string) (*domain.Message, *msgError.MessageError) {
+func (s *messageService) GetMessageByID(ctx context.Context, messageID string) (*domain.Message, *msgError.MsgError) {
 	s.logger.Debug("retrieving message by ID",
 		logger.String("service", msgError.ServiceName),
 		logger.String("message_id", messageID),
@@ -119,7 +119,7 @@ func (s *messageService) GetMessageByID(ctx context.Context, messageID string) (
 			logger.String("message_id", messageID),
 			logger.Error(dbErr),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to retrieve message",
 			Code:    msgError.CodeMessageRetrievalFailed,
 			Error:   pkgErrors.FromError(dbErr, pkgErrors.CodeDatabaseError, "failed to retrieve message"),

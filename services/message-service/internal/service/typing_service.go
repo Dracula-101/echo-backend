@@ -6,6 +6,7 @@ import (
 
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
+	"echo-backend/services/message-service/internal/messaging"
 	"echo-backend/services/message-service/internal/repo"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -17,8 +18,8 @@ const typingExpirationSeconds = 10
 
 // TypingServiceInterface defines the typing indicator service methods
 type TypingServiceInterface interface {
-	SetTyping(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, isTyping bool) *msgError.MessageError
-	GetTypingUsers(ctx context.Context, conversationID uuid.UUID, excludeUserID uuid.UUID) ([]TypingUserResponse, *msgError.MessageError)
+	SetTyping(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, isTyping bool) *msgError.MsgError
+	GetTypingUsers(ctx context.Context, conversationID uuid.UUID, excludeUserID uuid.UUID) ([]TypingUserResponse, *msgError.MsgError)
 }
 
 // TypingUserResponse represents a user currently typing
@@ -29,12 +30,12 @@ type TypingUserResponse struct {
 
 type typingService struct {
 	typingRepo     repo.TypingRepository
-	eventPublisher EventPublisher
+	eventPublisher messaging.EventPublisher
 	logger         logger.Logger
 }
 
 // NewTypingService creates a new typing service
-func NewTypingService(typingRepo repo.TypingRepository, eventPublisher EventPublisher, log logger.Logger) TypingServiceInterface {
+func NewTypingService(typingRepo repo.TypingRepository, eventPublisher messaging.EventPublisher, log logger.Logger) TypingServiceInterface {
 	return &typingService{
 		typingRepo:     typingRepo,
 		eventPublisher: eventPublisher,
@@ -42,7 +43,7 @@ func NewTypingService(typingRepo repo.TypingRepository, eventPublisher EventPubl
 	}
 }
 
-func (s *typingService) SetTyping(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, isTyping bool) *msgError.MessageError {
+func (s *typingService) SetTyping(ctx context.Context, conversationID uuid.UUID, userID uuid.UUID, isTyping bool) *msgError.MsgError {
 	if isTyping {
 		expiresAt := time.Now().Add(typingExpirationSeconds * time.Second)
 		if err := s.typingRepo.UpsertTypingIndicator(ctx, conversationID, userID, expiresAt); err != nil {
@@ -51,7 +52,7 @@ func (s *typingService) SetTyping(ctx context.Context, conversationID uuid.UUID,
 				logger.String("user_id", userID.String()),
 				logger.Error(err),
 			)
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Failed to set typing indicator",
 				Code:    msgError.CodeConversationUpdateFailed,
 				Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to set typing indicator"),
@@ -70,7 +71,7 @@ func (s *typingService) SetTyping(ctx context.Context, conversationID uuid.UUID,
 				logger.String("user_id", userID.String()),
 				logger.Error(err),
 			)
-			return &msgError.MessageError{
+			return &msgError.MsgError{
 				Message: "Failed to remove typing indicator",
 				Code:    msgError.CodeConversationUpdateFailed,
 				Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to remove typing indicator"),
@@ -86,14 +87,14 @@ func (s *typingService) SetTyping(ctx context.Context, conversationID uuid.UUID,
 	return nil
 }
 
-func (s *typingService) GetTypingUsers(ctx context.Context, conversationID uuid.UUID, excludeUserID uuid.UUID) ([]TypingUserResponse, *msgError.MessageError) {
+func (s *typingService) GetTypingUsers(ctx context.Context, conversationID uuid.UUID, excludeUserID uuid.UUID) ([]TypingUserResponse, *msgError.MsgError) {
 	indicators, err := s.typingRepo.GetActiveTypingUsers(ctx, conversationID, excludeUserID)
 	if err != nil {
 		s.logger.Error("Failed to get typing users",
 			logger.String("conversation_id", conversationID.String()),
 			logger.Error(err),
 		)
-		return nil, &msgError.MessageError{
+		return nil, &msgError.MsgError{
 			Message: "Failed to get typing users",
 			Code:    msgError.CodeConversationFetchFailed,
 			Error:   pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get typing users"),

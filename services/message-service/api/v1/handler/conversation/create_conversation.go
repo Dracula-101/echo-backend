@@ -21,7 +21,7 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	userID, ok := request.GetUserIDFromContext(handler.Context())
+	userID, ok := request.GetUserIDUUIDFromContext(handler.Context())
 	if !ok {
 		h.log.Warn("User not authenticated",
 			logger.String("request_id", requestID),
@@ -35,13 +35,49 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 	if !handler.ParseValidateAndSend(req) {
 		h.log.Warn("Create conversation validation failed",
 			logger.String("request_id", requestID),
-			logger.String("user_id", userID),
+			logger.String("user_id", userID.String()),
 		)
 		return
 	}
 
+	// check if title is empty for group conversations
+	if req.ConversationType != dto.ConversationTypeDirect && req.Title == "" {
+		h.log.Warn("Title is required for group, channel, and broadcast conversations",
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID.String()),
+		)
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Title is required for group, channel, and broadcast conversations", nil)
+		return
+	}
+
+	if len(req.ParticipantIDs) == 0 {
+		h.log.Warn("At least one participant is required",
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID.String()),
+		)
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "At least one participant is required", nil)
+		return
+	}
+
+	if req.ConversationType == dto.ConversationTypeDirect && len(req.ParticipantIDs) != 1 {
+		h.log.Warn("Direct conversations must have exactly 2 participants",
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID.String()),
+		)
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Direct conversations must have exactly 2 participants", nil)
+		return
+	}
+	if req.MaxMembers != nil && *req.MaxMembers < len(req.ParticipantIDs)+1 {
+		h.log.Warn("Max members must be greater than the number of participants",
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID.String()),
+		)
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Max members must be greater than the number of participants", nil)
+		return
+	}
+
 	h.log.Debug("Creating conversation",
-		logger.String("user_id", userID),
+		logger.String("user_id", userID.String()),
 		logger.Int("participant_count", len(req.ParticipantIDs)),
 	)
 
@@ -49,7 +85,7 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 	conversation, svcErr := h.conversationService.CreateConversation(
 		handler.Context(),
 		domain.CreateConversationInput{
-			CreatorUserID:    uuid.MustParse(userID),
+			CreatorUserID:    userID,
 			ConversationType: domain.ConversationType(req.ConversationType),
 			ParticipantIDs: func() []uuid.UUID {
 				ids := make([]uuid.UUID, 0, len(req.ParticipantIDs))
@@ -65,15 +101,15 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 			IsEncrypted:          req.IsEncrypted,
 			MaxMembers:           req.MaxMembers,
 			JoinApprovalRequired: req.JoinApprovalRequired,
-			WhoCanSendMessages:   req.WhoCanSendMessages,
-			WhoCanAddMembers:     req.WhoCanAddMembers,
-			WhoCanEditInfo:       req.WhoCanEditInfo,
-			WhoCanPinMessages:    req.WhoCanPinMessages,
+			WhoCanSendMessages:   req.WhoCanSendMessages.String(),
+			WhoCanAddMembers:     req.WhoCanAddMembers.String(),
+			WhoCanEditInfo:       req.WhoCanEditInfo.String(),
+			WhoCanPinMessages:    req.WhoCanPinMessages.String(),
 		},
 	)
 	if svcErr != nil {
 		h.log.Error("Failed to create conversation",
-			logger.String("user_id", userID),
+			logger.String("user_id", userID.String()),
 			logger.Error(svcErr.Error),
 		)
 		response.InternalServerError(handler.Context(), handler.Request(), handler.Writer(), "Failed to create conversation", svcErr.Error)
@@ -106,6 +142,6 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 		logger.String("request_id", requestID),
 		logger.String("correlation_id", correlationID),
 		logger.String("conversation_id", conversation.ID.String()),
-		logger.String("user_id", userID),
+		logger.String("user_id", userID.String()),
 	)
 }
