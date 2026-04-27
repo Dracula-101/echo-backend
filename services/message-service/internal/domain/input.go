@@ -6,13 +6,34 @@ import (
 	"github.com/google/uuid"
 )
 
+type Mention struct {
+	UserID uuid.UUID
+}
+
+type Location struct {
+	Latitude  float64
+	Longitude float64
+}
+
+type Contact struct {
+	Name        string
+	Email       string
+	PhoneNumber string
+}
+
 // SendMessageInput contains data for sending a message
 type SendMessageInput struct {
 	ConversationID  uuid.UUID
 	SenderUserID    uuid.UUID
-	Content         string
 	MessageType     MessageType
 	ParentMessageID *uuid.UUID
+	ForwardedFrom   *uuid.UUID
+	Mentions        []Mention
+	StickerID       *uuid.UUID
+	GifID           *uuid.UUID
+	Location        *Location
+	Contact         *Contact
+	Content         string
 	Metadata        *MessageMetadata
 }
 

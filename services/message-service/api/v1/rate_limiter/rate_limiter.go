@@ -28,10 +28,10 @@ const (
 )
 
 type RateLimiter interface {
-	CheckSendRateLimit(ctx context.Context, userID string) *msgError.MsgError
-	CheckCreateConvRateLimit(ctx context.Context, userID string) *msgError.MsgError
-	CheckReactRateLimit(ctx context.Context, userID string) *msgError.MsgError
-	CheckTypingRateLimit(ctx context.Context, userID, conversationID string) *msgError.MsgError
+	CheckSendRateLimit(ctx context.Context, userID string) (bool, int64, error)
+	CheckCreateConvRateLimit(ctx context.Context, userID string) (bool, int64, error)
+	CheckReactRateLimit(ctx context.Context, userID string) (bool, int64, error)
+	CheckTypingRateLimit(ctx context.Context, userID, conversationID string) (bool, error)
 }
 
 type rateLimiter struct {
@@ -46,16 +46,12 @@ func NewRateLimiter(cache cache.Cache, log logger.Logger) RateLimiter {
 	}
 }
 
-func (m *rateLimiter) checkCounterRateLimit(ctx context.Context, key string, limit int64, window time.Duration) *msgError.MsgError {
+func (m *rateLimiter) checkCounterRateLimit(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
 	count, err := m.cache.Increment(ctx, key, 1)
 	if err != nil {
-		return &msgError.MsgError{
-			Message: "Failed to check rate limit",
-			Code:    msgError.CodeCacheError,
-			Error: pkgErrors.FromError(err, msgError.CodeCacheError, "failed to increment rate limit counter").
-				WithService(msgError.ServiceName).
-				WithDetail("key", key),
-		}
+		return false, 0, pkgErrors.FromError(err, msgError.CodeCacheError, "failed to increment rate limit counter").
+			WithService(msgError.ServiceName).
+			WithDetail("key", key)
 	}
 	if count == 1 {
 		if expErr := m.cache.Expire(ctx, key, window); expErr != nil {
@@ -63,58 +59,40 @@ func (m *rateLimiter) checkCounterRateLimit(ctx context.Context, key string, lim
 		}
 	}
 	if count > limit {
-		return &msgError.MsgError{
-			Message: "Rate limit exceeded",
-			Code:    msgError.CodeRateLimited,
-			Error: pkgErrors.New(msgError.CodeRateLimited, "rate limit exceeded").
-				WithService(msgError.ServiceName).
-				WithDetail("key", key),
-		}
+		return false, count, nil
 	}
-	return nil
+	return true, count, nil
 }
-func (m *rateLimiter) CheckSendRateLimit(ctx context.Context, userID string) *msgError.MsgError {
+func (m *rateLimiter) CheckSendRateLimit(ctx context.Context, userID string) (bool, int64, error) {
 	m.log.Info("Checking send rate limit", logger.String("user_id", userID))
 	return m.checkCounterRateLimit(ctx, RLSendPrefix+userID, RLSendLimit, RLSendTTL)
 }
 
-func (m *rateLimiter) CheckCreateConvRateLimit(ctx context.Context, userID string) *msgError.MsgError {
+func (m *rateLimiter) CheckCreateConvRateLimit(ctx context.Context, userID string) (bool, int64, error) {
 	m.log.Info("Checking create conv rate limit", logger.String("user_id", userID))
 	return m.checkCounterRateLimit(ctx, RLCreateConvPrefix+userID, RLCreateConvLimit, RLCreateConvTTL)
 }
 
-func (m *rateLimiter) CheckReactRateLimit(ctx context.Context, userID string) *msgError.MsgError {
+func (m *rateLimiter) CheckReactRateLimit(ctx context.Context, userID string) (bool, int64, error) {
 	m.log.Info("Checking react rate limit", logger.String("user_id", userID))
 	return m.checkCounterRateLimit(ctx, RLReactPrefix+userID, RLReactLimit, RLReactTTL)
 }
 
-func (m *rateLimiter) CheckTypingRateLimit(ctx context.Context, userID, conversationID string) *msgError.MsgError {
+func (m *rateLimiter) CheckTypingRateLimit(ctx context.Context, userID, conversationID string) (bool, error) {
 	m.log.Info("Checking typing rate limit", logger.String("user_id", userID), logger.String("conversation_id", conversationID))
 	key := fmt.Sprintf("%s%s:%s", RLTypingPrefix, userID, conversationID)
 	exists, err := m.cache.Exists(ctx, key)
 	if err != nil {
 		m.log.Error("Failed to check typing rate limit", logger.String("key", key), logger.Error(err))
-		return &msgError.MsgError{
-			Message: "Failed to check typing rate limit",
-			Code:    msgError.CodeCacheError,
-			Error: pkgErrors.FromError(err, msgError.CodeCacheError, "failed to check typing throttle key").
-				WithService(msgError.ServiceName).
-				WithDetail("user_id", userID).
-				WithDetail("conversation_id", conversationID),
-		}
+		return false, pkgErrors.FromError(err, msgError.CodeCacheError, "failed to check typing rate limit").
+			WithService(msgError.ServiceName).
+			WithDetail("key", key)
 	}
 	if exists {
-		return &msgError.MsgError{
-			Message: "Typing update throttled",
-			Code:    msgError.CodeRateLimited,
-			Error: pkgErrors.New(msgError.CodeRateLimited, "typing update throttled").
-				WithService(msgError.ServiceName).
-				WithDetail("user_id", userID).
-				WithDetail("conversation_id", conversationID),
-		}
+		return false, nil
 	}
 	if setErr := m.cache.SetBool(ctx, key, true, RLTypingTTL); setErr != nil {
 		m.log.Warn("Failed to set typing throttle key", logger.String("key", key), logger.Error(setErr))
 	}
-	return nil
+	return true, nil
 }

@@ -138,6 +138,8 @@ const (
 	XBrowserName        = "X-Browser-Name"
 	XBrowserVersion     = "X-Browser-Version"
 	XSessionID          = "X-Session-ID"
+	XSessionToken       = "X-Session-Token"
+	XIdempotencyKey     = "X-Idempotency-Key"
 	XTenantID           = "X-Tenant-ID"
 	XUserID             = "X-User-ID"
 

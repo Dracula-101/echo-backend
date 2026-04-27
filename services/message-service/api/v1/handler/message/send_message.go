@@ -22,6 +22,7 @@ import (
 //
 // Every step logs request + user identifiers for traceability.
 func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
+	ctx := handler.Context()
 	requestID := handler.GetRequestID()
 	correlationID := handler.GetCorrelationID()
 
@@ -42,6 +43,30 @@ func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 		return
 	}
 
+	idempotencyKey, _ := req.GetIdempotencyKeyFromContext(handler.Context())
+	h.log.Debug("Idempotency key extracted",
+		logger.String("request_id", requestID),
+		logger.String("user_id", userID),
+		logger.String("idempotency_key", idempotencyKey),
+	)
+	h.log.Debug("Acquiring message lock",
+		logger.String("request_id", requestID),
+		logger.String("user_id", userID),
+	)
+	h.messageCache.AcquireMessageLock(ctx, idempotencyKey)
+	defer h.messageCache.ReleaseMessageLock(ctx, idempotencyKey)
+
+	conversationId, err := uuid.Parse(handler.PathParam("conversation_id"))
+	if err != nil {
+		h.log.Warn("Invalid conversation ID format",
+			logger.String("request_id", requestID),
+			logger.String("user_id", userID),
+			logger.String("conversation_id", handler.PathParam("conversation_id")),
+		)
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "Invalid conversation ID format", nil)
+		return
+	}
+
 	// Parse and validate request
 	request := dto.NewSendMessageRequest()
 	if !handler.ParseValidateAndSend(request) {
@@ -54,56 +79,47 @@ func (h *MessageHandler) SendMessage(handler *request.RequestHandler) {
 
 	h.log.Debug("Sending message",
 		logger.String("user_id", userID),
-		logger.String("conversation_id", request.ConversationID),
+		logger.String("conversation_id", conversationId.String()),
 		logger.String("message_type", string(request.MessageType)),
 	)
 
-	// Parse parent message ID if provided
-	var parentMessageID *uuid.UUID
-	if request.ParentMessageID != nil {
-		parsed := uuid.MustParse(*request.ParentMessageID)
-		parentMessageID = &parsed
-	}
-
 	// Call service layer
-	msg, err := h.messageService.SendMessage(
+	msg, msgErr := h.messageService.SendMessage(
 		handler.Context(),
 		&domain.SendMessageInput{
-			ConversationID:  uuid.MustParse(request.ConversationID),
+			ConversationID:  conversationId,
 			SenderUserID:    uuid.MustParse(userID),
 			Content:         request.Content,
 			MessageType:     domain.MessageType(request.MessageType),
-			ParentMessageID: parentMessageID,
-			Metadata:        request.Metadata,
+			ParentMessageID: request.ParentMessageID,
 		},
 		handler.GetDeviceInfo(),
 		handler.GetClientIP(),
 	)
 
-	if err != nil {
+	if msgErr != nil {
 		h.log.Error("Failed to send message",
 			logger.String("user_id", userID),
-			logger.String("conversation_id", request.ConversationID),
-			logger.String("code", err.Code.String()),
-			logger.Error(err.Error),
+			logger.String("conversation_id", conversationId.String()),
+			logger.Error(msgErr.Error),
 		)
-		switch err.Code {
+		switch msgErr.Code {
 		case msgError.CodeUserBlocked, msgError.CodeParticipantNotAllowedToSendMessages, msgError.CodeConversationInactive:
-			response.ForbiddenError(handler.Context(), handler.Request(), handler.Writer(), err.Message, err.Error)
+			response.ForbiddenError(handler.Context(), handler.Request(), handler.Writer(), msgErr.Message, msgErr.Error)
 		case msgError.CodeRateLimitExceeded:
-			response.TooManyRequestsError(handler.Context(), handler.Request(), handler.Writer(), err.Message, 100)
+			response.TooManyRequestsError(handler.Context(), handler.Request(), handler.Writer(), msgErr.Message, 100)
 		case msgError.CodeParticipantNotInConversation, msgError.CodeBlockedUserNotFound, msgError.CodeParticipantRemovedFromConversation,
 			msgError.CodeParticipantLeftConversation, msgError.CodeEmptyMessageContent, msgError.CodeMissingMessageMetadata, msgError.CodeConversationValidationFailed:
-			response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), err.Message, err.Error)
+			response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), msgErr.Message, msgErr.Error)
 		default:
-			response.InternalServerError(handler.Context(), handler.Request(), handler.Writer(), err.Message, err.Error)
+			response.InternalServerError(handler.Context(), handler.Request(), handler.Writer(), "Failed to send message", msgErr.Error)
 		}
 		return
 	}
 
 	h.log.Info("Message sent successfully",
 		logger.String("user_id", userID),
-		logger.String("conversation_id", request.ConversationID),
+		logger.String("conversation_id", conversationId.String()),
 	)
 
 	// Send response

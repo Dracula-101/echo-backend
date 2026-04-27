@@ -78,7 +78,6 @@ func (h *MessageHandler) GetThread(handler *req.RequestHandler) {
 			IsEdited:    msg.IsEdited,
 			IsDeleted:   msg.IsDeleted,
 			ReadCount:   msg.ReadCount,
-			Metadata:    msg.Metadata,
 			CreatedAt:   msg.CreatedAt,
 			UpdatedAt:   msg.UpdatedAt,
 			EditedAt:    msg.EditedAt,

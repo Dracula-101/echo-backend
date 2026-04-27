@@ -1080,9 +1080,28 @@ func InterceptDeviceId(skipPaths ...string) Handler {
 func InterceptSessionToken() Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sessionToken := r.Header.Get("X-Session-Token")
+			sessionToken := r.Header.Get(headers.XSessionToken)
 			ctx := context.WithValue(r.Context(), sContext.SessionTokenKey, sessionToken)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func InterceptIdempotencyKey() Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			idempotencyKey := r.Header.Get(headers.XIdempotencyKey)
+			if idempotencyKey != "" {
+				ctx := context.WithValue(r.Context(), sContext.IdempotencyKey, idempotencyKey)
+				r.Header.Set(headers.XIdempotencyKey, idempotencyKey)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			} else {
+				w.Header().Set(headers.ContentType, "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				response.BadRequestError(r.Context(), r, w, "Idempotency key required", errors.New("missing idempotency key in header"))
+				return
+			}
 		})
 	}
 }

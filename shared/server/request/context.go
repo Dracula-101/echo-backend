@@ -95,3 +95,12 @@ func GetDeviceIDFromContext(ctx context.Context) (string, bool) {
 	deviceID, ok := ctx.Value(sContext.DeviceIDKey).(string)
 	return deviceID, ok
 }
+
+func WithIdempotencyKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, sContext.IdempotencyKey, key)
+}
+
+func GetIdempotencyKeyFromContext(ctx context.Context) (string, bool) {
+	key, ok := ctx.Value(sContext.IdempotencyKey).(string)
+	return key, ok
+}

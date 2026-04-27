@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	ratelimiter "echo-backend/services/message-service/api/rate_limiter"
 	conversationHandler "echo-backend/services/message-service/api/v1/handler/conversation"
 	messageHandler "echo-backend/services/message-service/api/v1/handler/message"
 	"echo-backend/services/message-service/api/v1/middleware"
+	ratelimiter "echo-backend/services/message-service/api/v1/rate_limiter"
 	"echo-backend/services/message-service/internal/config"
 	"echo-backend/services/message-service/internal/consumer"
 	"echo-backend/services/message-service/internal/health"
@@ -230,7 +230,7 @@ func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *messageHandler.MessageHandler,
 	conversationHandler *conversationHandler.ConversationHandler,
-	ratelimiter ratelimiter.RateLimiter,
+	rateLimiter ratelimiter.RateLimiter,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
@@ -238,17 +238,17 @@ func setupAPIRoutes(
 	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
 	builder = builder.WithRoutes(func(r *router.Router) {
 		r.Post(
-			"/conversations",
-			request.Adapt(conversationHandler.CreateConversation),
+			"conversations/{conversation_id}/messages",
+			request.Adapt(messageHandler.SendMessage),
 			middleware.RateLimit(
 				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
-					return ratelimiter.CheckCreateConvRateLimit(ctx, key) == nil, 0, nil
+					return rateLimiter.CheckSendRateLimit(ctx, key)
 				},
 				func(req request.RequestHandler) string {
-					userID, _ := request.GetUserIDUUIDFromContext(req.Context())
-					return userID.String()
+					userId, _ := request.GetUserIDFromContext(req.Context())
+					return userId
 				},
-				20,
+				60,
 			),
 		)
 	})
@@ -290,6 +290,7 @@ func createRouter(
 			router.Middleware(coreMiddleware.InterceptUserId()),
 			router.Middleware(coreMiddleware.InterceptSessionId()),
 			router.Middleware(coreMiddleware.InterceptSessionToken()),
+			router.Middleware(coreMiddleware.InterceptIdempotencyKey()),
 		).
 		WithLateMiddleware(
 			router.Middleware(coreMiddleware.Recovery(log)),
@@ -494,7 +495,7 @@ func main() {
 	reportService := service.NewReportService(reportRepo, log)
 
 	// Initialize handlers
-	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, bookmarkService, reportService, log)
+	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, bookmarkService, reportService, messageCache, log)
 	conversationHandler := conversationHandler.NewConversationHandler(conversationService, messageService, typingService, draftService, settingsService, inviteService, log)
 	healthHandler := health.NewHandler(healthMgr)
 	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)
