@@ -2,7 +2,8 @@ package message
 
 import (
 	"echo-backend/services/message-service/internal/service"
-	"echo-backend/services/message-service/internal/service/cache"
+	"echo-backend/services/message-service/internal/service/idempotency"
+
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
@@ -14,7 +15,7 @@ type MessageHandler struct {
 	pollService     service.PollServiceInterface
 	bookmarkService service.BookmarkServiceInterface
 	reportService   service.ReportServiceInterface
-	messageCache    cache.MessageCache
+	idempotency     idempotency.Manager
 	log             logger.Logger
 }
 
@@ -24,7 +25,7 @@ func NewMessageHandler(
 	pollService service.PollServiceInterface,
 	bookmarkService service.BookmarkServiceInterface,
 	reportService service.ReportServiceInterface,
-	messageCache cache.MessageCache,
+	idempotencyMgr idempotency.Manager,
 	log logger.Logger,
 ) *MessageHandler {
 	return &MessageHandler{
@@ -33,7 +34,7 @@ func NewMessageHandler(
 		pollService:     pollService,
 		bookmarkService: bookmarkService,
 		reportService:   reportService,
-		messageCache:    messageCache,
+		idempotency:     idempotencyMgr,
 		log:             log,
 	}
 }

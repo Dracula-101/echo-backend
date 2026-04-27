@@ -6,9 +6,9 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// ForwardMessageRequest represents the request to forward a message to another conversation
 type ForwardMessageRequest struct {
-	TargetConversationID string `json:"target_conversation_id" validate:"required,uuid4"`
+	ConversationIDs []string `json:"conversation_ids" validate:"required,min=1,max=5,dive,uuid4"`
+	Comment         *string  `json:"comment,omitempty" validate:"omitempty,max=500"`
 }
 
 func NewForwardMessageRequest() *ForwardMessageRequest {
@@ -20,21 +20,44 @@ func (r *ForwardMessageRequest) GetValue() interface{} {
 }
 
 func (r *ForwardMessageRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
+	errors := make([]request.ValidationErrorDetail, 0, len(ve))
 	for _, fieldErr := range ve {
-		if fieldErr.Field() == "TargetConversationID" {
-			if fieldErr.Tag() == "required" {
+		switch fieldErr.Field() {
+		case "ConversationIDs":
+			switch fieldErr.Tag() {
+			case "required", "min":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.REQUIRED_FIELD,
-					Msg:  "Target conversation ID is required",
+					Msg:  "conversation_ids must contain at least one target",
 				})
-			} else if fieldErr.Tag() == "uuid4" {
+			case "max":
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.TOO_LONG,
+					Msg:  "conversation_ids must contain at most 5 targets",
+				})
+			case "uuid4":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.INVALID_FORMAT,
-					Msg:  "Target conversation ID must be a valid UUID",
+					Msg:  "each conversation_ids entry must be a valid UUID",
+				})
+			}
+		case "Comment":
+			if fieldErr.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.TOO_LONG,
+					Msg:  "comment must be at most 500 characters",
 				})
 			}
 		}
 	}
 	return errors, nil
+}
+
+type ForwardedTarget struct {
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id"`
+}
+
+type ForwardMessageResponse struct {
+	ForwardedTo []ForwardedTarget `json:"forwarded_to"`
 }

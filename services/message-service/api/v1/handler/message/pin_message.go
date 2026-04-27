@@ -49,5 +49,5 @@ func (h *MessageHandler) PinMessage(handler *req.RequestHandler) {
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Message pinned successfully", nil)
+		response.StatusCreated, "Message pinned", nil)
 }

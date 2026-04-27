@@ -46,6 +46,5 @@ func (h *MessageHandler) MarkAsRead(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Messages marked as read", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }

@@ -9,54 +9,39 @@ import (
 	"github.com/google/uuid"
 )
 
-type MessageType string
-
-const (
-	MessageTypeText      MessageType = "text"
-	MessageTypeImage     MessageType = "image"
-	MessageTypeVideo     MessageType = "video"
-	MessageTypeAudio     MessageType = "audio"
-	MessageTypeDocument  MessageType = "document"
-	MessageTypeSticker   MessageType = "sticker"
-	MessageTypeGIF       MessageType = "gif"
-	MessageTypeLocation  MessageType = "location"
-	MessageTypeContact   MessageType = "contact"
-	MessageTypePoll      MessageType = "poll"
-	MessageTypeVoiceNote MessageType = "voice_note"
-)
-
-type Mention struct {
-	UserID   uuid.UUID `json:"user_id" validate:"required,uuid4"`
-	Username string    `json:"username" validate:"required"`
-	Offset   int       `json:"offset" validate:"required,gte=0"`
-	Length   int       `json:"length" validate:"required,gt=0"`
+type MentionDTO struct {
+	UserID   string `json:"user_id" validate:"required,uuid4"`
+	Username string `json:"username,omitempty"`
+	Offset   int    `json:"offset" validate:"gte=0"`
+	Length   int    `json:"length" validate:"gt=0"`
 }
 
-type Location struct {
-	Latitude  float64 `json:"latitude" validate:"required"`
-	Longitude float64 `json:"longitude" validate:"required"`
+type LocationDTO struct {
+	Latitude  float64 `json:"latitude" validate:"gte=-90,lte=90"`
+	Longitude float64 `json:"longitude" validate:"gte=-180,lte=180"`
 	Name      string  `json:"name,omitempty" validate:"max=255"`
 	Address   string  `json:"address,omitempty" validate:"max=500"`
 }
 
-type Contact struct {
-	Name  string `json:"name" validate:"required"`
-	Phone string `json:"phone,omitempty" validate:"omitempty,e164"`
-	Email string `json:"email,omitempty" validate:"omitempty,email"`
+type ContactDTO struct {
+	Name  string `json:"name" validate:"required,max=100"`
+	Phone string `json:"phone,omitempty" validate:"max=20"`
+	Email string `json:"email,omitempty" validate:"omitempty,email,max=255"`
 }
 
 type SendMessageRequest struct {
-	MessageType     MessageType `json:"message_type" validate:"required,oneof=text image video audio document sticker gif location contact poll voice_note"`
-	Content         string      `json:"content" validate:"required_if=MessageType text,omitempty,min=1,max=10000"`
-	ParentMessageID *uuid.UUID  `json:"parent_message_id,omitempty" validate:"omitempty,uuid4"`
-	ForwardedFrom   *uuid.UUID  `json:"forwarded_from,omitempty" validate:"omitempty,uuid4"`
-	Mentions        []Mention   `json:"mentions,omitempty" validate:"max=50,dive"`
-	StickerID       *uuid.UUID  `json:"sticker_id,omitempty" validate:"required_if=MessageType sticker,omitempty,uuid4"`
-	GifID           *uuid.UUID  `json:"gif_id,omitempty" validate:"required_if=MessageType gif,omitempty,uuid4"`
-	Location        *Location   `json:"location,omitempty" validate:"required_if=MessageType location,omitempty,dive"`
-	Contact         *Contact    `json:"contact,omitempty" validate:"required_if=MessageType contact,omitempty,dive"`
-	ScheduledAt     *time.Time  `json:"scheduled_at,omitempty" validate:"omitempty,gt"`
-	ExpireAfter     *int        `json:"expire_after,omitempty" validate:"omitempty,gt=0"`
+	Content         string             `json:"content,omitempty" validate:"max=65536"`
+	MessageType     domain.MessageType `json:"message_type" validate:"required,oneof=text image video audio document sticker gif location contact poll voice_note"`
+	ParentMessageID *string            `json:"parent_message_id,omitempty" validate:"omitempty,uuid4"`
+	ForwardedFrom   *string            `json:"forwarded_from,omitempty" validate:"omitempty,uuid4"`
+	Mentions        []MentionDTO       `json:"mentions,omitempty" validate:"omitempty,max=50,dive"`
+	MediaIDs        []string           `json:"media_ids,omitempty" validate:"omitempty,max=10,dive,uuid4"`
+	StickerID       *string            `json:"sticker_id,omitempty" validate:"omitempty,uuid4"`
+	GifID           *string            `json:"gif_id,omitempty" validate:"omitempty,uuid4"`
+	Location        *LocationDTO       `json:"location,omitempty"`
+	Contact         *ContactDTO        `json:"contact,omitempty"`
+	ScheduledAt     *time.Time         `json:"scheduled_at,omitempty"`
+	ExpireAfter     *int               `json:"expire_after,omitempty" validate:"omitempty,gt=0,lte=604800"`
 }
 
 func NewSendMessageRequest() *SendMessageRequest {
@@ -68,98 +53,85 @@ func (r *SendMessageRequest) GetValue() interface{} {
 }
 
 func (r *SendMessageRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
+	errors := make([]request.ValidationErrorDetail, 0, len(ve))
 	for _, fieldErr := range ve {
 		switch fieldErr.Field() {
-		case "MessageType":
-			errors = append(errors, request.ValidationErrorDetail{
-				Msg:  "Invalid message type. Allowed values are: text, image, video, audio, document, sticker, gif, location, contact, poll, voice_note.",
-				Code: request.INVALID_FORMAT,
-			})
 		case "Content":
-			errors = append(errors, request.ValidationErrorDetail{
-				Msg:  "Content is required for text messages and must be between 1 and 10000 characters.",
-				Code: request.REQUIRED_FIELD,
-			})
+			if fieldErr.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.TOO_LONG,
+					Msg:  "Message content must be at most 65536 characters",
+				})
+			}
+		case "MessageType":
+			if fieldErr.Tag() == "required" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.REQUIRED_FIELD,
+					Msg:  "Message type is required",
+				})
+			} else if fieldErr.Tag() == "oneof" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.INVALID_FORMAT,
+					Msg:  "Message type must be one of: text, image, video, audio, document, sticker, gif, location, contact, poll, voice_note",
+				})
+			}
 		case "ParentMessageID", "ForwardedFrom", "StickerID", "GifID":
 			errors = append(errors, request.ValidationErrorDetail{
-				Msg:  "Must be a valid UUID.",
 				Code: request.INVALID_FORMAT,
+				Msg:  fieldErr.Field() + " must be a valid UUID",
 			})
 		case "Mentions":
 			errors = append(errors, request.ValidationErrorDetail{
-				Msg:  "Mentions cannot exceed 50 and must be valid.",
 				Code: request.INVALID_FORMAT,
+				Msg:  "Mentions must be a list of at most 50 valid entries",
 			})
-		case "Location":
+		case "MediaIDs":
 			errors = append(errors, request.ValidationErrorDetail{
-				Msg:  "Location must include valid latitude and longitude.",
 				Code: request.INVALID_FORMAT,
+				Msg:  "media_ids must be a list of at most 10 valid UUIDs",
 			})
-		case "Contact":
-			errors = append(errors, request.ValidationErrorDetail{
-				Msg:  "Contact must include a name and valid phone or email.",
-				Code: request.INVALID_FORMAT,
-			})
-		case "ScheduledAt":
-			if fieldErr.Tag() == "gt" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Msg:  "Scheduled time must be in the future.",
-					Code: request.INVALID_FORMAT,
-				})
-			}
 		case "ExpireAfter":
-			if fieldErr.Tag() == "gt" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Msg:  "Expire after must be a positive integer.",
-					Code: request.INVALID_FORMAT,
-				})
-			}
+			errors = append(errors, request.ValidationErrorDetail{
+				Code: request.INVALID_FORMAT,
+				Msg:  "expire_after must be between 1 and 604800 seconds",
+			})
+		case "Latitude", "Longitude":
+			errors = append(errors, request.ValidationErrorDetail{
+				Code: request.INVALID_FORMAT,
+				Msg:  fieldErr.Field() + " is out of range",
+			})
 		}
 	}
 	return errors, nil
 }
 
-type MessageStatus string
-
-const (
-	MessageStatusSent      MessageStatus = "sent"
-	MessageStatusDelivered MessageStatus = "delivered"
-	MessageStatusRead      MessageStatus = "read"
-	MessageStatusFailed    MessageStatus = "failed"
-)
-
 // SendMessageResponse represents the response after sending a message
 type SendMessageResponse struct {
-	ID              uuid.UUID     `json:"id"`
-	ConversationID  uuid.UUID     `json:"conversation_id"`
-	SenderUserID    uuid.UUID     `json:"sender_user_id"`
-	ParentMessageID *uuid.UUID    `json:"parent_message_id,omitempty"`
-	Content         string        `json:"content"`
-	MessageType     MessageType   `json:"message_type"`
-	Status          MessageStatus `json:"status"`
-	IsEdited        bool          `json:"is_edited"`
-	IsDeleted       bool          `json:"is_deleted"`
-	CreatedAt       time.Time     `json:"created_at"`
-	UpdatedAt       time.Time     `json:"updated_at"`
-	DeletedAt       *time.Time    `json:"deleted_at,omitempty"`
-	EditedAt        *time.Time    `json:"edited_at,omitempty"`
+	MessageID      uuid.UUID            `json:"message_id"`
+	ConversationID uuid.UUID            `json:"conversation_id"`
+	SenderUserID   uuid.UUID            `json:"sender_user_id"`
+	MessageType    domain.MessageType   `json:"message_type"`
+	Content        string               `json:"content"`
+	CreatedAt      time.Time            `json:"created_at"`
+	ExpiresAt      *time.Time           `json:"expires_at,omitempty"`
+	Status         domain.MessageStatus `json:"status"`
+	DeliveryCount  int                  `json:"delivery_count"`
+	ReadCount      int                  `json:"read_count"`
+	IsScheduled    bool                 `json:"is_scheduled"`
 }
 
 func NewSendMessageResponse(message *domain.Message) *SendMessageResponse {
 	return &SendMessageResponse{
-		ID:              message.ID,
-		ConversationID:  message.ConversationID,
-		SenderUserID:    message.SenderUserID,
-		ParentMessageID: message.ParentMessageID,
-		Content:         message.Content,
-		MessageType:     MessageType(message.MessageType),
-		Status:          MessageStatus(message.Status),
-		IsEdited:        message.IsEdited,
-		IsDeleted:       message.IsDeleted,
-		CreatedAt:       message.CreatedAt,
-		UpdatedAt:       message.UpdatedAt,
-		DeletedAt:       message.DeletedAt,
-		EditedAt:        message.EditedAt,
+		MessageID:      message.ID,
+		ConversationID: message.ConversationID,
+		SenderUserID:   message.SenderUserID,
+		MessageType:    message.MessageType,
+		Content:        message.Content,
+		CreatedAt:      message.CreatedAt,
+		ExpiresAt:      message.ExpiresAt,
+		Status:         message.Status,
+		DeliveryCount:  message.DeliveryCount,
+		ReadCount:      message.ReadCount,
+		IsScheduled:    message.IsScheduled,
 	}
 }

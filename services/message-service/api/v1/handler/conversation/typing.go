@@ -8,68 +8,51 @@ import (
 	"github.com/google/uuid"
 )
 
-// SetTypingIndicator handles POST /conversations/{id}/typing
 func (h *ConversationHandler) SetTypingIndicator(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
-	// Parse is_typing from query param or default to true for POST
 	isTyping := handler.QueryParam("is_typing") != "false"
 
 	h.log.Debug("Setting typing indicator",
-		logger.String("user_id", userID),
-		logger.String("conversation_id", conversationID),
+		logger.String("user_id", userID.String()),
+		logger.String("conversation_id", convUUID.String()),
 		logger.Bool("is_typing", isTyping),
 	)
 
-	svcErr := h.typingService.SetTyping(ctx, convUUID, uuid.MustParse(userID), isTyping)
-	if svcErr != nil {
+	if svcErr := h.typingService.SetTyping(ctx, convUUID, userID, isTyping); svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Typing indicator updated", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }
 
-// GetTypingUsers handles GET /conversations/{id}/typing
 func (h *ConversationHandler) GetTypingUsers(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
-	users, svcErr := h.typingService.GetTypingUsers(ctx, convUUID, uuid.MustParse(userID))
+	users, svcErr := h.typingService.GetTypingUsers(ctx, convUUID, userID)
 	if svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
@@ -89,8 +72,6 @@ func (h *ConversationHandler) GetTypingUsers(handler *request.RequestHandler) {
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
 		response.StatusOK, "Typing users retrieved",
-		map[string]interface{}{
-			"typing_users": resp,
-		},
+		map[string]interface{}{"typing_users": resp},
 	)
 }

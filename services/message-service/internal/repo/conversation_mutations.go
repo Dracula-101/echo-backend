@@ -40,6 +40,36 @@ func (r *conversationRepository) UpdateConversation(ctx context.Context, convers
 		args = append(args, *input.IsPublic)
 		argIdx++
 	}
+	if input.WhoCanSendMessages != nil {
+		setClauses = append(setClauses, fmt.Sprintf("who_can_send_messages = $%d", argIdx))
+		args = append(args, *input.WhoCanSendMessages)
+		argIdx++
+	}
+	if input.WhoCanAddMembers != nil {
+		setClauses = append(setClauses, fmt.Sprintf("who_can_add_members = $%d", argIdx))
+		args = append(args, *input.WhoCanAddMembers)
+		argIdx++
+	}
+	if input.WhoCanEditInfo != nil {
+		setClauses = append(setClauses, fmt.Sprintf("who_can_edit_info = $%d", argIdx))
+		args = append(args, *input.WhoCanEditInfo)
+		argIdx++
+	}
+	if input.WhoCanPinMessages != nil {
+		setClauses = append(setClauses, fmt.Sprintf("who_can_pin_messages = $%d", argIdx))
+		args = append(args, *input.WhoCanPinMessages)
+		argIdx++
+	}
+	if input.InviteLinkExpiresAt != nil {
+		setClauses = append(setClauses, fmt.Sprintf("invite_link_expires_at = $%d", argIdx))
+		args = append(args, *input.InviteLinkExpiresAt)
+		argIdx++
+	}
+	if input.JoinApprovalRequired != nil {
+		setClauses = append(setClauses, fmt.Sprintf("join_approval_required = $%d", argIdx))
+		args = append(args, *input.JoinApprovalRequired)
+		argIdx++
+	}
 
 	if len(setClauses) == 0 {
 		return nil

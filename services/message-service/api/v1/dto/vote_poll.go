@@ -6,9 +6,8 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// VotePollRequest represents the request to vote on a poll
 type VotePollRequest struct {
-	OptionIndexes []int `json:"option_indexes" validate:"required,min=1,dive,min=0"`
+	OptionIDs []string `json:"option_ids" validate:"required,min=1,dive,uuid4"`
 }
 
 func NewVotePollRequest() *VotePollRequest {
@@ -20,19 +19,14 @@ func (r *VotePollRequest) GetValue() interface{} {
 }
 
 func (r *VotePollRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
+	errors := make([]request.ValidationErrorDetail, 0, len(ve))
 	for _, fieldErr := range ve {
-		if fieldErr.Field() == "OptionIndexes" {
-			if fieldErr.Tag() == "required" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.REQUIRED_FIELD,
-					Msg:  "Option indexes are required",
-				})
-			} else if fieldErr.Tag() == "min" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.INVALID_FORMAT,
-					Msg:  "At least one option index is required",
-				})
+		if fieldErr.Field() == "OptionIDs" {
+			switch fieldErr.Tag() {
+			case "required", "min":
+				errors = append(errors, request.ValidationErrorDetail{Code: request.REQUIRED_FIELD, Msg: "option_ids is required"})
+			case "uuid4":
+				errors = append(errors, request.ValidationErrorDetail{Code: request.INVALID_FORMAT, Msg: "each option_ids entry must be a valid UUID"})
 			}
 		}
 	}

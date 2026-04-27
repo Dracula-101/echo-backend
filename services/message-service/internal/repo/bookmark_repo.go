@@ -8,20 +8,29 @@ import (
 	"shared/pkg/logger"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
-// Bookmark represents a user's bookmarked message.
 type Bookmark struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	MessageID    uuid.UUID
-	Notes        *string
-	BookmarkedAt time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	MessageID      uuid.UUID
+	CollectionName *string
+	Notes          *string
+	Tags           []string
+	BookmarkedAt   time.Time
 }
 
-// BookmarkRepository defines the interface for bookmark interactions.
+type CreateBookmarkInput struct {
+	UserID         uuid.UUID
+	MessageID      uuid.UUID
+	CollectionName *string
+	Notes          *string
+	Tags           []string
+}
+
 type BookmarkRepository interface {
-	CreateBookmark(ctx context.Context, userID, messageID uuid.UUID, notes *string) error
+	CreateBookmark(ctx context.Context, input CreateBookmarkInput) error
 	DeleteBookmark(ctx context.Context, userID, messageID uuid.UUID) error
 	GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Bookmark, int, error)
 }
@@ -39,18 +48,17 @@ func NewBookmarkRepository(db database.Database, log logger.Logger) BookmarkRepo
 	}
 }
 
-// CreateBookmark inserts a new bookmark. Returns an error on conflict.
-func (r *bookmarkRepository) CreateBookmark(ctx context.Context, userID, messageID uuid.UUID, notes *string) error {
+func (r *bookmarkRepository) CreateBookmark(ctx context.Context, input CreateBookmarkInput) error {
 	query := `
-		INSERT INTO messages.bookmarks (user_id, message_id, notes)
-		VALUES ($1, $2, $3)
+		INSERT INTO messages.bookmarks (user_id, message_id, collection_name, notes, tags)
+		VALUES ($1, $2, $3, $4, $5)
 	`
 
-	_, err := r.db.Exec(ctx, query, userID, messageID, notes)
+	_, err := r.db.Exec(ctx, query, input.UserID, input.MessageID, input.CollectionName, input.Notes, pq.Array(input.Tags))
 	if err != nil {
 		r.logger.Error("Failed to create bookmark",
-			logger.String("user_id", userID.String()),
-			logger.String("message_id", messageID.String()),
+			logger.String("user_id", input.UserID.String()),
+			logger.String("message_id", input.MessageID.String()),
 			logger.Error(err),
 		)
 		return err
@@ -98,7 +106,7 @@ func (r *bookmarkRepository) GetBookmarks(ctx context.Context, userID uuid.UUID,
 	}
 
 	query := `
-		SELECT id, user_id, message_id, notes, bookmarked_at
+		SELECT id, user_id, message_id, collection_name, notes, tags, bookmarked_at
 		FROM messages.bookmarks
 		WHERE user_id = $1
 		ORDER BY bookmarked_at DESC
@@ -122,7 +130,9 @@ func (r *bookmarkRepository) GetBookmarks(ctx context.Context, userID uuid.UUID,
 			&b.ID,
 			&b.UserID,
 			&b.MessageID,
+			&b.CollectionName,
 			&b.Notes,
+			pq.Array(&b.Tags),
 			&b.BookmarkedAt,
 		); scanErr != nil {
 			r.logger.Error("Failed to scan bookmark row",

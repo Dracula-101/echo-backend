@@ -8,38 +8,30 @@ import (
 	"github.com/google/uuid"
 )
 
-// UnmuteConversation unmutes notifications for a conversation
 func (h *ConversationHandler) UnmuteConversation(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
 	h.log.Debug("Unmuting conversation",
-		logger.String("user_id", userID),
-		logger.String("conversation_id", conversationID),
+		logger.String("user_id", userID.String()),
+		logger.String("conversation_id", convUUID.String()),
 	)
 
-	svcErr := h.conversationService.UnmuteConversation(ctx, convUUID, uuid.MustParse(userID))
+	svcErr := h.conversationService.UnmuteConversation(ctx, convUUID, userID)
 	if svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Conversation unmuted successfully", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }

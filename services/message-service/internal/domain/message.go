@@ -21,16 +21,18 @@ type Message struct {
 	Status          MessageStatus
 	IsEdited        bool
 	IsDeleted       bool
+	IsScheduled     bool
+	ExpiresAt       *time.Time
 	Metadata        *MessageMetadata
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       *time.Time
 	EditedAt        *time.Time
 
-	// Enriched fields (from joins)
-	SenderName   string
-	SenderAvatar string
-	ReadCount    int
+	SenderName    string
+	SenderAvatar  string
+	ReadCount     int
+	DeliveryCount int
 }
 
 func NewMessage(model db.Message) Message {
@@ -86,12 +88,18 @@ func NewMessage(model db.Message) Message {
 type MessageType string
 
 const (
-	MessageTypeText     MessageType = "text"
-	MessageTypeImage    MessageType = "image"
-	MessageTypeVideo    MessageType = "video"
-	MessageTypeAudio    MessageType = "audio"
-	MessageTypeFile     MessageType = "file"
-	MessageTypeLocation MessageType = "location"
+	MessageTypeText      MessageType = "text"
+	MessageTypeImage     MessageType = "image"
+	MessageTypeVideo     MessageType = "video"
+	MessageTypeAudio     MessageType = "audio"
+	MessageTypeFile      MessageType = "file"
+	MessageTypeDocument  MessageType = "document"
+	MessageTypeLocation  MessageType = "location"
+	MessageTypeContact   MessageType = "contact"
+	MessageTypeSticker   MessageType = "sticker"
+	MessageTypeGif       MessageType = "gif"
+	MessageTypePoll      MessageType = "poll"
+	MessageTypeVoiceNote MessageType = "voice_note"
 )
 
 // MessageStatus represents the delivery status
@@ -105,9 +113,7 @@ const (
 	MessageStatusFailed    MessageStatus = "failed"
 )
 
-// MessageMetadata contains additional message information
 type MessageMetadata struct {
-	// Media information
 	MediaURL      string `json:"media_url,omitempty"`
 	ThumbnailURL  string `json:"thumbnail_url,omitempty"`
 	MediaSize     int    `json:"media_size,omitempty"`
@@ -117,12 +123,20 @@ type MessageMetadata struct {
 	Width         int    `json:"width,omitempty"`
 	Height        int    `json:"height,omitempty"`
 
-	// Location information
-	Latitude  float64 `json:"latitude,omitempty"`
-	Longitude float64 `json:"longitude,omitempty"`
-	Address   string  `json:"address,omitempty"`
+	MediaIDs []string `json:"media_ids,omitempty"`
 
-	// Other metadata
+	StickerID string `json:"sticker_id,omitempty"`
+	GifID     string `json:"gif_id,omitempty"`
+
+	Latitude     float64 `json:"latitude,omitempty"`
+	Longitude    float64 `json:"longitude,omitempty"`
+	LocationName string  `json:"location_name,omitempty"`
+	Address      string  `json:"address,omitempty"`
+
+	ContactName  string `json:"contact_name,omitempty"`
+	ContactPhone string `json:"contact_phone,omitempty"`
+	ContactEmail string `json:"contact_email,omitempty"`
+
 	LinkPreview *LinkPreview `json:"link_preview,omitempty"`
 }
 

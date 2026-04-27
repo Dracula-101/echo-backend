@@ -5,6 +5,7 @@ import (
 
 	"echo-backend/services/message-service/api/v1/dto"
 	"echo-backend/services/message-service/internal/domain"
+
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
@@ -12,24 +13,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// MuteConversation mutes notifications for a conversation
 func (h *ConversationHandler) MuteConversation(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
@@ -42,7 +36,7 @@ func (h *ConversationHandler) MuteConversation(handler *request.RequestHandler) 
 	if req.MuteUntil != nil {
 		t, err := time.Parse(time.RFC3339, *req.MuteUntil)
 		if err != nil {
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "mute_until must be a valid RFC3339 timestamp", nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "mute_until must be a valid RFC3339 timestamp", err)
 			return
 		}
 		if t.Before(time.Now()) {
@@ -53,13 +47,13 @@ func (h *ConversationHandler) MuteConversation(handler *request.RequestHandler) 
 	}
 
 	h.log.Debug("Muting conversation",
-		logger.String("user_id", userID),
-		logger.String("conversation_id", conversationID),
+		logger.String("user_id", userID.String()),
+		logger.String("conversation_id", convUUID.String()),
 	)
 
 	svcErr := h.conversationService.MuteConversation(ctx, domain.MuteConversationInput{
 		ConversationID: convUUID,
-		UserID:         uuid.MustParse(userID),
+		UserID:         userID,
 		MuteUntil:      muteUntil,
 	})
 	if svcErr != nil {
@@ -68,5 +62,10 @@ func (h *ConversationHandler) MuteConversation(handler *request.RequestHandler) 
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Conversation muted successfully", nil)
+		response.StatusOK, "Conversation muted",
+		map[string]interface{}{
+			"is_muted":    true,
+			"muted_until": muteUntil,
+		},
+	)
 }

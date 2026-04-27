@@ -41,7 +41,12 @@ func (h *MessageHandler) ReportMessage(handler *req.RequestHandler) {
 		logger.String("report_type", request.ReportType),
 	)
 
-	svcErr := h.reportService.ReportMessage(ctx, msgUUID, uuid.MustParse(userID), request.ReportType, request.Description)
+	uID, parseErr := uuid.Parse(userID)
+	if parseErr != nil {
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid user id", parseErr)
+		return
+	}
+	svcErr := h.reportService.ReportMessage(ctx, msgUUID, uID, request.ReportType, request.Description)
 	if svcErr != nil {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return

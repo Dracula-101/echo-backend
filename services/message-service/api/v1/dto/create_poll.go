@@ -6,13 +6,16 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// CreatePollRequest represents the request to create a poll
 type CreatePollRequest struct {
-	ConversationID string   `json:"conversation_id" validate:"required,uuid4"`
-	Question       string   `json:"question" validate:"required,min=1,max=500"`
-	Options        []string `json:"options" validate:"required,min=2,max=10,dive,min=1,max=200"`
-	AllowMultiple  bool     `json:"allow_multiple"`
-	ExpiresAt      *string  `json:"expires_at,omitempty"`
+	ConversationID       string   `json:"conversation_id" validate:"required,uuid4"`
+	Question             string   `json:"question" validate:"required,min=1,max=255"`
+	Options              []string `json:"options" validate:"required,min=2,max=10,dive,min=1,max=100"`
+	AllowMultipleAnswers bool     `json:"allow_multiple_answers"`
+	IsAnonymous          bool     `json:"is_anonymous"`
+	IsQuiz               bool     `json:"is_quiz"`
+	CorrectOptionIndex   *int     `json:"correct_option_index,omitempty" validate:"omitempty,gte=0"`
+	Explanation          *string  `json:"explanation,omitempty" validate:"omitempty,max=200"`
+	ClosesAt             *string  `json:"closes_at,omitempty"`
 }
 
 func NewCreatePollRequest() *CreatePollRequest {
@@ -24,54 +27,32 @@ func (r *CreatePollRequest) GetValue() interface{} {
 }
 
 func (r *CreatePollRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
+	errors := make([]request.ValidationErrorDetail, 0, len(ve))
 	for _, fieldErr := range ve {
 		switch fieldErr.Field() {
 		case "ConversationID":
 			if fieldErr.Tag() == "required" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.REQUIRED_FIELD,
-					Msg:  "Conversation ID is required",
-				})
+				errors = append(errors, request.ValidationErrorDetail{Code: request.REQUIRED_FIELD, Msg: "conversation_id is required"})
 			} else if fieldErr.Tag() == "uuid4" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.INVALID_FORMAT,
-					Msg:  "Conversation ID must be a valid UUID",
-				})
+				errors = append(errors, request.ValidationErrorDetail{Code: request.INVALID_FORMAT, Msg: "conversation_id must be a valid UUID"})
 			}
 		case "Question":
-			if fieldErr.Tag() == "required" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.REQUIRED_FIELD,
-					Msg:  "Poll question is required",
-				})
-			} else if fieldErr.Tag() == "min" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.TOO_SHORT,
-					Msg:  "Poll question cannot be empty",
-				})
-			} else if fieldErr.Tag() == "max" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.TOO_LONG,
-					Msg:  "Poll question must be at most 500 characters",
-				})
+			switch fieldErr.Tag() {
+			case "required", "min":
+				errors = append(errors, request.ValidationErrorDetail{Code: request.REQUIRED_FIELD, Msg: "question is required"})
+			case "max":
+				errors = append(errors, request.ValidationErrorDetail{Code: request.TOO_LONG, Msg: "question must be at most 255 characters"})
 			}
 		case "Options":
-			if fieldErr.Tag() == "required" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.REQUIRED_FIELD,
-					Msg:  "Poll options are required",
-				})
-			} else if fieldErr.Tag() == "min" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.INVALID_FORMAT,
-					Msg:  "At least 2 poll options are required",
-				})
-			} else if fieldErr.Tag() == "max" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.INVALID_FORMAT,
-					Msg:  "At most 10 poll options are allowed",
-				})
+			switch fieldErr.Tag() {
+			case "required", "min":
+				errors = append(errors, request.ValidationErrorDetail{Code: request.INVALID_FORMAT, Msg: "options must contain at least 2 entries"})
+			case "max":
+				errors = append(errors, request.ValidationErrorDetail{Code: request.TOO_LONG, Msg: "options must contain at most 10 entries"})
+			}
+		case "Explanation":
+			if fieldErr.Tag() == "max" {
+				errors = append(errors, request.ValidationErrorDetail{Code: request.TOO_LONG, Msg: "explanation must be at most 200 characters"})
 			}
 		}
 	}

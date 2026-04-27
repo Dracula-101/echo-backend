@@ -11,17 +11,25 @@ import (
 	"github.com/google/uuid"
 )
 
-// BookmarkResponse represents a bookmark returned to callers.
 type BookmarkResponse struct {
-	ID           string
-	MessageID    string
-	Notes        *string
-	BookmarkedAt time.Time
+	ID             string
+	MessageID      string
+	CollectionName *string
+	Notes          *string
+	Tags           []string
+	BookmarkedAt   time.Time
 }
 
-// BookmarkServiceInterface defines the interface for bookmark operations.
+type CreateBookmarkInput struct {
+	MessageID      uuid.UUID
+	UserID         uuid.UUID
+	CollectionName *string
+	Notes          *string
+	Tags           []string
+}
+
 type BookmarkServiceInterface interface {
-	CreateBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, notes *string) *msgError.MsgError
+	CreateBookmark(ctx context.Context, input CreateBookmarkInput) *msgError.MsgError
 	DeleteBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) *msgError.MsgError
 	GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]BookmarkResponse, int, *msgError.MsgError)
 }
@@ -31,7 +39,6 @@ type bookmarkService struct {
 	logger       logger.Logger
 }
 
-// NewBookmarkService creates a new instance of BookmarkServiceInterface.
 func NewBookmarkService(bookmarkRepo repo.BookmarkRepository, log logger.Logger) BookmarkServiceInterface {
 	return &bookmarkService{
 		bookmarkRepo: bookmarkRepo,
@@ -39,12 +46,17 @@ func NewBookmarkService(bookmarkRepo repo.BookmarkRepository, log logger.Logger)
 	}
 }
 
-// CreateBookmark adds a bookmark for the given message and user.
-func (s *bookmarkService) CreateBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, notes *string) *msgError.MsgError {
-	if err := s.bookmarkRepo.CreateBookmark(ctx, userID, messageID, notes); err != nil {
+func (s *bookmarkService) CreateBookmark(ctx context.Context, in CreateBookmarkInput) *msgError.MsgError {
+	if err := s.bookmarkRepo.CreateBookmark(ctx, repo.CreateBookmarkInput{
+		UserID:         in.UserID,
+		MessageID:      in.MessageID,
+		CollectionName: in.CollectionName,
+		Notes:          in.Notes,
+		Tags:           in.Tags,
+	}); err != nil {
 		s.logger.Error("Failed to create bookmark",
-			logger.String("message_id", messageID.String()),
-			logger.String("user_id", userID.String()),
+			logger.String("message_id", in.MessageID.String()),
+			logger.String("user_id", in.UserID.String()),
 			logger.Error(err),
 		)
 		return &msgError.MsgError{
@@ -52,11 +64,9 @@ func (s *bookmarkService) CreateBookmark(ctx context.Context, messageID uuid.UUI
 			Message: "Failed to create bookmark",
 		}
 	}
-
 	return nil
 }
 
-// DeleteBookmark removes a bookmark for the given message and user.
 func (s *bookmarkService) DeleteBookmark(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) *msgError.MsgError {
 	if err := s.bookmarkRepo.DeleteBookmark(ctx, userID, messageID); err != nil {
 		s.logger.Error("Failed to delete bookmark",
@@ -69,11 +79,9 @@ func (s *bookmarkService) DeleteBookmark(ctx context.Context, messageID uuid.UUI
 			Message: "Failed to delete bookmark",
 		}
 	}
-
 	return nil
 }
 
-// GetBookmarks retrieves bookmarks for a user with pagination.
 func (s *bookmarkService) GetBookmarks(ctx context.Context, userID uuid.UUID, limit, offset int) ([]BookmarkResponse, int, *msgError.MsgError) {
 	bookmarks, total, err := s.bookmarkRepo.GetBookmarks(ctx, userID, limit, offset)
 	if err != nil {
@@ -90,10 +98,12 @@ func (s *bookmarkService) GetBookmarks(ctx context.Context, userID uuid.UUID, li
 	responses := make([]BookmarkResponse, len(bookmarks))
 	for i, b := range bookmarks {
 		responses[i] = BookmarkResponse{
-			ID:           b.ID.String(),
-			MessageID:    b.MessageID.String(),
-			Notes:        b.Notes,
-			BookmarkedAt: b.BookmarkedAt,
+			ID:             b.ID.String(),
+			MessageID:      b.MessageID.String(),
+			CollectionName: b.CollectionName,
+			Notes:          b.Notes,
+			Tags:           b.Tags,
+			BookmarkedAt:   b.BookmarkedAt,
 		}
 	}
 

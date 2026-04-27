@@ -1,6 +1,8 @@
 package message
 
 import (
+	"time"
+
 	"echo-backend/services/message-service/api/v1/dto"
 	"shared/pkg/logger"
 	req "shared/server/request"
@@ -9,7 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// SyncMessages retrieves messages after a given message ID for client sync/catch-up
 func (h *MessageHandler) SyncMessages(handler *req.RequestHandler) {
 	ctx := handler.Context()
 
@@ -19,28 +20,31 @@ func (h *MessageHandler) SyncMessages(handler *req.RequestHandler) {
 		return
 	}
 
-	conversationID := handler.QueryParam("conversation_id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id is required", nil)
-		return
-	}
+	conversationID := handler.PathParam("conversation_id")
 	if _, err := uuid.Parse(conversationID); err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", err)
 		return
 	}
 
-	lastMessageID := handler.QueryParam("last_message_id")
-	if lastMessageID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "last_message_id is required", nil)
+	sinceStr := handler.QueryParam("since")
+	if sinceStr == "" {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "since is required", nil)
 		return
 	}
-	if _, err := uuid.Parse(lastMessageID); err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "last_message_id must be a valid UUID", nil)
-		return
-	}
-
-	limit, err := handler.QueryParamInt("limit", 100)
+	since, err := time.Parse(time.RFC3339, sinceStr)
 	if err != nil {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "since must be a valid RFC3339 timestamp", err)
+		return
+	}
+	if since.Before(time.Now().Add(-30 * 24 * time.Hour)) {
+		response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), 422, "Sync window exceeded",
+			map[string]interface{}{"action": "full_reload"},
+		)
+		return
+	}
+
+	limit, qerr := handler.QueryParamInt("limit", 100)
+	if qerr != nil {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "limit must be an integer", nil)
 		return
 	}
@@ -51,17 +55,18 @@ func (h *MessageHandler) SyncMessages(handler *req.RequestHandler) {
 
 	h.log.Debug("Syncing messages",
 		logger.String("conversation_id", conversationID),
-		logger.String("last_message_id", lastMessageID),
+		logger.String("since", since.Format(time.RFC3339)),
 		logger.Int("limit", limit),
 	)
 
-	messages, hasMore, msgErr := h.messageService.SyncMessages(ctx, conversationID, lastMessageID, limit)
+	messages, hasMore, msgErr := h.messageService.SyncMessages(ctx, conversationID, since, limit)
 	if msgErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), msgErr.Message, msgErr.Error)
 		return
 	}
 
 	messagesResponse := make([]dto.MessageResponse, 0, len(messages))
+	var nextSince time.Time
 	for _, msg := range messages {
 		messagesResponse = append(messagesResponse, dto.MessageResponse{
 			ID:             msg.ID.String(),
@@ -86,12 +91,19 @@ func (h *MessageHandler) SyncMessages(handler *req.RequestHandler) {
 			EditedAt:    msg.EditedAt,
 			DeletedAt:   msg.DeletedAt,
 		})
+		if msg.UpdatedAt.After(nextSince) {
+			nextSince = msg.UpdatedAt
+		}
+	}
+	if nextSince.IsZero() {
+		nextSince = since
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Messages synced",
 		map[string]interface{}{
-			"messages": messagesResponse,
-			"has_more": hasMore,
+			"messages":   messagesResponse,
+			"has_more":   hasMore,
+			"next_since": nextSince.Format(time.RFC3339Nano),
 		},
 	)
 }

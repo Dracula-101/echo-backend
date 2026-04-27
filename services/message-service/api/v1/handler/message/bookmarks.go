@@ -2,6 +2,8 @@ package message
 
 import (
 	"echo-backend/services/message-service/api/v1/dto"
+	"echo-backend/services/message-service/internal/service"
+
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
@@ -40,14 +42,25 @@ func (h *MessageHandler) BookmarkMessage(handler *req.RequestHandler) {
 		logger.String("message_id", messageID),
 	)
 
-	svcErr := h.bookmarkService.CreateBookmark(ctx, msgUUID, uuid.MustParse(userID), request.Notes)
+	uID, parseErr := uuid.Parse(userID)
+	if parseErr != nil {
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid user id", parseErr)
+		return
+	}
+	svcErr := h.bookmarkService.CreateBookmark(ctx, service.CreateBookmarkInput{
+		MessageID:      msgUUID,
+		UserID:         uID,
+		CollectionName: request.CollectionName,
+		Notes:          request.Notes,
+		Tags:           request.Tags,
+	})
 	if svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Message bookmarked successfully", nil)
+		response.StatusCreated, "Message bookmarked", nil)
 }
 
 // RemoveBookmark removes a bookmark from a message
@@ -71,14 +84,18 @@ func (h *MessageHandler) RemoveBookmark(handler *req.RequestHandler) {
 		return
 	}
 
-	svcErr := h.bookmarkService.DeleteBookmark(ctx, msgUUID, uuid.MustParse(userID))
+	uID, parseErr := uuid.Parse(userID)
+	if parseErr != nil {
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid user id", parseErr)
+		return
+	}
+	svcErr := h.bookmarkService.DeleteBookmark(ctx, msgUUID, uID)
 	if svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Bookmark removed successfully", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }
 
 // GetBookmarks retrieves the current user's bookmarked messages
@@ -107,7 +124,12 @@ func (h *MessageHandler) GetBookmarks(handler *req.RequestHandler) {
 		return
 	}
 
-	bookmarks, totalCount, svcErr := h.bookmarkService.GetBookmarks(ctx, uuid.MustParse(userID), limit, offset)
+	uID, parseErr := uuid.Parse(userID)
+	if parseErr != nil {
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid user id", parseErr)
+		return
+	}
+	bookmarks, totalCount, svcErr := h.bookmarkService.GetBookmarks(ctx, uID, limit, offset)
 	if svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return

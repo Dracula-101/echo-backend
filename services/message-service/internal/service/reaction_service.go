@@ -14,10 +14,17 @@ import (
 	"github.com/google/uuid"
 )
 
+type ReactionSummaryEntry struct {
+	ReactionType string `json:"reaction_type"`
+	Count        int    `json:"count"`
+	ReactedByMe  bool   `json:"reacted_by_me"`
+}
+
 type ReactionServiceInterface interface {
 	AddReaction(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, reactionType string, emoji *string, skinTone *string) pkgErrors.AppError
 	RemoveReaction(ctx context.Context, messageID uuid.UUID, userID uuid.UUID, reactionType string) pkgErrors.AppError
 	GetMessageReactions(ctx context.Context, messageID uuid.UUID) ([]dbModel.Reaction, pkgErrors.AppError)
+	GetMessageReactionsWithSummary(ctx context.Context, messageID uuid.UUID, requesterUserID uuid.UUID) ([]dbModel.Reaction, []ReactionSummaryEntry, pkgErrors.AppError)
 }
 
 type reactionService struct {
@@ -118,6 +125,38 @@ func (s *reactionService) RemoveReaction(ctx context.Context, messageID uuid.UUI
 }
 
 func (s *reactionService) GetMessageReactions(ctx context.Context, messageID uuid.UUID) ([]dbModel.Reaction, pkgErrors.AppError) {
-	// Note: Authentication logic in handler ensures user has access to conversation
 	return s.reactionRepo.GetMessageReactions(ctx, messageID)
+}
+
+func (s *reactionService) GetMessageReactionsWithSummary(ctx context.Context, messageID uuid.UUID, requesterUserID uuid.UUID) ([]dbModel.Reaction, []ReactionSummaryEntry, pkgErrors.AppError) {
+	reactions, err := s.reactionRepo.GetMessageReactions(ctx, messageID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	counts := make(map[string]int)
+	reactedByMe := make(map[string]bool)
+	order := make([]string, 0)
+	requesterID := requesterUserID.String()
+
+	for _, r := range reactions {
+		if _, seen := counts[r.ReactionType]; !seen {
+			order = append(order, r.ReactionType)
+		}
+		counts[r.ReactionType]++
+		if r.UserID == requesterID {
+			reactedByMe[r.ReactionType] = true
+		}
+	}
+
+	summary := make([]ReactionSummaryEntry, 0, len(order))
+	for _, rt := range order {
+		summary = append(summary, ReactionSummaryEntry{
+			ReactionType: rt,
+			Count:        counts[rt],
+			ReactedByMe:  reactedByMe[rt],
+		})
+	}
+
+	return reactions, summary, nil
 }

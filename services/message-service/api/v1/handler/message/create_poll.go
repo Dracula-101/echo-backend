@@ -23,23 +23,37 @@ func (h *MessageHandler) CreatePoll(handler *request.RequestHandler) {
 		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
-	userID := uuid.MustParse(userIDStr)
+	userID, perr := uuid.Parse(userIDStr)
+	if perr != nil {
+		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "Invalid user id", perr)
+		return
+	}
 
-	var expiresAt *time.Time
-	if req.ExpiresAt != nil {
-		t, err := time.Parse(time.RFC3339, *req.ExpiresAt)
+	var closesAt *time.Time
+	if req.ClosesAt != nil {
+		t, err := time.Parse(time.RFC3339, *req.ClosesAt)
 		if err == nil {
-			expiresAt = &t
+			closesAt = &t
 		}
 	}
 
+	convID, err := uuid.Parse(req.ConversationID)
+	if err != nil {
+		response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", err)
+		return
+	}
+
 	input := domain.CreatePollInput{
-		ConversationID: uuid.MustParse(req.ConversationID),
-		CreatorUserID:  userID,
-		Question:       req.Question,
-		Options:        req.Options,
-		AllowMultiple:  req.AllowMultiple,
-		ExpiresAt:      expiresAt,
+		ConversationID:     convID,
+		CreatorUserID:      userID,
+		Question:           req.Question,
+		Options:            req.Options,
+		AllowMultiple:      req.AllowMultipleAnswers,
+		IsAnonymous:        req.IsAnonymous,
+		IsQuiz:             req.IsQuiz,
+		CorrectOptionIndex: req.CorrectOptionIndex,
+		Explanation:        req.Explanation,
+		ExpiresAt:          closesAt,
 	}
 
 	poll, options, appErr := h.pollService.CreatePoll(handler.Context(), input)

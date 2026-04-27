@@ -36,6 +36,11 @@ const (
 	CodeBlockedUserNotFound MessageErrorCode = "BLOCK_USER_NOT_FOUND"
 	CodeRateLimitExceeded   MessageErrorCode = "RATE_LIMIT_EXCEEDED"
 
+	// Idempotency Errors
+	CodeIdempotencyKeyRequired MessageErrorCode = "IDEMPOTENCY_KEY_REQUIRED"
+	CodeIdempotencyKeyInvalid  MessageErrorCode = "IDEMPOTENCY_KEY_INVALID"
+	CodeIdempotencyConflict    MessageErrorCode = "IDEMPOTENCY_CONFLICT"
+
 	// Conversation Errors
 	CodeConversationNotFound         MessageErrorCode = "CONVERSATION_NOT_FOUND"
 	CodeConversationValidationFailed MessageErrorCode = "CONVERSATION_VALIDATION_FAILED"

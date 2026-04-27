@@ -1,18 +1,15 @@
 package message
 
 import (
-	"net/http"
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// RemoveReaction removes a reaction from a message
 func (h *MessageHandler) RemoveReaction(handler *request.RequestHandler) {
-	messageIDStr := chi.URLParam(handler.Request(), "id")
+	messageIDStr := handler.PathParam("id")
 	messageID, err := uuid.Parse(messageIDStr)
 	if err != nil {
 		h.log.Warn("Invalid message ID in RemoveReaction", logger.String("message_id", messageIDStr))
@@ -20,22 +17,23 @@ func (h *MessageHandler) RemoveReaction(handler *request.RequestHandler) {
 		return
 	}
 
-	// Reaction type is passed as `{reaction_id}` parameter according to main.go routing.
-	// r.Delete("/{id}/reactions/{reaction_id}", ...)
-	reactionType := chi.URLParam(handler.Request(), "reaction_id")
+	reactionType := handler.PathParam("reaction_id")
 
 	userIDStr, ok := request.GetUserIDFromContext(handler.Context())
 	if !ok {
 		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
-	userID := uuid.MustParse(userIDStr)
+	userID, parseErr := uuid.Parse(userIDStr)
+	if parseErr != nil {
+		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "Invalid user id", parseErr)
+		return
+	}
 
-	appErr := h.reactionService.RemoveReaction(handler.Context(), messageID, userID, reactionType)
-	if appErr != nil {
+	if appErr := h.reactionService.RemoveReaction(handler.Context(), messageID, userID, reactionType); appErr != nil {
 		h.sendAppError(handler, appErr)
 		return
 	}
 
-	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), http.StatusOK, "Reaction removed successfully", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }

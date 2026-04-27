@@ -11,35 +11,22 @@ import (
 	"github.com/google/uuid"
 )
 
-// UpdateParticipantRole updates the role of a participant in a conversation
 func (h *ConversationHandler) UpdateParticipantRole(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
-
-	targetUserID := handler.PathParam("user_id")
-	if targetUserID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Target user ID is required", nil)
-		return
-	}
-	targetUUID, err := uuid.Parse(targetUserID)
+	targetUUID, err := uuid.Parse(handler.PathParam("user_id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Target user ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Target user ID must be a valid UUID", err)
 		return
 	}
 
@@ -49,15 +36,15 @@ func (h *ConversationHandler) UpdateParticipantRole(handler *request.RequestHand
 	}
 
 	h.log.Debug("Updating participant role",
-		logger.String("user_id", userID),
-		logger.String("conversation_id", conversationID),
-		logger.String("target_user_id", targetUserID),
+		logger.String("user_id", userID.String()),
+		logger.String("conversation_id", convUUID.String()),
+		logger.String("target_user_id", targetUUID.String()),
 		logger.String("new_role", req.Role),
 	)
 
 	svcErr := h.conversationService.UpdateParticipantRole(ctx, domain.UpdateParticipantRoleInput{
 		ConversationID: convUUID,
-		CallerUserID:   uuid.MustParse(userID),
+		CallerUserID:   userID,
 		TargetUserID:   targetUUID,
 		NewRole:        req.Role,
 	})
@@ -72,5 +59,5 @@ func (h *ConversationHandler) UpdateParticipantRole(handler *request.RequestHand
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Participant role updated successfully", nil)
+		response.StatusOK, "Participant role updated", nil)
 }

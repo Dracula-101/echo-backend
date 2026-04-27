@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"shared/pkg/cache"
 	"shared/pkg/database"
@@ -19,6 +20,7 @@ type MessageRepository interface {
 	InsertMessages(ctx context.Context, messages []*dbModels.Message) pkgErrors.AppError
 	GetMessagesByConversationID(ctx context.Context, conversationID string, limit int, beforeMessageID *string) ([]*dbModels.Message, pkgErrors.AppError)
 	GetMessagesAfterID(ctx context.Context, conversationID string, afterMessageID string, limit int) ([]*dbModels.Message, pkgErrors.AppError)
+	GetMessagesUpdatedSince(ctx context.Context, conversationID string, since time.Time, limit int) ([]*dbModels.Message, pkgErrors.AppError)
 	GetMessageByID(ctx context.Context, messageID string) (*dbModels.Message, pkgErrors.AppError)
 	GetMessageCount(ctx context.Context, conversationID string) (int64, pkgErrors.AppError)
 	UpdateMessageContent(ctx context.Context, messageID string, content string) pkgErrors.AppError
@@ -27,7 +29,7 @@ type MessageRepository interface {
 	UnpinMessage(ctx context.Context, conversationID string, messageID string) pkgErrors.AppError
 	GetPinnedMessages(ctx context.Context, conversationID string) ([]*dbModels.Message, pkgErrors.AppError)
 	GetThreadMessages(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*dbModels.Message, pkgErrors.AppError)
-	SearchMessages(ctx context.Context, query string, userID string, conversationID *string, limit int, offset int) ([]*dbModels.Message, int, pkgErrors.AppError)
+	SearchMessages(ctx context.Context, query string, userID string, conversationID *string, limit int, cursor *time.Time) ([]*dbModels.Message, int, pkgErrors.AppError)
 }
 
 type messageRepository struct {
@@ -720,9 +722,10 @@ func (r *messageRepository) GetThreadMessages(ctx context.Context, parentMessage
 	return r.scanMessages(rows)
 }
 
-// SearchMessages searches for messages using full-text search
-func (r *messageRepository) SearchMessages(ctx context.Context, query string, userID string, conversationID *string, limit int, offset int) ([]*dbModels.Message, int, pkgErrors.AppError) {
-	// Count query
+// SearchMessages searches for messages using full-text search.
+// cursor is the created_at of the last result from the previous page; pass nil for the first page.
+// Total count is returned alongside the page so callers can show progress.
+func (r *messageRepository) SearchMessages(ctx context.Context, query string, userID string, conversationID *string, limit int, cursor *time.Time) ([]*dbModels.Message, int, pkgErrors.AppError) {
 	countQuery := `
 		SELECT COUNT(*)
 		FROM messages.search_index si
@@ -743,7 +746,6 @@ func (r *messageRepository) SearchMessages(ctx context.Context, query string, us
 		return nil, 0, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to count search results")
 	}
 
-	// Results query
 	searchQuery := `
 		SELECT
 			m.id, m.conversation_id, m.sender_user_id, m.parent_message_id,
@@ -760,10 +762,11 @@ func (r *messageRepository) SearchMessages(ctx context.Context, query string, us
 		WHERE si.content_tsvector @@ plainto_tsquery('english', $1)
 		  AND m.deleted_at IS NULL
 		  AND ($3::uuid IS NULL OR si.conversation_id = $3)
-		ORDER BY ts_rank(si.content_tsvector, plainto_tsquery('english', $1)) DESC, m.created_at DESC
-		LIMIT $4 OFFSET $5
+		  AND ($5::timestamptz IS NULL OR m.created_at < $5)
+		ORDER BY m.created_at DESC
+		LIMIT $4
 	`
-	rows, err := r.db.Query(ctx, searchQuery, query, userID, conversationID, limit, offset)
+	rows, err := r.db.Query(ctx, searchQuery, query, userID, conversationID, limit, cursor)
 	if err != nil {
 		r.logger.Error("failed to search messages",
 			logger.String("query", query),
@@ -779,6 +782,36 @@ func (r *messageRepository) SearchMessages(ctx context.Context, query string, us
 	}
 
 	return messages, totalCount, nil
+}
+
+// GetMessagesUpdatedSince returns messages whose updated_at > since (covers new + edited + deleted).
+func (r *messageRepository) GetMessagesUpdatedSince(ctx context.Context, conversationID string, since time.Time, limit int) ([]*dbModels.Message, pkgErrors.AppError) {
+	query := `
+		SELECT
+			id, conversation_id, sender_user_id, parent_message_id,
+			message_type, content, content_encrypted, content_hash,
+			format_type, mentions, hashtags, links, status,
+			delivered_at, delivery_count, read_count, reply_count,
+			last_reply_at, reaction_count, is_forwarded,
+			forwarded_from_message_id, forward_count, sent_from_device_id,
+			sent_from_ip, created_at, updated_at, edited_at, deleted_at, metadata
+		FROM messages.messages
+		WHERE conversation_id = $1
+		  AND updated_at > $2
+		ORDER BY updated_at ASC
+		LIMIT $3
+	`
+	rows, err := r.db.Query(ctx, query, conversationID, since, limit)
+	if err != nil {
+		r.logger.Error("failed to query messages since",
+			logger.String("conversation_id", conversationID),
+			logger.Error(err),
+		)
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to query messages")
+	}
+	defer rows.Close()
+
+	return r.scanMessages(rows)
 }
 
 // scanMessages is a helper to scan message rows into models

@@ -6,12 +6,11 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// SearchMessagesRequest represents the request to search messages
 type SearchMessagesRequest struct {
-	Query          string  `json:"query" validate:"required,min=1,max=500"`
-	ConversationID *string `json:"conversation_id,omitempty" validate:"omitempty,uuid4"`
-	Limit          int     `json:"limit,omitempty" validate:"omitempty,min=1,max=100"`
-	Offset         int     `json:"offset,omitempty" validate:"omitempty,min=0"`
+	Query  string `json:"q" validate:"required,min=2,max=100"`
+	Limit  int    `json:"limit,omitempty" validate:"omitempty,min=1,max=50"`
+	Offset int    `json:"offset,omitempty" validate:"omitempty,min=0"`
+	Cursor string `json:"cursor,omitempty"`
 }
 
 func NewSearchMessagesRequest() *SearchMessagesRequest {
@@ -30,27 +29,21 @@ func (r *SearchMessagesRequest) ValidateErrors(ve validator.ValidationErrors) ([
 	for _, fieldErr := range ve {
 		switch fieldErr.Field() {
 		case "Query":
-			if fieldErr.Tag() == "required" {
+			switch fieldErr.Tag() {
+			case "required":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.REQUIRED_FIELD,
-					Msg:  "Search query is required",
+					Msg:  "q is required",
 				})
-			} else if fieldErr.Tag() == "min" {
+			case "min":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.TOO_SHORT,
-					Msg:  "Search query cannot be empty",
+					Msg:  "q must be at least 2 characters",
 				})
-			} else if fieldErr.Tag() == "max" {
+			case "max":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.TOO_LONG,
-					Msg:  "Search query must be at most 500 characters",
-				})
-			}
-		case "ConversationID":
-			if fieldErr.Tag() == "uuid4" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.INVALID_FORMAT,
-					Msg:  "Conversation ID must be a valid UUID",
+					Msg:  "q must be at most 100 characters",
 				})
 			}
 		case "Limit":
@@ -62,7 +55,7 @@ func (r *SearchMessagesRequest) ValidateErrors(ve validator.ValidationErrors) ([
 			} else if fieldErr.Tag() == "max" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.INVALID_FORMAT,
-					Msg:  "Limit must be at most 100",
+					Msg:  "Limit must be at most 50",
 				})
 			}
 		case "Offset":

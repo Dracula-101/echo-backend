@@ -8,7 +8,7 @@ import (
 
 // EditMessageRequest represents the request to edit a message
 type EditMessageRequest struct {
-	Content string `json:"content" validate:"required,min=1,max=10000"`
+	Content string `json:"content" validate:"required,min=1,max=65536"`
 }
 
 func NewEditMessageRequest() *EditMessageRequest {
@@ -36,7 +36,7 @@ func (r *EditMessageRequest) ValidateErrors(ve validator.ValidationErrors) ([]re
 			} else if fieldErr.Tag() == "max" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.TOO_LONG,
-					Msg:  "Message content must be at most 10000 characters",
+					Msg:  "Message content must be at most 65536 characters",
 				})
 			}
 		}

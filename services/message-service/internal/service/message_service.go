@@ -38,8 +38,8 @@ type MessageServiceInterface interface {
 	GetPinnedMessages(ctx context.Context, conversationID string) ([]*domain.Message, *msgError.MsgError)
 	MarkAsRead(ctx context.Context, messageID string, userID string) *msgError.MsgError
 	GetDeliveryStatus(ctx context.Context, messageID string, userID string) (*domain.DeliveryStatusSummary, *msgError.MsgError)
-	SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MsgError)
-	SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MsgError)
+	SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, cursor *time.Time) ([]*domain.Message, int, *msgError.MsgError)
+	SyncMessages(ctx context.Context, conversationID string, since time.Time, limit int) ([]*domain.Message, bool, *msgError.MsgError)
 	GetThread(ctx context.Context, parentMessageID string, limit int, beforeMessageID *string) ([]*domain.Message, bool, *msgError.MsgError)
 
 	// Event processing
@@ -149,12 +149,49 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 	// 	s.cache.Increment(ctx, rateLimitKey, 60)
 	// }
 
-	validationErr := s.validateMessage(string(req.MessageType), req.Metadata)
-	if validationErr != nil {
+	if validationErr := s.validateSendInput(req); validationErr != nil {
 		return nil, validationErr
 	}
 
-	// Get conversation participants for delivery tracking
+	if req.ParentMessageID != nil {
+		parent, perr := s.messageRepo.GetMessageByID(ctx, req.ParentMessageID.String())
+		if perr != nil {
+			return nil, &msgError.MsgError{
+				Message: "Parent message not found",
+				Code:    msgError.CodeMessageNotFound,
+				Error:   perr,
+			}
+		}
+		if parent.ConversationID != req.ConversationID.String() {
+			return nil, &msgError.MsgError{
+				Message: "parent_message_id does not belong to this conversation",
+				Code:    msgError.CodeMessageNotFound,
+				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "parent conversation mismatch"),
+			}
+		}
+		if parent.IsDeleted {
+			return nil, &msgError.MsgError{
+				Message: "Cannot reply to a deleted message",
+				Code:    msgError.CodeMessageDeleted,
+				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "parent is deleted"),
+			}
+		}
+	}
+
+	if req.ForwardedFrom != nil {
+		source, ferr := s.messageRepo.GetMessageByID(ctx, req.ForwardedFrom.String())
+		if ferr != nil {
+			req.ForwardedFrom = nil
+		} else if source.SenderUserID != "" {
+			senderUUID, parseErr := uuid.Parse(source.SenderUserID)
+			if parseErr == nil {
+				if blocked, _ := s.userRepo.CheckForBlockedUser(senderUUID); blocked {
+					req.ForwardedFrom = nil
+				}
+			}
+		}
+	}
+
 	participants, participantsErr := s.conversationRepo.GetConversationParticipants(ctx, req.ConversationID)
 	if participantsErr != nil {
 		s.logger.Error("Failed to get conversation participants",
@@ -162,45 +199,77 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 			logger.String("conversation_id", req.ConversationID.String()),
 			logger.Error(participantsErr),
 		)
-		// Don't fail the message send, just log the error - delivery tracking will be incomplete
 	}
 
-	// Build recipient IDs list (all participants except sender)
+	participantSet := make(map[uuid.UUID]struct{}, len(participants))
 	var recipientIDs []uuid.UUID
 	for _, p := range participants {
+		participantSet[p.UserID] = struct{}{}
 		if p.UserID != req.SenderUserID {
 			recipientIDs = append(recipientIDs, p.UserID)
 		}
 	}
 
-	messageEvent := domain.ChatMessageEvent{
-		ID:               uuid.New(),
-		ConversationID:   req.ConversationID,
-		SenderUserID:     req.SenderUserID,
-		RecipientIDs:     recipientIDs,
-		ParentMessageID:  req.ParentMessageID,
-		MessageType:      req.MessageType,
-		Content:          req.Content,
-		ContentEncrypted: false,
-		ContentHash:      s.hashing.HashString(req.Content),
-		FormatType:       domain.MessageFormatPlain,
-		Status:           domain.MessageStatusSent,
-		Mentions:         json.RawMessage("[]"),
-		Links:            json.RawMessage("[]"),
-		Hashtags:         []string{},
-		DeliveryCount:    0,
-		ReadCount:        0,
-		ReplyCount:       0,
-		ReactionCount:    0,
-		ForwardCount:     0,
-		IsForwarded:      false,
-		SentFromDeviceID: deviceInfo.ID,
-		SentFromIP:       clientIP,
-		Metadata:         utils.MarshalRawMessageSafe(req.Metadata),
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+	if len(req.Mentions) > 0 {
+		filtered := req.Mentions[:0]
+		for _, m := range req.Mentions {
+			if _, ok := participantSet[m.UserID]; ok {
+				filtered = append(filtered, m)
+			}
+		}
+		req.Mentions = filtered
 	}
-	// publish event
+
+	metadata := mergeMetadata(req)
+	mentionsJSON := marshalMentions(req.Mentions)
+
+	now := time.Now()
+	var forwardedFrom *string
+	if req.ForwardedFrom != nil {
+		s := req.ForwardedFrom.String()
+		forwardedFrom = &s
+	}
+
+	messageEvent := domain.ChatMessageEvent{
+		ID:                     uuid.New(),
+		ConversationID:         req.ConversationID,
+		SenderUserID:           req.SenderUserID,
+		RecipientIDs:           recipientIDs,
+		ParentMessageID:        req.ParentMessageID,
+		MessageType:            req.MessageType,
+		Content:                req.Content,
+		ContentEncrypted:       false,
+		ContentHash:            s.hashing.HashString(req.Content),
+		FormatType:             domain.MessageFormatPlain,
+		Status:                 domain.MessageStatusSent,
+		Mentions:               mentionsJSON,
+		Links:                  json.RawMessage("[]"),
+		Hashtags:               []string{},
+		DeliveryCount:          0,
+		ReadCount:              0,
+		ReplyCount:             0,
+		ReactionCount:          0,
+		ForwardCount:           0,
+		IsForwarded:            req.ForwardedFrom != nil,
+		ForwardedFromMessageID: forwardedFrom,
+		MediaIDs:               uuidsToStrings(req.MediaIDs),
+		StickerID:              uuidPtrToStringPtr(req.StickerID),
+		GifID:                  uuidPtrToStringPtr(req.GifID),
+		IsScheduled:            req.ScheduledAt != nil,
+		ScheduledAt:            req.ScheduledAt,
+		ExpireAfterSeconds:     req.ExpireAfter,
+		SentFromDeviceID:       deviceInfo.ID,
+		SentFromIP:             clientIP,
+		Metadata:               utils.MarshalRawMessageSafe(metadata),
+		CreatedAt:              now,
+		UpdatedAt:              now,
+	}
+
+	if req.ExpireAfter != nil {
+		expiry := now.Add(time.Duration(*req.ExpireAfter) * time.Second)
+		messageEvent.ExpiresAt = &expiry
+	}
+
 	publishErr := s.eventPublisher.PublishChatMessage(ctx, &messageEvent)
 	if publishErr != nil {
 		s.logger.Error("Failed to publish chat message event",
@@ -216,12 +285,6 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 		}
 	}
 
-	s.logger.Debug("Chat message event published",
-		logger.String("service", msgError.ServiceName),
-		logger.String("conversation_id", req.ConversationID.String()),
-		logger.String("sender_user_id", req.SenderUserID.String()),
-	)
-
 	msg := &domain.Message{
 		ID:              messageEvent.ID,
 		ConversationID:  messageEvent.ConversationID,
@@ -231,10 +294,75 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 		Content:         messageEvent.Content,
 		Status:          messageEvent.Status,
 		ReadCount:       messageEvent.ReadCount,
+		DeliveryCount:   messageEvent.DeliveryCount,
+		IsScheduled:     messageEvent.IsScheduled,
+		ExpiresAt:       messageEvent.ExpiresAt,
 		CreatedAt:       messageEvent.CreatedAt,
 		UpdatedAt:       messageEvent.UpdatedAt,
-		Metadata:        req.Metadata,
+		Metadata:        metadata,
 	}
 
 	return msg, nil
+}
+
+func mergeMetadata(req *domain.SendMessageInput) *domain.MessageMetadata {
+	md := &domain.MessageMetadata{}
+	if req.Metadata != nil {
+		*md = *req.Metadata
+	}
+	if len(req.MediaIDs) > 0 {
+		ids := make([]string, 0, len(req.MediaIDs))
+		for _, id := range req.MediaIDs {
+			ids = append(ids, id.String())
+		}
+		md.MediaIDs = ids
+	}
+	if req.StickerID != nil {
+		md.StickerID = req.StickerID.String()
+	}
+	if req.GifID != nil {
+		md.GifID = req.GifID.String()
+	}
+	if req.Location != nil {
+		md.Latitude = req.Location.Latitude
+		md.Longitude = req.Location.Longitude
+		md.LocationName = req.Location.Name
+		md.Address = req.Location.Address
+	}
+	if req.Contact != nil {
+		md.ContactName = req.Contact.Name
+		md.ContactPhone = req.Contact.Phone
+		md.ContactEmail = req.Contact.Email
+	}
+	return md
+}
+
+func marshalMentions(mentions []domain.Mention) json.RawMessage {
+	if len(mentions) == 0 {
+		return json.RawMessage("[]")
+	}
+	b, err := json.Marshal(mentions)
+	if err != nil {
+		return json.RawMessage("[]")
+	}
+	return b
+}
+
+func uuidsToStrings(ids []uuid.UUID) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return out
+}
+
+func uuidPtrToStringPtr(id *uuid.UUID) *string {
+	if id == nil {
+		return nil
+	}
+	s := id.String()
+	return &s
 }

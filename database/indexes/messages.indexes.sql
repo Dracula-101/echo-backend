@@ -143,5 +143,13 @@ CREATE INDEX IF NOT EXISTS idx_messages_call_participants_joined ON messages.cal
 
 -- Conversation settings table indexes
 CREATE INDEX IF NOT EXISTS idx_messages_settings_conversation ON messages.conversation_settings(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_messages_settings_disappearing ON messages.conversation_settings(disappearing_messages_enabled) 
+CREATE INDEX IF NOT EXISTS idx_messages_settings_disappearing ON messages.conversation_settings(disappearing_messages_enabled)
     WHERE disappearing_messages_enabled = TRUE;
+
+-- Outbox table indexes
+-- The relay scans unprocessed rows in insertion order; this partial index
+-- keeps the working set tiny once rows are marked processed.
+CREATE INDEX IF NOT EXISTS idx_messages_outbox_unprocessed ON messages.outbox(created_at)
+    WHERE processed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_outbox_event_type ON messages.outbox(event_type);
+CREATE INDEX IF NOT EXISTS idx_messages_outbox_aggregate ON messages.outbox(aggregate_id) WHERE aggregate_id IS NOT NULL;

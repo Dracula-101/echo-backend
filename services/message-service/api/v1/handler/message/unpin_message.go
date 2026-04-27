@@ -43,6 +43,5 @@ func (h *MessageHandler) UnpinMessage(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Message unpinned successfully", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }

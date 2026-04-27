@@ -3,7 +3,6 @@ package ratelimiter
 import (
 	"context"
 	msgError "echo-backend/services/message-service/internal/error"
-	"fmt"
 	"shared/pkg/cache"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
@@ -15,16 +14,22 @@ var (
 	RLCreateConvPrefix = "rl:create_conv:"
 	RLReactPrefix      = "rl:react:"
 	RLTypingPrefix     = "rl:typing:"
+	RLSearchPrefix     = "rl:search:"
+	RLReportPrefix     = "rl:report:"
 )
 
 const (
 	RLSendTTL         = 60 * time.Second
-	RLSendLimit       = int64(30)
+	RLSendLimit       = int64(60)
 	RLCreateConvTTL   = 3600 * time.Second
 	RLCreateConvLimit = int64(10)
 	RLReactTTL        = 60 * time.Second
-	RLReactLimit      = int64(60)
+	RLReactLimit      = int64(100)
 	RLTypingTTL       = 3 * time.Second
+	RLSearchTTL       = 60 * time.Second
+	RLSearchLimit     = int64(10)
+	RLReportTTL       = 24 * time.Hour
+	RLReportLimit     = int64(5)
 )
 
 type RateLimiter interface {
@@ -32,6 +37,9 @@ type RateLimiter interface {
 	CheckCreateConvRateLimit(ctx context.Context, userID string) (bool, int64, error)
 	CheckReactRateLimit(ctx context.Context, userID string) (bool, int64, error)
 	CheckTypingRateLimit(ctx context.Context, userID, conversationID string) (bool, error)
+
+	CheckReportRateLimit(ctx context.Context, userID string) (bool, int64, error)
+	CheckSearchRateLimit(ctx context.Context, userID, conversationID string) (bool, int64, error)
 }
 
 type rateLimiter struct {
@@ -80,19 +88,18 @@ func (m *rateLimiter) CheckReactRateLimit(ctx context.Context, userID string) (b
 
 func (m *rateLimiter) CheckTypingRateLimit(ctx context.Context, userID, conversationID string) (bool, error) {
 	m.log.Info("Checking typing rate limit", logger.String("user_id", userID), logger.String("conversation_id", conversationID))
-	key := fmt.Sprintf("%s%s:%s", RLTypingPrefix, userID, conversationID)
-	exists, err := m.cache.Exists(ctx, key)
-	if err != nil {
-		m.log.Error("Failed to check typing rate limit", logger.String("key", key), logger.Error(err))
-		return false, pkgErrors.FromError(err, msgError.CodeCacheError, "failed to check typing rate limit").
-			WithService(msgError.ServiceName).
-			WithDetail("key", key)
-	}
-	if exists {
-		return false, nil
-	}
-	if setErr := m.cache.SetBool(ctx, key, true, RLTypingTTL); setErr != nil {
-		m.log.Warn("Failed to set typing throttle key", logger.String("key", key), logger.Error(setErr))
-	}
-	return true, nil
+	key := RLTypingPrefix + userID + ":" + conversationID
+	allowed, _, err := m.checkCounterRateLimit(ctx, key, 1, RLTypingTTL)
+	return allowed, err
+}
+
+func (m *rateLimiter) CheckReportRateLimit(ctx context.Context, userID string) (bool, int64, error) {
+	m.log.Info("Checking report rate limit", logger.String("user_id", userID))
+	return m.checkCounterRateLimit(ctx, RLReportPrefix+userID, RLReportLimit, RLReportTTL)
+}
+
+func (m *rateLimiter) CheckSearchRateLimit(ctx context.Context, userID, conversationID string) (bool, int64, error) {
+	m.log.Info("Checking search rate limit", logger.String("user_id", userID), logger.String("conversation_id", conversationID))
+	key := RLSearchPrefix + userID + ":" + conversationID
+	return m.checkCounterRateLimit(ctx, key, RLSearchLimit, RLSearchTTL)
 }

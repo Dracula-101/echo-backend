@@ -8,8 +8,8 @@ import (
 
 // ReportMessageRequest represents the request to report a message
 type ReportMessageRequest struct {
-	ReportType  string `json:"report_type" validate:"required,oneof=spam harassment violence inappropriate copyright other"`
-	Description string `json:"description" validate:"omitempty,max=2000"`
+	ReportType  string `json:"report_type" validate:"required,oneof=spam harassment hate_speech inappropriate misinformation other"`
+	Description string `json:"description" validate:"omitempty,max=1000"`
 }
 
 func NewReportMessageRequest() *ReportMessageRequest {
@@ -33,14 +33,14 @@ func (r *ReportMessageRequest) ValidateErrors(ve validator.ValidationErrors) ([]
 			} else if fieldErr.Tag() == "oneof" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.INVALID_FORMAT,
-					Msg:  "Report type must be one of: spam, harassment, violence, inappropriate, copyright, other",
+					Msg:  "Report type must be one of: spam, harassment, hate_speech, inappropriate, misinformation, other",
 				})
 			}
 		case "Description":
 			if fieldErr.Tag() == "max" {
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.TOO_LONG,
-					Msg:  "Description must be at most 2000 characters",
+					Msg:  "Description must be at most 1000 characters",
 				})
 			}
 		}

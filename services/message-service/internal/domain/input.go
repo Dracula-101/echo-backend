@@ -6,34 +6,23 @@ import (
 	"github.com/google/uuid"
 )
 
-type Mention struct {
-	UserID uuid.UUID
-}
-
-type Location struct {
-	Latitude  float64
-	Longitude float64
-}
-
-type Contact struct {
-	Name        string
-	Email       string
-	PhoneNumber string
-}
-
 // SendMessageInput contains data for sending a message
 type SendMessageInput struct {
 	ConversationID  uuid.UUID
 	SenderUserID    uuid.UUID
 	MessageType     MessageType
+	Content         string
 	ParentMessageID *uuid.UUID
 	ForwardedFrom   *uuid.UUID
 	Mentions        []Mention
+	MediaIDs        []uuid.UUID
 	StickerID       *uuid.UUID
 	GifID           *uuid.UUID
 	Location        *Location
 	Contact         *Contact
-	Content         string
+	ScheduledAt     *time.Time
+	ExpireAfter     *int
+	IdempotencyKey  string
 	Metadata        *MessageMetadata
 }
 
@@ -123,12 +112,16 @@ type GetTypingUsersInput struct {
 
 // CreatePollInput contains data for creating a poll
 type CreatePollInput struct {
-	ConversationID uuid.UUID
-	CreatorUserID  uuid.UUID
-	Question       string
-	Options        []string
-	AllowMultiple  bool
-	ExpiresAt      *time.Time
+	ConversationID     uuid.UUID
+	CreatorUserID      uuid.UUID
+	Question           string
+	Options            []string
+	AllowMultiple      bool
+	IsAnonymous        bool
+	IsQuiz             bool
+	CorrectOptionIndex *int
+	Explanation        *string
+	ExpiresAt          *time.Time
 }
 
 // VotePollInput contains data for voting on a poll
@@ -152,15 +145,23 @@ type GetDeliveryStatusInput struct {
 
 // UpdateConversationInput contains data for updating a conversation
 type UpdateConversationInput struct {
-	Title       *string
-	Description *string
-	AvatarURL   *string
-	IsPublic    *bool
+	Title                *string
+	Description          *string
+	AvatarURL            *string
+	IsPublic             *bool
+	WhoCanSendMessages   *string
+	WhoCanAddMembers     *string
+	WhoCanEditInfo       *string
+	WhoCanPinMessages    *string
+	InviteLinkExpiresAt  *time.Time
+	JoinApprovalRequired *bool
 }
 
 // HasChanges checks if any field is set
 func (i *UpdateConversationInput) HasChanges() bool {
-	return i.Title != nil || i.Description != nil || i.AvatarURL != nil || i.IsPublic != nil
+	return i.Title != nil || i.Description != nil || i.AvatarURL != nil || i.IsPublic != nil ||
+		i.WhoCanSendMessages != nil || i.WhoCanAddMembers != nil || i.WhoCanEditInfo != nil ||
+		i.WhoCanPinMessages != nil || i.InviteLinkExpiresAt != nil || i.JoinApprovalRequired != nil
 }
 
 // ForwardMessageInput contains data for forwarding a message

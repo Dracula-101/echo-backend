@@ -1,19 +1,19 @@
 package message
 
 import (
-	"echo-backend/services/message-service/api/v1/dto"
 	"net/http"
+
+	"echo-backend/services/message-service/api/v1/dto"
+
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// AddReaction adds a reaction to a message
 func (h *MessageHandler) AddReaction(handler *request.RequestHandler) {
-	messageIDStr := chi.URLParam(handler.Request(), "id")
+	messageIDStr := handler.PathParam("id")
 	messageID, err := uuid.Parse(messageIDStr)
 	if err != nil {
 		h.log.Warn("Invalid message ID in AddReaction", logger.String("message_id", messageIDStr))
@@ -26,18 +26,24 @@ func (h *MessageHandler) AddReaction(handler *request.RequestHandler) {
 		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
-	userID := uuid.MustParse(userIDStr)
+	userID, parseErr := uuid.Parse(userIDStr)
+	if parseErr != nil {
+		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "Invalid user id", parseErr)
+		return
+	}
 
 	req := dto.NewAddReactionRequest()
 	if !handler.ParseValidateAndSend(req) {
 		return
 	}
 
-	appErr := h.reactionService.AddReaction(handler.Context(), messageID, userID, req.Emoji, &req.Emoji, nil)
+	emojiPtr := &req.ReactionType
+	appErr := h.reactionService.AddReaction(handler.Context(), messageID, userID, req.ReactionType, emojiPtr, req.SkinTone)
 	if appErr != nil {
 		h.sendAppError(handler, appErr)
 		return
 	}
 
-	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(), http.StatusOK, "Reaction added successfully", nil)
+	response.JSONWithMessage(handler.Context(), handler.Request(), handler.Writer(),
+		http.StatusCreated, "Reaction added", nil)
 }

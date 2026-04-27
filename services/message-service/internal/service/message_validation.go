@@ -1,6 +1,9 @@
 package service
 
 import (
+	"strings"
+	"time"
+
 	"echo-backend/services/message-service/internal/domain"
 	msgError "echo-backend/services/message-service/internal/error"
 	pkgErrors "shared/pkg/errors"
@@ -48,58 +51,63 @@ func (s *messageService) handleValidationError(dbErr pkgErrors.AppError) *msgErr
 	}
 }
 
-// validateMessage checks that the message type has the required metadata fields.
-func (s *messageService) validateMessage(rawMsgType string, metadata *domain.MessageMetadata) *msgError.MsgError {
-	msgType := domain.MessageType(rawMsgType)
-	switch msgType {
-	case domain.MessageTypeImage:
-		if metadata == nil || metadata.MediaURL == "" {
-			return &msgError.MsgError{
-				Message: "Metadata with valid URL is required for image messages",
-				Code:    msgError.CodeMissingMessageMetadata,
-				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for image message"),
-			}
-		}
-	case domain.MessageTypeVideo:
-		if metadata == nil || metadata.MediaURL == "" {
-			return &msgError.MsgError{
-				Message: "Metadata with valid URL is required for video messages",
-				Code:    msgError.CodeMissingMessageMetadata,
-				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for video message"),
-			}
-		}
-	case domain.MessageTypeFile:
-		if metadata == nil || metadata.MediaURL == "" || metadata.FileName == "" {
-			return &msgError.MsgError{
-				Message: "Metadata with valid URL and filename is required for file messages",
-				Code:    msgError.CodeMissingMessageMetadata,
-				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for file message"),
-			}
-		}
+func (s *messageService) validateSendInput(req *domain.SendMessageInput) *msgError.MsgError {
+	switch req.MessageType {
 	case domain.MessageTypeText:
-		// No specific metadata validation for text messages
-	case domain.MessageTypeAudio:
-		if metadata == nil || metadata.MediaURL == "" {
-			return &msgError.MsgError{
-				Message: "Metadata with valid URL is required for audio messages",
-				Code:    msgError.CodeMissingMessageMetadata,
-				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for audio message"),
-			}
+		if strings.TrimSpace(req.Content) == "" {
+			return missingField("Text messages require non-empty content", "missing content for text message")
+		}
+	case domain.MessageTypeImage, domain.MessageTypeVideo, domain.MessageTypeAudio,
+		domain.MessageTypeDocument, domain.MessageTypeFile:
+		if len(req.MediaIDs) == 0 {
+			return missingField("media_ids is required for media messages", "missing media_ids")
+		}
+	case domain.MessageTypeVoiceNote:
+		if len(req.MediaIDs) != 1 {
+			return missingField("voice_note must reference exactly one media file", "invalid media_ids count for voice_note")
+		}
+	case domain.MessageTypeSticker:
+		if req.StickerID == nil {
+			return missingField("sticker_id is required for sticker messages", "missing sticker_id")
+		}
+	case domain.MessageTypeGif:
+		if req.GifID == nil {
+			return missingField("gif_id is required for gif messages", "missing gif_id")
 		}
 	case domain.MessageTypeLocation:
-		if metadata == nil || metadata.Latitude == 0 || metadata.Longitude == 0 {
-			return &msgError.MsgError{
-				Message: "Metadata with valid latitude and longitude is required for location messages",
-				Code:    msgError.CodeMissingMessageMetadata,
-				Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "missing metadata for location message"),
-			}
+		if req.Location == nil {
+			return missingField("location is required for location messages", "missing location")
 		}
+	case domain.MessageTypeContact:
+		if req.Contact == nil || req.Contact.Name == "" {
+			return missingField("contact with at least a name is required for contact messages", "missing contact")
+		}
+		if req.Contact.Phone == "" && req.Contact.Email == "" {
+			return missingField("contact requires at least one of phone or email", "missing contact phone/email")
+		}
+	case domain.MessageTypePoll:
+		return missingField("polls must be created via POST /polls", "poll cannot be sent through messages endpoint")
 	default:
-		return &msgError.MsgError{
-			Message: "Unsupported message type",
-			Code:    msgError.CodeMissingMessageMetadata,
-			Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, "unsupported message type"),
+		return missingField("Unsupported message type", "unsupported message type")
+	}
+
+	if req.ScheduledAt != nil {
+		now := time.Now()
+		if !req.ScheduledAt.After(now) {
+			return missingField("scheduled_at must be in the future", "scheduled_at not in future")
+		}
+		if req.ScheduledAt.After(now.Add(7 * 24 * time.Hour)) {
+			return missingField("scheduled_at cannot be more than 7 days ahead", "scheduled_at exceeds 7 day window")
 		}
 	}
+
 	return nil
+}
+
+func missingField(userMsg, internalMsg string) *msgError.MsgError {
+	return &msgError.MsgError{
+		Message: userMsg,
+		Code:    msgError.CodeMissingMessageMetadata,
+		Error:   pkgErrors.New(pkgErrors.CodeInvalidArgument, internalMsg),
+	}
 }

@@ -3,6 +3,7 @@ package conversation
 import (
 	"echo-backend/services/message-service/api/v1/dto"
 	"echo-backend/services/message-service/internal/repo"
+
 	"shared/pkg/logger"
 	"shared/server/request"
 	"shared/server/response"
@@ -10,24 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// GetSettings retrieves conversation settings
 func (h *ConversationHandler) GetSettings(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	_, ok := request.GetUserIDFromContext(ctx)
-	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
+	if _, ok := h.authedUserID(handler); !ok {
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
@@ -47,24 +40,17 @@ func (h *ConversationHandler) GetSettings(handler *request.RequestHandler) {
 		response.StatusOK, "Settings retrieved", settings)
 }
 
-// UpdateSettings updates conversation settings
 func (h *ConversationHandler) UpdateSettings(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
-	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
-	convUUID, err := uuid.Parse(conversationID)
+	convUUID, err := uuid.Parse(handler.PathParam("id"))
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
@@ -74,23 +60,22 @@ func (h *ConversationHandler) UpdateSettings(handler *request.RequestHandler) {
 	}
 
 	h.log.Debug("Updating conversation settings",
-		logger.String("user_id", userID),
-		logger.String("conversation_id", conversationID),
+		logger.String("user_id", userID.String()),
+		logger.String("conversation_id", convUUID.String()),
 	)
 
-	svcErr := h.settingsService.UpdateSettings(ctx, convUUID, uuid.MustParse(userID), repo.ConversationSettingsInput{
+	if svcErr := h.settingsService.UpdateSettings(ctx, convUUID, userID, repo.ConversationSettingsInput{
 		DisappearingMessagesEnabled:  req.DisappearingMessagesEnabled,
 		DisappearingMessagesDuration: req.DisappearingMessagesDuration,
 		ReadReceiptsEnabled:          req.ReadReceiptsEnabled,
 		TypingIndicatorsEnabled:      req.TypingIndicatorsEnabled,
 		LinkPreviewsEnabled:          req.LinkPreviewsEnabled,
 		AutoDownloadMedia:            req.AutoDownloadMedia,
-	})
-	if svcErr != nil {
+	}); svcErr != nil {
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		return
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Settings updated successfully", nil)
+		response.StatusOK, "Settings updated", nil)
 }

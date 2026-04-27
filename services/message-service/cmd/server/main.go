@@ -17,6 +17,7 @@ import (
 	"echo-backend/services/message-service/internal/repo"
 	"echo-backend/services/message-service/internal/service"
 	cacheSvc "echo-backend/services/message-service/internal/service/cache"
+	"echo-backend/services/message-service/internal/service/idempotency"
 
 	"shared/pkg/cache"
 	"shared/pkg/cache/redis"
@@ -226,35 +227,191 @@ func createDeliveryKafkaConsumer(cfg config.KafkaConsumerConfig, log logger.Logg
 	return kafkaConsumer, nil
 }
 
+type messageRateLimits struct {
+	send   coreMiddleware.Handler
+	react  coreMiddleware.Handler
+	report coreMiddleware.Handler
+	search coreMiddleware.Handler
+}
+
 func setupAPIRoutes(
 	builder *router.Builder,
 	messageHandler *messageHandler.MessageHandler,
 	conversationHandler *conversationHandler.ConversationHandler,
-	rateLimiter ratelimiter.RateLimiter,
+	rl ratelimiter.RateLimiter,
 	log logger.Logger,
 ) *router.Builder {
 	log.Debug("Registering API routes")
 
-	// Message endpoints (root level - API Gateway routes /api/v1/messages to this service)
+	userKey := func(req request.RequestHandler) string {
+		userID, _ := request.GetUserIDUUIDFromContext(req.Context())
+		return userID.String()
+	}
+	userConvKey := func(req request.RequestHandler) string {
+		userID, _ := request.GetUserIDUUIDFromContext(req.Context())
+		return userID.String() + "|" + req.PathParam("conversation_id")
+	}
+
+	createConvRateLimit := middleware.RateLimit(
+		func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+			return rl.CheckCreateConvRateLimit(ctx, key)
+		},
+		userKey,
+		ratelimiter.RLCreateConvLimit,
+	)
+	sendRateLimit := middleware.RateLimit(
+		func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+			return rl.CheckSendRateLimit(ctx, key)
+		},
+		userKey,
+		ratelimiter.RLSendLimit,
+	)
+	reactRateLimit := middleware.RateLimit(
+		func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+			return rl.CheckReactRateLimit(ctx, key)
+		},
+		userKey,
+		ratelimiter.RLReactLimit,
+	)
+	reportRateLimit := middleware.RateLimit(
+		func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+			return rl.CheckReportRateLimit(ctx, key)
+		},
+		userKey,
+		ratelimiter.RLReportLimit,
+	)
+	searchRateLimit := middleware.RateLimit(
+		func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+			userID, convID, ok := splitUserConvKey(key)
+			if !ok {
+				return true, 0, nil
+			}
+			return rl.CheckSearchRateLimit(ctx, userID, convID)
+		},
+		userConvKey,
+		ratelimiter.RLSearchLimit,
+	)
+
+	rateLimits := messageRateLimits{
+		send:   sendRateLimit,
+		react:  reactRateLimit,
+		report: reportRateLimit,
+		search: searchRateLimit,
+	}
+
 	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post(
-			"conversations/{conversation_id}/messages",
-			request.Adapt(messageHandler.SendMessage),
-			middleware.RateLimit(
-				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
-					return rateLimiter.CheckSendRateLimit(ctx, key)
-				},
-				func(req request.RequestHandler) string {
-					userId, _ := request.GetUserIDFromContext(req.Context())
-					return userId
-				},
-				60,
-			),
-		)
+		registerConversationRoutes(r, conversationHandler, createConvRateLimit)
+		registerMessageRoutes(r, messageHandler, rateLimits)
+		registerPollRoutes(r, messageHandler)
+		registerInviteRoutes(r, conversationHandler)
 	})
 
 	log.Debug("API routes registered successfully")
 	return builder
+}
+
+// registerConversationRoutes wires endpoints under /conversations.
+//
+// Note on ordering: literal segments (e.g. "/conversations/me") must be
+// registered before parameterized ones (e.g. "/conversations/{id}") so the
+// gorilla/mux matcher does not greedily bind them to the {id} route.
+func registerConversationRoutes(
+	r *router.Router,
+	h *conversationHandler.ConversationHandler,
+	createConvRateLimit coreMiddleware.Handler,
+) {
+	r.Post("/conversations", request.Adapt(h.CreateConversation), createConvRateLimit)
+	r.Get("/conversations/me", request.Adapt(h.GetUserConversations))
+
+	r.Get("/conversations/{id}", request.Adapt(h.GetConversationByID))
+	r.Put("/conversations/{id}", request.Adapt(h.UpdateConversation))
+	r.Delete("/conversations/{id}", request.Adapt(h.DeleteConversation))
+
+	r.Post("/conversations/{id}/participants", request.Adapt(h.AddParticipants))
+	r.Put("/conversations/{id}/participants/{user_id}", request.Adapt(h.UpdateParticipantRole))
+	r.Delete("/conversations/{id}/participants/{user_id}", request.Adapt(h.RemoveParticipant))
+
+	r.Get("/conversations/{id}/pinned", request.Adapt(h.GetPinnedMessages))
+
+	r.Post("/conversations/{id}/mute", request.Adapt(h.MuteConversation))
+	r.Delete("/conversations/{id}/mute", request.Adapt(h.UnmuteConversation))
+
+	r.Get("/conversations/{id}/unread", request.Adapt(h.GetUnreadCount))
+
+	r.Post("/conversations/{id}/typing", request.Adapt(h.SetTypingIndicator))
+	r.Get("/conversations/{id}/typing", request.Adapt(h.GetTypingUsers))
+
+	r.Put("/conversations/{id}/draft", request.Adapt(h.SaveDraft))
+	r.Get("/conversations/{id}/draft", request.Adapt(h.GetDraft))
+	r.Delete("/conversations/{id}/draft", request.Adapt(h.DeleteDraft))
+
+	r.Get("/conversations/{id}/settings", request.Adapt(h.GetSettings))
+	r.Put("/conversations/{id}/settings", request.Adapt(h.UpdateSettings))
+
+	r.Post("/conversations/{id}/invites", request.Adapt(h.CreateInvite))
+	r.Get("/conversations/{id}/invites", request.Adapt(h.GetConversationInvites))
+	r.Delete("/conversations/{id}/invites/{invite_id}", request.Adapt(h.RevokeInvite))
+}
+
+// splitUserConvKey reverses the userConvKey closure used by the search
+// rate limiter. Returns (userID, conversationID, ok).
+func splitUserConvKey(key string) (string, string, bool) {
+	for i := 0; i < len(key); i++ {
+		if key[i] == '|' {
+			return key[:i], key[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+// registerMessageRoutes wires endpoints under /conversations/{conversation_id}/messages.
+//
+// Literal segments (search, sync, bookmarks) are registered before /{id}
+// so they are not consumed by the {id} param.
+func registerMessageRoutes(r *router.Router, h *messageHandler.MessageHandler, limits messageRateLimits) {
+	const base = "/conversations/{conversation_id}/messages"
+
+	r.Post(base, request.Adapt(h.SendMessage), limits.send)
+	r.Get(base, request.Adapt(h.GetMessages))
+
+	r.Post(base+"/search", request.Adapt(h.SearchMessages), limits.search)
+	r.Get(base+"/sync", request.Adapt(h.SyncMessages))
+	r.Get(base+"/bookmarks", request.Adapt(h.GetBookmarks))
+
+	r.Get(base+"/{id}", request.Adapt(h.GetMessageByID))
+	r.Put(base+"/{id}", request.Adapt(h.EditMessage))
+	r.Delete(base+"/{id}", request.Adapt(h.DeleteMessage))
+
+	r.Post(base+"/{id}/reactions", request.Adapt(h.AddReaction), limits.react)
+	r.Get(base+"/{id}/reactions", request.Adapt(h.GetReactions))
+	r.Delete(base+"/{id}/reactions/{reaction_id}", request.Adapt(h.RemoveReaction))
+
+	r.Post(base+"/{id}/read", request.Adapt(h.MarkAsRead))
+	r.Get(base+"/{id}/delivery", request.Adapt(h.GetDeliveryStatus))
+
+	r.Post(base+"/{id}/forward", request.Adapt(h.ForwardMessage), limits.send)
+
+	r.Post(base+"/{id}/pin", request.Adapt(h.PinMessage))
+	r.Delete(base+"/{id}/pin", request.Adapt(h.UnpinMessage))
+
+	r.Get(base+"/{id}/thread", request.Adapt(h.GetThread))
+
+	r.Post(base+"/{id}/bookmark", request.Adapt(h.BookmarkMessage))
+	r.Delete(base+"/{id}/bookmark", request.Adapt(h.RemoveBookmark))
+
+	r.Post(base+"/{id}/report", request.Adapt(h.ReportMessage), limits.report)
+}
+
+// registerPollRoutes wires endpoints under /polls.
+func registerPollRoutes(r *router.Router, h *messageHandler.MessageHandler) {
+	r.Post("/polls", request.Adapt(h.CreatePoll))
+	r.Post("/polls/{id}/vote", request.Adapt(h.VotePoll))
+	r.Get("/polls/{id}/results", request.Adapt(h.GetPollResults))
+}
+
+// registerInviteRoutes wires the invite-accept endpoint.
+func registerInviteRoutes(r *router.Router, h *conversationHandler.ConversationHandler) {
+	r.Post("/invites/{code}/accept", request.Adapt(h.AcceptInvite))
 }
 
 func createRouter(
@@ -477,6 +634,10 @@ func main() {
 	settingsRepo := repo.NewConversationSettingsRepository(dbClient, log)
 	inviteRepo := repo.NewInviteRepository(dbClient, log)
 	reportRepo := repo.NewReportRepository(dbClient, log)
+	outboxRepo := repo.NewOutboxRepository(log)
+	_ = outboxRepo // wired into send/edit/delete paths in subsequent steps
+
+	idempotencyMgr := idempotency.NewManager(cacheClient, log)
 
 	// Initialize event publisher
 	publisher := msgPublisher.NewKafkaEventPublisher(kafkaProducer, log)
@@ -495,7 +656,7 @@ func main() {
 	reportService := service.NewReportService(reportRepo, log)
 
 	// Initialize handlers
-	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, bookmarkService, reportService, messageCache, log)
+	messageHandler := messageHandler.NewMessageHandler(messageService, reactionService, pollService, bookmarkService, reportService, idempotencyMgr, log)
 	conversationHandler := conversationHandler.NewConversationHandler(conversationService, messageService, typingService, draftService, settingsService, inviteService, log)
 	healthHandler := health.NewHandler(healthMgr)
 	chatMessageConsumer := consumer.NewChatMessageConsumer(messageService, log)

@@ -36,30 +36,13 @@ func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 		logger.String("correlation_id", correlationID),
 	)
 
-	// Parse query parameters
-	conversationID := handler.QueryParam("conversation_id")
-	if conversationID == "" {
-		h.log.Warn("Missing conversation_id parameter",
-			logger.String("service", msgError.ServiceName),
-			logger.String("request_id", requestID),
-		)
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id is required", nil)
-		return
-	}
-
-	// Validate conversation ID format
+	conversationID := handler.PathParam("conversation_id")
 	if _, err := uuid.Parse(conversationID); err != nil {
-		h.log.Warn("Invalid conversation_id format",
-			logger.String("service", msgError.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("conversation_id", conversationID),
-		)
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", err)
 		return
 	}
 
-	// Parse limit (default: 20, max: 100)
-	limit, err := handler.QueryParamInt("limit", 20)
+	limit, err := handler.QueryParamInt("limit", 50)
 	if err != nil {
 		h.log.Warn("Invalid limit parameter",
 			logger.String("service", msgError.ServiceName),
@@ -79,24 +62,18 @@ func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 		return
 	}
 
-	// Parse cursors (optional, mutually exclusive)
-	beforeCursor := handler.QueryParam("before")
-	afterCursor := handler.QueryParam("after")
+	beforeCursor := handler.QueryParam("before_id")
+	afterCursor := handler.QueryParam("after_id")
 
 	if beforeCursor != "" && afterCursor != "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "cannot specify both 'before' and 'after' cursors", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "cannot specify both 'before_id' and 'after_id' cursors", nil)
 		return
 	}
 
 	var beforeMessageID *string
 	if beforeCursor != "" {
 		if _, err := uuid.Parse(beforeCursor); err != nil {
-			h.log.Warn("Invalid before cursor format",
-				logger.String("service", msgError.ServiceName),
-				logger.String("request_id", requestID),
-				logger.String("cursor", beforeCursor),
-			)
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "before cursor must be a valid message ID (UUID)", nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "before_id must be a valid message ID (UUID)", err)
 			return
 		}
 		beforeMessageID = &beforeCursor
@@ -104,12 +81,7 @@ func (h *MessageHandler) GetMessages(handler *req.RequestHandler) {
 
 	if afterCursor != "" {
 		if _, err := uuid.Parse(afterCursor); err != nil {
-			h.log.Warn("Invalid after cursor format",
-				logger.String("service", msgError.ServiceName),
-				logger.String("request_id", requestID),
-				logger.String("cursor", afterCursor),
-			)
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "after cursor must be a valid message ID (UUID)", nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "after_id must be a valid message ID (UUID)", err)
 			return
 		}
 	}

@@ -1,13 +1,13 @@
 package message
 
 import (
+	"echo-backend/services/message-service/api/v1/dto"
 	msgError "echo-backend/services/message-service/internal/error"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
 )
 
-// DeleteMessage deletes a message by its ID
 func (h *MessageHandler) DeleteMessage(handler *req.RequestHandler) {
 	ctx := handler.Context()
 
@@ -23,8 +23,12 @@ func (h *MessageHandler) DeleteMessage(handler *req.RequestHandler) {
 		return
 	}
 
-	// Default: delete for everyone. Query param can override.
-	deleteForEveryone := handler.QueryParam("delete_for") != "me"
+	body := dto.NewDeleteMessageRequest()
+	handler.AllowEmptyBody()
+	if !handler.ParseValidateAndSend(body) {
+		return
+	}
+	deleteForEveryone := body.DeleteFor == "" || body.DeleteFor == "everyone"
 
 	h.log.Debug("Deleting message",
 		logger.String("user_id", userID),
@@ -50,6 +54,5 @@ func (h *MessageHandler) DeleteMessage(handler *req.RequestHandler) {
 		return
 	}
 
-	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Message deleted successfully", nil)
+	handler.Writer().WriteHeader(response.StatusNoContent)
 }

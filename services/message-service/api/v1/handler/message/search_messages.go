@@ -1,13 +1,16 @@
 package message
 
 import (
+	"time"
+
 	"echo-backend/services/message-service/api/v1/dto"
 	"shared/pkg/logger"
 	req "shared/server/request"
 	"shared/server/response"
+
+	"github.com/google/uuid"
 )
 
-// SearchMessages searches for messages matching a query
 func (h *MessageHandler) SearchMessages(handler *req.RequestHandler) {
 	ctx := handler.Context()
 
@@ -17,17 +20,34 @@ func (h *MessageHandler) SearchMessages(handler *req.RequestHandler) {
 		return
 	}
 
+	conversationID := handler.PathParam("conversation_id")
+	if _, err := uuid.Parse(conversationID); err != nil {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "conversation_id must be a valid UUID", err)
+		return
+	}
+
 	request := dto.NewSearchMessagesRequest()
 	if !handler.ParseValidateAndSend(request) {
 		return
 	}
 
+	var cursor *time.Time
+	if request.Cursor != "" {
+		t, perr := time.Parse(time.RFC3339, request.Cursor)
+		if perr != nil {
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "cursor must be a valid RFC3339 timestamp", perr)
+			return
+		}
+		cursor = &t
+	}
+
 	h.log.Debug("Searching messages",
 		logger.String("user_id", userID),
-		logger.String("query", request.Query),
+		logger.String("conversation_id", conversationID),
+		logger.String("q", request.Query),
 	)
 
-	messages, totalCount, err := h.messageService.SearchMessages(ctx, userID, request.Query, request.ConversationID, request.Limit, request.Offset)
+	messages, totalCount, err := h.messageService.SearchMessages(ctx, userID, request.Query, &conversationID, request.Limit, cursor)
 	if err != nil {
 		h.log.Error("Failed to search messages",
 			logger.String("user_id", userID),
@@ -37,7 +57,6 @@ func (h *MessageHandler) SearchMessages(handler *req.RequestHandler) {
 		return
 	}
 
-	// Build response
 	messagesResponse := make([]dto.MessageResponse, 0, len(messages))
 	for _, msg := range messages {
 		messagesResponse = append(messagesResponse, dto.MessageResponse{
@@ -65,12 +84,18 @@ func (h *MessageHandler) SearchMessages(handler *req.RequestHandler) {
 		})
 	}
 
+	var nextCursor *string
+	if len(messagesResponse) == request.Limit && len(messagesResponse) > 0 {
+		c := messages[len(messages)-1].CreatedAt.Format(time.RFC3339Nano)
+		nextCursor = &c
+	}
+
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Search results",
 		map[string]interface{}{
 			"messages":    messagesResponse,
 			"total_count": totalCount,
 			"limit":       request.Limit,
-			"offset":      request.Offset,
+			"next_cursor": nextCursor,
 		},
 	)
 }

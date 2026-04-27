@@ -413,3 +413,21 @@ CREATE TABLE messages.conversation_settings (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Transactional Outbox
+-- Rows enqueued in the same transaction as the business write. A relay
+-- process publishes unprocessed rows to Kafka, then sets processed_at.
+-- This guarantees at-least-once delivery without dual-write inconsistency.
+CREATE TABLE messages.outbox (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100) NOT NULL,        -- e.g. message.sent, message.edited
+    topic VARCHAR(255) NOT NULL,             -- target Kafka topic
+    aggregate_id UUID,                       -- partition key (message_id, conversation_id, etc.)
+    payload JSONB NOT NULL,
+    user_id UUID,                            -- producer user (for tracing)
+    headers JSONB DEFAULT '{}'::JSONB,       -- correlation_id, trace_id, request_id
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TIMESTAMPTZ,                -- NULL until the relay publishes it
+    processing_attempts INTEGER DEFAULT 0,
+    last_error TEXT
+);

@@ -37,7 +37,7 @@ type ChatMessageEvent struct {
 	ID                     uuid.UUID
 	ConversationID         uuid.UUID
 	SenderUserID           uuid.UUID
-	RecipientIDs           []uuid.UUID // Recipients for delivery tracking
+	RecipientIDs           []uuid.UUID
 	ParentMessageID        *uuid.UUID
 	MessageType            MessageType
 	Content                string
@@ -57,6 +57,13 @@ type ChatMessageEvent struct {
 	IsForwarded            bool
 	ForwardedFromMessageID *string
 	ForwardCount           int
+	MediaIDs               []string
+	StickerID              *string
+	GifID                  *string
+	IsScheduled            bool
+	ScheduledAt            *time.Time
+	ExpireAfterSeconds     *int
+	ExpiresAt              *time.Time
 	SentFromDeviceID       string
 	SentFromIP             string
 	CreatedAt              time.Time
@@ -92,6 +99,10 @@ func (e *ChatMessageEvent) ToDBModel() *dbModels.Message {
 		IsForwarded:            e.IsForwarded,
 		ForwardedFromMessageID: e.ForwardedFromMessageID,
 		ForwardCount:           e.ForwardCount,
+		IsScheduled:            e.IsScheduled,
+		ScheduledAt:            e.ScheduledAt,
+		ExpireAfterSeconds:     e.ExpireAfterSeconds,
+		ExpiresAt:              e.ExpiresAt,
 		SentFromDeviceID:       utils.PtrString(e.SentFromDeviceID),
 		SentFromIP:             utils.PtrString(e.SentFromIP),
 		CreatedAt:              e.CreatedAt,

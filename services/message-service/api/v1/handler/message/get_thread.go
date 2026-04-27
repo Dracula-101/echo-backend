@@ -34,15 +34,15 @@ func (h *MessageHandler) GetThread(handler *req.RequestHandler) {
 		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "limit must be an integer", nil)
 		return
 	}
-	if limit < 1 || limit > 200 {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "limit must be between 1 and 200", nil)
+	if limit < 1 || limit > 100 {
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "limit must be between 1 and 100", nil)
 		return
 	}
 
 	var beforeID *string
-	if before := handler.QueryParam("before"); before != "" {
+	if before := handler.QueryParam("before_id"); before != "" {
 		if _, err := uuid.Parse(before); err != nil {
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "before must be a valid UUID", nil)
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "before_id must be a valid UUID", err)
 			return
 		}
 		beforeID = &before
@@ -52,6 +52,12 @@ func (h *MessageHandler) GetThread(handler *req.RequestHandler) {
 		logger.String("parent_message_id", parentMessageID),
 		logger.Int("limit", limit),
 	)
+
+	parent, parentErr := h.messageService.GetMessageByID(ctx, parentMessageID)
+	if parentErr != nil {
+		response.NotFoundError(ctx, handler.Request(), handler.Writer(), "Parent message not found")
+		return
+	}
 
 	messages, hasMore, msgErr := h.messageService.GetThread(ctx, parentMessageID, limit, beforeID)
 	if msgErr != nil {
@@ -85,10 +91,28 @@ func (h *MessageHandler) GetThread(handler *req.RequestHandler) {
 		})
 	}
 
+	parentResp := dto.MessageResponse{
+		ID:             parent.ID.String(),
+		ConversationID: parent.ConversationID.String(),
+		SenderUserID:   parent.SenderUserID.String(),
+		Content:        parent.Content,
+		MessageType:    string(parent.MessageType),
+		Status:         string(parent.Status),
+		IsEdited:       parent.IsEdited,
+		IsDeleted:      parent.IsDeleted,
+		ReadCount:      parent.ReadCount,
+		Metadata:       parent.Metadata,
+		CreatedAt:      parent.CreatedAt,
+		UpdatedAt:      parent.UpdatedAt,
+		EditedAt:       parent.EditedAt,
+		DeletedAt:      parent.DeletedAt,
+	}
+
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Thread messages retrieved",
 		map[string]interface{}{
-			"messages": messagesResponse,
-			"has_more": hasMore,
+			"parent_message": parentResp,
+			"replies":        messagesResponse,
+			"has_more":       hasMore,
 		},
 	)
 }

@@ -21,12 +21,8 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 		logger.String("client_ip", handler.GetClientIP()),
 	)
 
-	userID, ok := request.GetUserIDUUIDFromContext(handler.Context())
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		h.log.Warn("User not authenticated",
-			logger.String("request_id", requestID),
-		)
-		response.UnauthorizedError(handler.Context(), handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
@@ -81,19 +77,22 @@ func (h *ConversationHandler) CreateConversation(handler *request.RequestHandler
 		logger.Int("participant_count", len(req.ParticipantIDs)),
 	)
 
-	// Call service layer
+	participantUUIDs := make([]uuid.UUID, 0, len(req.ParticipantIDs))
+	for _, idStr := range req.ParticipantIDs {
+		id, perr := uuid.Parse(idStr)
+		if perr != nil {
+			response.BadRequestError(handler.Context(), handler.Request(), handler.Writer(), "participant_ids must be valid UUIDs", perr)
+			return
+		}
+		participantUUIDs = append(participantUUIDs, id)
+	}
+
 	conversation, svcErr := h.conversationService.CreateConversation(
 		handler.Context(),
 		domain.CreateConversationInput{
-			CreatorUserID:    userID,
-			ConversationType: domain.ConversationType(req.ConversationType),
-			ParticipantIDs: func() []uuid.UUID {
-				ids := make([]uuid.UUID, 0, len(req.ParticipantIDs))
-				for _, idStr := range req.ParticipantIDs {
-					ids = append(ids, uuid.MustParse(idStr))
-				}
-				return ids
-			}(),
+			CreatorUserID:        userID,
+			ConversationType:     domain.ConversationType(req.ConversationType),
+			ParticipantIDs:       participantUUIDs,
 			IsPublic:             req.IsPublic,
 			Title:                req.Title,
 			Description:          req.Description,

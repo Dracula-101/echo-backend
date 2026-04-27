@@ -11,24 +11,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// AddParticipants adds participants to a conversation
 func (h *ConversationHandler) AddParticipants(handler *request.RequestHandler) {
 	ctx := handler.Context()
 
-	userID, ok := request.GetUserIDFromContext(ctx)
+	userID, ok := h.authedUserID(handler)
 	if !ok {
-		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "User not authenticated", nil)
 		return
 	}
 
 	conversationID := handler.PathParam("id")
-	if conversationID == "" {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID is required", nil)
-		return
-	}
 	convUUID, err := uuid.Parse(conversationID)
 	if err != nil {
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Conversation ID must be a valid UUID", err)
 		return
 	}
 
@@ -39,27 +33,30 @@ func (h *ConversationHandler) AddParticipants(handler *request.RequestHandler) {
 
 	participantIDs := make([]uuid.UUID, 0, len(req.ParticipantIDs))
 	for _, idStr := range req.ParticipantIDs {
-		participantIDs = append(participantIDs, uuid.MustParse(idStr))
+		id, parseErr := uuid.Parse(idStr)
+		if parseErr != nil {
+			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "participant_ids must be valid UUIDs", parseErr)
+			return
+		}
+		participantIDs = append(participantIDs, id)
 	}
 
 	h.log.Debug("Adding participants",
-		logger.String("user_id", userID),
+		logger.String("user_id", userID.String()),
 		logger.String("conversation_id", conversationID),
 		logger.Int("count", len(participantIDs)),
 	)
 
 	svcErr := h.conversationService.AddParticipants(ctx, domain.AddParticipantsInput{
 		ConversationID: convUUID,
-		UserID:         uuid.MustParse(userID),
+		UserID:         userID,
 		ParticipantIDs: participantIDs,
 	})
 	if svcErr != nil {
 		switch svcErr.Code {
 		case msgError.CodePermissionDenied:
 			response.ForbiddenError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
-		case msgError.CodeDirectConversationLimit:
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
-		case msgError.CodeMaxMembersExceeded:
+		case msgError.CodeDirectConversationLimit, msgError.CodeMaxMembersExceeded:
 			response.BadRequestError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
 		default:
 			response.InternalServerError(ctx, handler.Request(), handler.Writer(), svcErr.Message, svcErr.Error)
@@ -68,5 +65,5 @@ func (h *ConversationHandler) AddParticipants(handler *request.RequestHandler) {
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(),
-		response.StatusOK, "Participants added successfully", nil)
+		response.StatusCreated, "Participants added", nil)
 }

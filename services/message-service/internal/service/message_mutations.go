@@ -504,9 +504,8 @@ func (s *messageService) GetDeliveryStatus(ctx context.Context, messageID string
 	return summary, nil
 }
 
-// SearchMessages searches for messages matching a query
-func (s *messageService) SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, offset int) ([]*domain.Message, int, *msgError.MsgError) {
-	dbMessages, totalCount, dbErr := s.messageRepo.SearchMessages(ctx, query, userID, conversationID, limit, offset)
+func (s *messageService) SearchMessages(ctx context.Context, userID string, query string, conversationID *string, limit int, cursor *time.Time) ([]*domain.Message, int, *msgError.MsgError) {
+	dbMessages, totalCount, dbErr := s.messageRepo.SearchMessages(ctx, query, userID, conversationID, limit, cursor)
 	if dbErr != nil {
 		return nil, 0, &msgError.MsgError{
 			Message: "Failed to search messages",
@@ -523,9 +522,27 @@ func (s *messageService) SearchMessages(ctx context.Context, userID string, quer
 	return messages, totalCount, nil
 }
 
-// SyncMessages retrieves messages after a given message ID for client sync
-func (s *messageService) SyncMessages(ctx context.Context, conversationID string, lastMessageID string, limit int) ([]*domain.Message, bool, *msgError.MsgError) {
-	return s.GetMessagesAfter(ctx, conversationID, lastMessageID, limit)
+func (s *messageService) SyncMessages(ctx context.Context, conversationID string, since time.Time, limit int) ([]*domain.Message, bool, *msgError.MsgError) {
+	dbMessages, dbErr := s.messageRepo.GetMessagesUpdatedSince(ctx, conversationID, since, limit+1)
+	if dbErr != nil {
+		return nil, false, &msgError.MsgError{
+			Message: "Failed to sync messages",
+			Code:    msgError.CodeMessageRetrievalFailed,
+			Error:   dbErr,
+		}
+	}
+
+	hasMore := len(dbMessages) > limit
+	if hasMore {
+		dbMessages = dbMessages[:limit]
+	}
+
+	messages := make([]*domain.Message, 0, len(dbMessages))
+	for _, dbMsg := range dbMessages {
+		msg := domain.NewMessage(*dbMsg)
+		messages = append(messages, &msg)
+	}
+	return messages, hasMore, nil
 }
 
 // GetThread retrieves thread/reply messages for a parent message

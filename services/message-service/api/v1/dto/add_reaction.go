@@ -6,9 +6,9 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// AddReactionRequest represents the request to add a reaction to a message
 type AddReactionRequest struct {
-	Emoji string `json:"emoji" validate:"required,min=1,max=50"`
+	ReactionType string  `json:"reaction_type" validate:"required,min=1,max=100"`
+	SkinTone     *string `json:"skin_tone,omitempty" validate:"omitempty,oneof=light medium_light medium medium_dark dark"`
 }
 
 func NewAddReactionRequest() *AddReactionRequest {
@@ -20,23 +20,27 @@ func (r *AddReactionRequest) GetValue() interface{} {
 }
 
 func (r *AddReactionRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
-	var errors []request.ValidationErrorDetail
+	errors := make([]request.ValidationErrorDetail, 0, len(ve))
 	for _, fieldErr := range ve {
-		if fieldErr.Field() == "Emoji" {
-			if fieldErr.Tag() == "required" {
+		switch fieldErr.Field() {
+		case "ReactionType":
+			switch fieldErr.Tag() {
+			case "required", "min":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.REQUIRED_FIELD,
-					Msg:  "Emoji is required",
+					Msg:  "reaction_type is required",
 				})
-			} else if fieldErr.Tag() == "min" {
-				errors = append(errors, request.ValidationErrorDetail{
-					Code: request.TOO_SHORT,
-					Msg:  "Emoji cannot be empty",
-				})
-			} else if fieldErr.Tag() == "max" {
+			case "max":
 				errors = append(errors, request.ValidationErrorDetail{
 					Code: request.TOO_LONG,
-					Msg:  "Emoji must be at most 50 characters",
+					Msg:  "reaction_type must be at most 100 characters",
+				})
+			}
+		case "SkinTone":
+			if fieldErr.Tag() == "oneof" {
+				errors = append(errors, request.ValidationErrorDetail{
+					Code: request.INVALID_FORMAT,
+					Msg:  "skin_tone must be one of: light, medium_light, medium, medium_dark, dark",
 				})
 			}
 		}

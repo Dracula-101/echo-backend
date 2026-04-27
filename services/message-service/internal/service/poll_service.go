@@ -62,7 +62,9 @@ func (s *pollService) CreatePoll(ctx context.Context, input domain.CreatePollInp
 		MessageID:     messageID.String(),
 		Question:      input.Question,
 		AllowMultiple: input.AllowMultiple,
-		IsAnonymous:   false, // Can be extended if requested
+		IsAnonymous:   input.IsAnonymous,
+		IsQuiz:        input.IsQuiz,
+		Explanation:   input.Explanation,
 		TotalVotes:    0,
 		CreatedAt:     time.Now(),
 		ClosesAt:      input.ExpiresAt,
@@ -87,7 +89,7 @@ func (s *pollService) CreatePoll(ctx context.Context, input domain.CreatePollInp
 		ID:             messageID.String(),
 		ConversationID: input.ConversationID.String(),
 		SenderUserID:   input.CreatorUserID.String(),
-		MessageType:    dbModel.MessageTypeText, // Base type
+		MessageType:    dbModel.MessageTypePoll,
 		Content:        &input.Question,
 		FormatType:     dbModel.MessageFormatPlain,
 		Status:         dbModel.MessageStatusSent,
