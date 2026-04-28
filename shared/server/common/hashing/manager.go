@@ -71,9 +71,10 @@ type parsedHash struct {
 }
 
 const (
-	AlgorithmArgon2id Algorithm = "argon2id"
-	AlgorithmBcrypt   Algorithm = "bcrypt"
-	AlgorithmScrypt   Algorithm = "scrypt"
+	AlgorithmArgon2id     Algorithm = "argon2id"
+	AlgorithmBcrypt       Algorithm = "bcrypt"
+	AlgorithmScrypt       Algorithm = "scrypt"
+	AlgorithmSimpleSHA256 Algorithm = "simple-sha256"
 )
 
 func NewManager(cfg Config) (*Manager, error) {
@@ -179,6 +180,13 @@ func (m *Manager) SimpleHash(value string) (*string, error) {
 	hash := sha256.Sum256([]byte(value))
 	encoded := base64.RawURLEncoding.EncodeToString(hash[:])
 	return &encoded, nil
+}
+
+func (m *Manager) SimpleVerify(value string, encoded string) (bool, Algorithm, error) {
+	hash := sha256.Sum256([]byte(value))
+	expectedEncoded := base64.RawURLEncoding.EncodeToString(hash[:])
+	match := subtle.ConstantTimeCompare([]byte(expectedEncoded), []byte(encoded)) == 1
+	return match, AlgorithmSimpleSHA256, nil
 }
 
 func (m *Manager) Hash(password string) (*HashResult, error) {
@@ -319,6 +327,16 @@ func (m *Manager) hashScrypt(password string) (*HashResult, error) {
 		Salt:      salt,
 		Sum:       sum,
 		Params:    params,
+	}, nil
+}
+
+func (m *Manager) hashSimpleSHA256(password string) (*HashResult, error) {
+	hash := sha256.Sum256([]byte(password))
+	encoded := base64.RawURLEncoding.EncodeToString(hash[:])
+	return &HashResult{
+		Algorithm: AlgorithmSimpleSHA256,
+		Encoded:   encoded,
+		Sum:       hash[:],
 	}, nil
 }
 

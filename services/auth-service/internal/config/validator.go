@@ -14,6 +14,7 @@ func ValidateAndSetDefaults(cfg *Config) error {
 		validateDatabase,
 		validateCache,
 		validateAuth,
+		validateSms,
 		validateSecurity,
 		validateLogging,
 		validateEmail,
@@ -233,6 +234,35 @@ func validateAuth(cfg *Config) error {
 
 	if cfg.Auth.Session.AbsoluteTimeout <= 0 {
 		cfg.Auth.Session.AbsoluteTimeout = 24 * time.Hour
+	}
+
+	return nil
+}
+
+func validateSms(cfg *Config) error {
+	if !cfg.Sms.Enabled {
+		return nil
+	}
+
+	validProviders := []string{"twilio", "nexmo", "plivo"}
+	if !contains(validProviders, cfg.Sms.Provider) {
+		return fmt.Errorf("sms.provider must be one of: %s", strings.Join(validProviders, ", "))
+	}
+
+	// Validate Twilio configuration
+	if cfg.Sms.Provider == "twilio" {
+		if cfg.Sms.Twilio.AccountSID == "" {
+			return fmt.Errorf("sms.twilio.account_sid is required when provider is 'twilio'")
+		}
+		if cfg.Sms.Twilio.MessagingServiceSID == "" {
+			return fmt.Errorf("sms.twilio.messaging_service_sid is required when provider is 'twilio'")
+		}
+		if cfg.Sms.Twilio.AuthToken == "" {
+			return fmt.Errorf("sms.twilio.auth_token is required when provider is 'twilio'")
+		}
+		if cfg.Sms.Twilio.FromNumber == "" {
+			return fmt.Errorf("sms.twilio.from_number is required when provider is 'twilio'")
+		}
 	}
 
 	return nil

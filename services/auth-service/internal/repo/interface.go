@@ -39,6 +39,13 @@ type AuthRepository interface {
 	MarkEmailVerified(ctx context.Context, userID string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) pkgErrors.AppError
 	ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError
 
+	// Phone verification
+	CreateOTPVerification(ctx context.Context, userID string, phone string, otp string, otpHash string, ipAddress string, userAgent string) pkgErrors.AppError
+	GetOTPVerification(ctx context.Context, userID string) ([]*domain.OTPVerification, pkgErrors.AppError)
+	DeleteOTPVerification(ctx context.Context, userID string, phone string, otpCode string) pkgErrors.AppError
+	LogOTPAttempt(ctx context.Context, userID string) pkgErrors.AppError
+	MarkPhoneVerified(ctx context.Context, userID string) pkgErrors.AppError
+
 	// Two-factor authentication
 	Update2FASecret(ctx context.Context, userID string, secret string) pkgErrors.AppError
 	Enable2FA(ctx context.Context, userID string) pkgErrors.AppError

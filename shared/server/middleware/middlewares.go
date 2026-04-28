@@ -1022,8 +1022,6 @@ func InterceptUserId(skipPaths ...string) Handler {
 			ctx := context.WithValue(r.Context(), sContext.UserIDKey, userID.String())
 			r.Header.Set(headers.XUserID, userID.String())
 			next.ServeHTTP(w, r.WithContext(ctx))
-
-			response.UnauthorizedError(r.Context(), r, w, "Missing or Invalid Auth Token", errors.New("missing user id in header"))
 		})
 	}
 }

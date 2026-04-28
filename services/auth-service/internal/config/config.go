@@ -8,6 +8,7 @@ type Config struct {
 	Server          ServerConfig          `yaml:"server" mapstructure:"server"`
 	Database        DatabaseConfig        `yaml:"database" mapstructure:"database"`
 	Cache           CacheConfig           `yaml:"cache" mapstructure:"cache"`
+	Sms             SmsConfig             `yaml:"sms" mapstructure:"sms"`
 	LocationService LocationServiceConfig `yaml:"location_service" mapstructure:"location_service"`
 	Kafka           KafkaConfig           `yaml:"kafka" mapstructure:"kafka"`
 	Auth            AuthConfig            `yaml:"auth" mapstructure:"auth"`
@@ -98,6 +99,27 @@ type RedisConfig struct {
 	RedisMinIdleConns int           `yaml:"min_idle_conns" mapstructure:"min_idle_conns"`
 	RedisMaxRetries   int           `yaml:"max_retries" mapstructure:"max_retries"`
 	RedisPoolTimeout  time.Duration `yaml:"pool_timeout" mapstructure:"pool_timeout"`
+}
+
+// SmsConfig contains SMS service configuration
+type SmsConfig struct {
+	Enabled    bool             `yaml:"enabled" mapstructure:"enabled"`
+	Provider   string           `yaml:"provider" mapstructure:"provider"`
+	Twilio     TwilioConfig     `yaml:"twilio" mapstructure:"twilio"`
+	SignalWire SignalWireConfig `yaml:"signalwire" mapstructure:"signalwire"`
+}
+
+type TwilioConfig struct {
+	AccountSID          string `yaml:"account_sid" mapstructure:"account_sid"`
+	MessagingServiceSID string `yaml:"messaging_service_sid" mapstructure:"messaging_service_sid"`
+	AuthToken           string `yaml:"auth_token" mapstructure:"auth_token"`
+	FromNumber          string `yaml:"from_number" mapstructure:"from_number"`
+}
+
+type SignalWireConfig struct {
+	ProjectID  string `yaml:"project_id" mapstructure:"project_id"`
+	AuthToken  string `yaml:"auth_token" mapstructure:"auth_token"`
+	FromNumber string `yaml:"from_number" mapstructure:"from_number"`
 }
 
 type LocationServiceConfig struct {

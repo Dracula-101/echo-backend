@@ -17,6 +17,7 @@ import (
 	authCache "auth-service/internal/service/cache"
 	"auth-service/internal/service/location"
 	sessionSvc "auth-service/internal/service/session"
+	"auth-service/internal/service/sms"
 
 	"context"
 	"fmt"
@@ -78,6 +79,10 @@ func loadConfig() (*config.Config, error) {
 	cfg, err = config.Load(configPath, env)
 	if err != nil {
 		log.Error("Failed to load config", logger.Error(err))
+		return nil, err
+	}
+	if err := config.Validate(cfg); err != nil {
+		log.Error("Config validation failed", logger.Error(err))
 		return nil, err
 	}
 	log.Debug("Config loaded successfully")
@@ -321,6 +326,32 @@ func setupRoutes(builder *router.Builder, h *handler.AuthHandler, rateLimiter ra
 				5,
 			),
 		)
+		r.Post(
+			"/send-otp",
+			req.Adapt(h.SendOTP),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return rateLimiter.AllowOtpSend(ctx, key, limit)
+				},
+				func(req req.RequestHandler) string {
+					return req.GetClientIP()
+				},
+				10,
+			),
+		)
+		r.Post(
+			"/verify-phone",
+			req.Adapt(h.VerifyPhone),
+			middleware.RateLimit(
+				func(ctx context.Context, key string, limit int64) (bool, int64, error) {
+					return rateLimiter.AllowOtpSend(ctx, key, limit)
+				},
+				func(req req.RequestHandler) string {
+					return req.GetClientIP()
+				},
+				10,
+			),
+		)
 		r.Get("/sessions", req.Adapt(h.GetSessions))
 		r.Delete("/sessions/{id}", req.Adapt(h.DeleteSession))
 
@@ -558,6 +589,14 @@ func main() {
 	tokenService := createTokenManager(*cfg, log)
 	hashingService := createHashingService(*cfg, log)
 	locationService := location.NewLocationService(cfg.LocationService.Endpoint, log)
+	log.Info("Sms service configuration",
+		logger.String("provider", cfg.Sms.Provider),
+		logger.Bool("enabled", cfg.Sms.Enabled),
+		logger.String("account_sid", cfg.Sms.Twilio.AccountSID),
+		logger.String("messaging_service_sid", cfg.Sms.Twilio.MessagingServiceSID),
+		logger.String("from_number", cfg.Sms.Twilio.FromNumber),
+	)
+	smsService := sms.NewSmsService(cfg.Sms.Twilio.AccountSID, cfg.Sms.Twilio.MessagingServiceSID, cfg.Sms.Twilio.AuthToken, cfg.Sms.Twilio.FromNumber, log)
 
 	_ = outbox.NewOutboxRepository(dbClient, log)
 	loginHistoryRepo := login_history.NewLoginHistoryRepo(dbClient, log)
@@ -576,6 +615,7 @@ func main() {
 		WithAuthCache(authCache).
 		WithSessionCache(sessionCache).
 		WithRateLimiter(*rateLimiter).
+		WithSmsService(smsService).
 		WithTokenService(*tokenService).
 		WithHashingService(*hashingService).
 		WithEmailService(*emailService).

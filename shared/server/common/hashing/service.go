@@ -36,6 +36,13 @@ func (s *HashingService) SimpleHash(ctx context.Context, value string) (*string,
 	return s.manager.SimpleHash(value)
 }
 
+func (s *HashingService) SimpleVerify(ctx context.Context, value string, encoded string) (bool, Algorithm, error) {
+	if err := ctx.Err(); err != nil {
+		return false, "", err
+	}
+	return s.manager.SimpleVerify(value, encoded)
+}
+
 func (s *HashingService) HashString(input string) string {
 	hashResult, err := s.manager.Hash(input)
 	if err != nil {

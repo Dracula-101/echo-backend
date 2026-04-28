@@ -36,6 +36,9 @@ type AuthService interface {
 	// Email verification
 	VerifyEmail(ctx context.Context, token string, deviceInfo request.DeviceInfo, locationInfo request.IpAddressInfo) (*string, *error.AuthError)
 	SendEmailVerification(ctx context.Context, userID string, email string, ipAddress string, userAgent string) *error.AuthError
+
+	VerifyPhone(ctx context.Context, userID string, otp string) *error.AuthError
+	SendOtpVerification(ctx context.Context, userID string, phone string, ipAddress string, userAgent string) *error.AuthError
 	ResendVerification(ctx context.Context, email string, ipAddress string, userAgent string) (*string, *error.AuthError)
 
 	// MFA

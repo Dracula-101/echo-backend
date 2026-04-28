@@ -92,23 +92,23 @@ func (a *AuthSession) PrimaryKey() interface{} {
 }
 
 type OTPVerification struct {
-	ID             string          `db:"id" json:"id" pk:"true"`
-	UserID         *string         `db:"user_id" json:"user_id,omitempty"`
-	Identifier     string          `db:"identifier" json:"identifier"`
-	IdentifierType IdentifierType  `db:"identifier_type" json:"identifier_type"`
-	OTPCode        string          `db:"otp_code" json:"-"`
-	OTPHash        string          `db:"otp_hash" json:"-"`
-	Purpose        OTPPurpose      `db:"purpose" json:"purpose"`
-	Attempts       int             `db:"attempts" json:"attempts"`
-	MaxAttempts    int             `db:"max_attempts" json:"max_attempts"`
-	IsVerified     bool            `db:"is_verified" json:"is_verified"`
-	VerifiedAt     *time.Time      `db:"verified_at" json:"verified_at,omitempty"`
-	ExpiresAt      time.Time       `db:"expires_at" json:"expires_at"`
-	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
-	SentVia        *string         `db:"sent_via" json:"sent_via,omitempty"`
-	IPAddress      *string         `db:"ip_address" json:"ip_address,omitempty"`
-	UserAgent      *string         `db:"user_agent" json:"user_agent,omitempty"`
-	Metadata       json.RawMessage `db:"metadata" json:"metadata,omitempty"`
+	ID             string           `db:"id" json:"id" pk:"true"`
+	UserID         *string          `db:"user_id" json:"user_id,omitempty"`
+	Identifier     string           `db:"identifier" json:"identifier"`
+	IdentifierType IdentifierType   `db:"identifier_type" json:"identifier_type"`
+	OTPCode        string           `db:"otp_code" json:"-"`
+	OTPHash        string           `db:"otp_hash" json:"-"`
+	Purpose        OTPPurpose       `db:"purpose" json:"purpose"`
+	Attempts       int              `db:"attempts" json:"attempts"`
+	MaxAttempts    int              `db:"max_attempts" json:"max_attempts"`
+	IsVerified     bool             `db:"is_verified" json:"is_verified"`
+	VerifiedAt     *time.Time       `db:"verified_at" json:"verified_at,omitempty"`
+	ExpiresAt      time.Time        `db:"expires_at" json:"expires_at"`
+	CreatedAt      time.Time        `db:"created_at" json:"created_at"`
+	SentVia        *string          `db:"sent_via" json:"sent_via,omitempty"`
+	IPAddress      *string          `db:"ip_address" json:"ip_address,omitempty"`
+	UserAgent      *string          `db:"user_agent" json:"user_agent,omitempty"`
+	Metadata       *json.RawMessage `db:"metadata" json:"metadata,omitempty"`
 }
 
 func (o *OTPVerification) TableName() string {

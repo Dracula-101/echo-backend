@@ -62,6 +62,7 @@ const (
 	CodePasswordResetTokenUsed    = "AUTH_PASSWORD_RESET_TOKEN_USED"
 	CodeSamePassword              = "AUTH_SAME_PASSWORD"
 	CodePasswordReuseNotAllowed   = "AUTH_PASSWORD_REUSE_NOT_ALLOWED"
+	CodePhoneAlreadyVerified      = "AUTH_PHONE_ALREADY_VERIFIED"
 
 	// Email Verification Errors
 	CodeEmailAlreadyVerified     = "AUTH_EMAIL_ALREADY_VERIFIED"
@@ -87,6 +88,16 @@ const (
 	CodeVerificationInvalid           = "AUTH_VERIFICATION_INVALID"
 	CodeVerificationEmailRecentlySent = "AUTH_VERIFICATION_EMAIL_RECENTLY_SENT"
 	CodeTooManyVerificationAttempts   = "AUTH_TOO_MANY_VERIFICATION_ATTEMPTS"
+
+	CodeSmsSendFailed                  = "AUTH_SMS_SEND_FAILED"
+	CodeOtpHashingFailed               = "AUTH_OTP_HASHING_FAILED"
+	CodeInvalidOTP                     = "AUTH_INVALID_OTP"
+	CodeTooManyOTPAttempts             = "AUTH_TOO_MANY_OTP_ATTEMPTS"
+	CodeOTPExpired                     = "AUTH_OTP_EXPIRED"
+	CodeOTPNotFound                    = "AUTH_OTP_NOT_FOUND"
+	CodeOTPVerificationFailed          = "AUTH_OTP_VERIFICATION_FAILED"
+	CodeOTPVerificationCooldown        = "AUTH_OTP_VERIFICATION_COOLDOWN"
+	CodeOTPTooManyVerificationAttempts = "AUTH_OTP_TOO_MANY_VERIFICATION_ATTEMPTS"
 
 	// IP Blocking Errors
 	CodeIPLocked = "AUTH_IP_LOCKED"

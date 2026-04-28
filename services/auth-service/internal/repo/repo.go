@@ -23,6 +23,7 @@ import (
 
 const (
 	AccountLockDuration = 30 * time.Minute
+	OtpExpiryDuration   = 10 * time.Minute
 )
 
 // ============================================================================
@@ -612,6 +613,7 @@ func (r *authRepository) MarkEmailVerified(ctx context.Context, userID string, d
 
 	return nil
 }
+
 func (r *authRepository) ActivatePendingUser(ctx context.Context, userID string) pkgErrors.AppError {
 	r.log.Info("Activating pending user account",
 		logger.String("service", authErrors.ServiceName),
@@ -633,6 +635,173 @@ func (r *authRepository) ActivatePendingUser(ctx context.Context, userID string)
 		logger.String("service", authErrors.ServiceName),
 		logger.String("user_id", userID),
 		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
+// ============================================================================
+// Phone Verification
+// ============================================================================
+func (r *authRepository) CreateOTPVerification(ctx context.Context, userID string, phone string, otpCode string, hashedOtp string, ipAddress string, userAgent string) pkgErrors.AppError {
+	r.log.Info("Creating OTP verification record",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	expiresAt := time.Now().Add(OtpExpiryDuration)
+	insertDbModel := dbModels.OTPVerification{
+		UserID:         utils.PtrString(userID),
+		Identifier:     phone,
+		ExpiresAt:      expiresAt,
+		OTPCode:        otpCode,
+		OTPHash:        hashedOtp, // Store hashed OTP for security
+		IdentifierType: dbModels.IdentifierTypePhone,
+		Purpose:        dbModels.OTPPurposePhoneVerification,
+		Attempts:       0,
+		MaxAttempts:    5,
+		SentVia:        utils.PtrString("twilio"),
+		IPAddress:      utils.PtrString(ipAddress),
+		UserAgent:      utils.PtrString(userAgent),
+		CreatedAt:      time.Now(),
+	}
+	_, err := r.db.Insert(ctx, &insertDbModel)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create OTP verification record").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("OTP verification record created successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	return nil
+}
+
+func (r *authRepository) GetOTPVerification(ctx context.Context, userID string) ([]*domain.OTPVerification, pkgErrors.AppError) {
+	r.log.Debug("Fetching OTP verification record",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `SELECT * FROM auth.otp_verifications WHERE user_id = $1 AND identifier_type = $2 AND purpose = $3 AND verified_at IS NULL`
+	rows, err := r.db.Query(ctx, query, userID, dbModels.IdentifierTypePhone, dbModels.OTPPurposePhoneVerification)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			r.log.Debug("No OTP verification record found",
+				logger.String("service", authErrors.ServiceName),
+				logger.String("user_id", userID),
+			)
+			return nil, nil
+		}
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get OTP verification record").
+			WithDetail("user_id", userID)
+	}
+	defer rows.Close()
+
+	var otpVerifications []*dbModels.OTPVerification
+	for rows.Next() {
+		var dbOtp dbModels.OTPVerification
+		err := rows.ScanModel(&dbOtp)
+		if err != nil {
+			return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to scan OTP verification record").
+				WithDetail("user_id", userID)
+		}
+		otpVerifications = append(otpVerifications, &dbOtp)
+	}
+
+	r.log.Debug("OTP verification records fetched successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int("record_count", len(otpVerifications)),
+	)
+
+	var domainOtps []*domain.OTPVerification
+	for _, dbOtp := range otpVerifications {
+		domainOtps = append(domainOtps, &domain.OTPVerification{
+			Phone:     dbOtp.Identifier,
+			OTPHash:   dbOtp.OTPHash,
+			Attempts:  dbOtp.Attempts,
+			ExpiresAt: dbOtp.ExpiresAt,
+			SentVia:   utils.DerefString(dbOtp.SentVia),
+		})
+	}
+
+	return domainOtps, nil
+}
+
+func (r *authRepository) DeleteOTPVerification(ctx context.Context, userID string, phone string, otp string) pkgErrors.AppError {
+	r.log.Info("Deleting OTP verification record",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `DELETE FROM auth.otp_verifications WHERE user_id = $1 AND identifier = $2 AND purpose = $3 AND otp_code = $4`
+	result, err := r.db.Exec(ctx, query, userID, phone, dbModels.OTPPurposePhoneVerification, otp)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to delete OTP verification record").
+			WithDetail("user_id", userID)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info("OTP verification record deleted successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+		logger.Int64("rows_affected", rowsAffected),
+	)
+	return nil
+}
+
+func (r *authRepository) LogOTPAttempt(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Logging OTP verification attempt",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.otp_verifications
+		SET attempts = attempts + 1
+		WHERE user_id = $1 AND purpose = $2 AND verified_at IS NULL`
+	_, err := r.db.Exec(ctx, query, userID, dbModels.OTPPurposePhoneVerification)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to log OTP verification attempt").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("OTP verification attempt logged",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+	return nil
+}
+
+func (r *authRepository) MarkPhoneVerified(ctx context.Context, userID string) pkgErrors.AppError {
+	r.log.Info("Marking phone as verified",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
+	)
+
+	query := `UPDATE auth.otp_verifications
+		SET verified_at = NOW(),
+		    attempts = attempts + 1,
+			otp_code = '',				
+			is_verified = TRUE
+		WHERE user_id = $1 AND purpose = $2 AND verified_at IS NULL`
+	_, err := r.db.Exec(ctx, query, userID, dbModels.OTPPurposePhoneVerification)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update OTP verification record for phone verification").
+			WithDetail("user_id", userID)
+	}
+
+	updateUserQuery := `UPDATE auth.users SET phone_verified = TRUE, updated_at = NOW() WHERE id = $1`
+	_, err = r.db.Exec(ctx, updateUserQuery, userID)
+	if err != nil {
+		return pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to update user phone verification status").
+			WithDetail("user_id", userID)
+	}
+
+	r.log.Info("Phone marked as verified successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", userID),
 	)
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"auth-service/internal/repo/session"
 	"auth-service/internal/service/cache"
 	sessionSvc "auth-service/internal/service/session"
+	"auth-service/internal/service/sms"
 	"shared/pkg/email"
 	"shared/pkg/logger"
 	"shared/server/common/hashing"
@@ -25,6 +26,7 @@ type authService struct {
 	authCache             cache.AuthCache
 	sessionCache          sessionSvc.SessionCache
 	emailService          email.EmailService
+	smsService            sms.SmsService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
 	rateLimiter           ratelimiter.RateLimiter
@@ -44,6 +46,7 @@ type AuthServiceBuilder struct {
 	emailVerificationRepo email_verification.EmailVerificationTokenRepository
 	authCache             cache.AuthCache
 	sessionCache          sessionSvc.SessionCache
+	smsService            sms.SmsService
 	emailService          email.EmailService
 	tokenService          token.JWTTokenService
 	hashingService        hashing.HashingService
@@ -92,6 +95,11 @@ func (b *AuthServiceBuilder) WithRateLimiter(rateLimiter ratelimiter.RateLimiter
 	return b
 }
 
+func (b *AuthServiceBuilder) WithSmsService(smsService sms.SmsService) *AuthServiceBuilder {
+	b.smsService = smsService
+	return b
+}
+
 func (b *AuthServiceBuilder) WithEmailService(emailService email.EmailService) *AuthServiceBuilder {
 	b.emailService = emailService
 	return b
@@ -137,6 +145,7 @@ func (b *AuthServiceBuilder) Build() AuthService {
 		emailVerificationRepo: b.emailVerificationRepo,
 		authCache:             b.authCache,
 		sessionCache:          b.sessionCache,
+		smsService:            b.smsService,
 		emailService:          b.emailService,
 		tokenService:          b.tokenService,
 		hashingService:        b.hashingService,

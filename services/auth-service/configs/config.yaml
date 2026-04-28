@@ -50,6 +50,19 @@ cache:
     default_expiration: ${MEMORY_CACHE_DEFAULT_EXPIRATION:5m}
     cleanup_interval: ${MEMORY_CACHE_CLEANUP_INTERVAL:10m}
 
+sms:
+  enabled: ${SMS_ENABLED:true}
+  provider: ${SMS_PROVIDER:twilio}
+  twilio:
+    account_sid: ${TWILIO_ACCOUNT_SID:}
+    auth_token: ${TWILIO_AUTH_TOKEN:}
+    from_number: ${TWILIO_FROM_NUMBER:}
+    messaging_service_sid: ${TWILIO_MESSAGING_SERVICE_SID:}
+  signalwire:
+    project_id: ${SIGNALWIRE_PROJECT_ID:}
+    auth_token: ${SIGNALWIRE_AUTH_TOKEN:}
+    space_url: ${SIGNALWIRE_SPACE_URL:}
+
 location_service:
   enabled: ${LOCATION_SERVICE_ENABLED:true}
   endpoint: ${LOCATION_SERVICE_ENDPOINT:http://localhost:8090/lookup}
