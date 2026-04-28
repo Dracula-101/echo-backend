@@ -33,6 +33,15 @@ POSTGRES_DB="${POSTGRES_DB:-echo_db}"
 
 export PGPASSWORD="$POSTGRES_PASSWORD"
 
+# ── Temp file that accumulates all SQL to run in one transaction ──────────────
+TRANSACTION_FILE=$(mktemp /tmp/echo_init_XXXXXX.sql)
+TRANSACTION_FAILED=false
+
+cleanup() {
+    rm -f "$TRANSACTION_FILE"
+}
+trap cleanup EXIT
+
 psql_root() {
     psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d postgres "$@"
 }
@@ -41,22 +50,49 @@ psql_db() {
     psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"
 }
 
-run_file() {
+# Logs the file and appends a \i directive to the transaction script.
+# Nothing is executed yet — commit_transaction does that.
+queue_file() {
     local file="$1"
     local label="${2:-$(basename "$file")}"
     if [ ! -f "$file" ]; then
-        echo "   [WARN] Not found: $file"
+        echo "   [WARN] Not found: $file (skipped)"
         return 0
     fi
     echo "   + $label"
-    local output
-    if ! output=$(psql_db -v ON_ERROR_STOP=1 -f "$file" --quiet 2>&1); then
-        echo "$output" | grep -v "^NOTICE:" | grep -v "^$" | grep -v "^DO$"
-        echo "   [ERROR] Failed on: $file"
-        exit 1
-    fi
+    printf '\\i %s\n' "$file" >> "$TRANSACTION_FILE"
 }
 
+# Wraps the accumulated SQL in BEGIN/COMMIT and runs it as a single session.
+# Any error triggers an automatic ROLLBACK (ON_ERROR_STOP + open transaction).
+commit_transaction() {
+    echo ""
+    echo "[ T ] Executing transaction..."
+
+    # Wrap the queued \i directives in an explicit transaction
+    local wrapped
+    wrapped=$(mktemp /tmp/echo_init_wrapped_XXXXXX.sql)
+    {
+        echo "BEGIN;"
+        cat "$TRANSACTION_FILE"
+        echo "COMMIT;"
+    } > "$wrapped"
+
+    local output
+    if ! output=$(psql_db -v ON_ERROR_STOP=1 -f "$wrapped" --quiet 2>&1); then
+        rm -f "$wrapped"
+        # Strip noise, surface only real errors
+        echo "$output" | grep -v "^NOTICE:" | grep -v "^$" | grep -v "^DO$" | grep -v "^BEGIN$" | grep -v "^ROLLBACK$"
+        echo ""
+        echo "   [ERROR] Transaction failed — all changes have been rolled back."
+        exit 1
+    fi
+
+    rm -f "$wrapped"
+    echo "   Transaction committed."
+}
+
+# ── Header ────────────────────────────────────────────────────────────────────
 echo ""
 echo "======================================================"
 echo " Echo Backend — Database Initialization"
@@ -66,6 +102,7 @@ echo " User:     $POSTGRES_USER"
 echo " Database: $POSTGRES_DB"
 echo "======================================================"
 
+# ── [1/8] Connection check ────────────────────────────────────────────────────
 echo ""
 echo "[1/8] Verifying PostgreSQL connection..."
 if ! psql_root -c '\q' > /dev/null 2>&1; then
@@ -75,6 +112,8 @@ if ! psql_root -c '\q' > /dev/null 2>&1; then
 fi
 echo "      Connected."
 
+# ── [2/8] Database creation ───────────────────────────────────────────────────
+# CREATE DATABASE cannot run inside a transaction — kept outside intentionally.
 echo ""
 echo "[2/8] Preparing database..."
 
@@ -103,9 +142,11 @@ else
     fi
 fi
 
+# ── Steps 3–8: queued into one transaction ────────────────────────────────────
+
 echo ""
 echo "[3/8] Enabling extensions..."
-run_file "$DATABASE_DIR/extensions.sql" "extensions.sql"
+queue_file "$DATABASE_DIR/extensions.sql" "extensions.sql"
 
 echo ""
 echo "[4/8] Creating schemas..."
@@ -118,7 +159,7 @@ for f in \
     "analytics.schema.sql" \
     "location.schema.sql"
 do
-    run_file "$DATABASE_DIR/schemas/$f" "$f"
+    queue_file "$DATABASE_DIR/schemas/$f" "$f"
 done
 
 echo ""
@@ -135,7 +176,7 @@ for f in \
     "notifications.functions.sql" \
     "notifications.trigger_functions.sql"
 do
-    run_file "$DATABASE_DIR/functions/$f" "$f"
+    queue_file "$DATABASE_DIR/functions/$f" "$f"
 done
 
 echo ""
@@ -147,7 +188,7 @@ for dir in auth users media messages notifications; do
         continue
     fi
     while IFS= read -r -d '' f; do
-        run_file "$f" "$dir/$(basename "$f")"
+        queue_file "$f" "$dir/$(basename "$f")"
     done < <(find "$dir_path" -maxdepth 1 -name '*.sql' -print0 | sort -zV)
 done
 
@@ -160,7 +201,7 @@ for f in \
     "messages.rls.sql" \
     "notifications.rls.sql"
 do
-    run_file "$DATABASE_DIR/rls/$f" "$f"
+    queue_file "$DATABASE_DIR/rls/$f" "$f"
 done
 
 echo ""
@@ -173,24 +214,47 @@ if [ "$SKIP_INDEXES" = false ]; then
         "messages.indexes.sql" \
         "notifications.indexes.sql"
     do
-        run_file "$DATABASE_DIR/indexes/$f" "$f"
+        queue_file "$DATABASE_DIR/indexes/$f" "$f"
     done
 else
     echo "[8/8] Skipping indexes (--skip-indexes)"
 fi
 
+# ── Flush the transaction ─────────────────────────────────────────────────────
+commit_transaction
+
+# ── pg_cron (outside transaction — it writes to a shared catalog) ─────────────
 if [ "$SKIP_CRON" = false ]; then
     echo ""
     echo "[ + ] Scheduling pg_cron jobs..."
     if [ -f "$DATABASE_DIR/pg_cron.sql" ]; then
+
+        # CREATE EXTENSION is what creates the cron schema — the scheduler
+        # background worker only runs jobs, it does not create the schema.
+        echo "      Creating pg_cron extension..."
+        if ! ext_output=$(psql_db -v ON_ERROR_STOP=1 --quiet \
+                -c "CREATE EXTENSION IF NOT EXISTS pg_cron;" 2>&1); then
+            echo "$ext_output" | grep -v "^NOTICE:" | grep -v "^$"
+            echo ""
+            echo "   [ERROR] Could not create pg_cron extension."
+            echo "           Ensure shared_preload_libraries includes 'pg_cron' and Postgres is restarted."
+            echo "           Run with --skip-cron to bypass this step."
+            exit 1
+        fi
+
         if ! cron_output=$(psql_db -v ON_ERROR_STOP=1 -f "$DATABASE_DIR/pg_cron.sql" --quiet 2>&1); then
             echo "$cron_output" | grep -v "^NOTICE:" | grep -v "^$"
-            echo "      [WARN] pg_cron scheduling failed."
-            echo "             Ensure shared_preload_libraries includes 'pg_cron' and Postgres is restarted."
+            echo ""
+            echo "   [ERROR] pg_cron scheduling failed."
+            echo "           Ensure shared_preload_libraries includes 'pg_cron' and Postgres is restarted."
+            echo "           Run with --skip-cron to bypass this step."
+            exit 1
         fi
+        echo "      pg_cron jobs scheduled."
     fi
 fi
 
+# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "======================================================"
 echo " Summary"
