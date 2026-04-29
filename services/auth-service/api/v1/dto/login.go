@@ -8,25 +8,22 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// LoginRequest represents the payload required to authenticate a user.
 type LoginRequest struct {
-	Email     string  `json:"email" validate:"required,email"`
-	Password  string  `json:"password" validate:"required,min=8"`
-	FCMToken  *string `json:"fcm_token,omitempty" validate:"omitempty"`
-	APNSToken *string `json:"apns_token,omitempty" validate:"omitempty"`
+	Email       *string `json:"email,omitempty"        validate:"omitempty,email"`
+	Password    *string `json:"password,omitempty"     validate:"omitempty,min=8"`
+	VerifyToken *string `json:"verify_token,omitempty"`
+	FCMToken    *string `json:"fcm_token,omitempty"`
+	APNSToken   *string `json:"apns_token,omitempty"`
 }
 
-// NewLoginRequest constructs a login request with zero values.
 func NewLoginRequest() *LoginRequest {
 	return &LoginRequest{}
 }
 
-// GetValue exposes the request for validation helpers.
 func (lr *LoginRequest) GetValue() interface{} {
 	return lr
 }
 
-// ValidateErrors maps validator errors into transport-friendly details.
 func (lr *LoginRequest) ValidateErrors(ve validator.ValidationErrors) ([]request.ValidationErrorDetail, error) {
 	var errs []request.ValidationErrorDetail
 	for _, err := range ve {
@@ -37,14 +34,9 @@ func (lr *LoginRequest) ValidateErrors(ve validator.ValidationErrors) ([]request
 				Code: request.INVALID_FORMAT,
 			})
 		case "Password":
-			if err.Tag() == "required" {
+			if err.Tag() == "min" {
 				errs = append(errs, request.ValidationErrorDetail{
-					Msg:  "Password is required",
-					Code: request.REQUIRED_FIELD,
-				})
-			} else if err.Tag() == "min" {
-				errs = append(errs, request.ValidationErrorDetail{
-					Msg:  "Password must be at least 8 characters long",
+					Msg:  "Password must be at least 8 characters",
 					Code: request.INVALID_FORMAT,
 				})
 			}
@@ -56,6 +48,28 @@ func (lr *LoginRequest) ValidateErrors(ve validator.ValidationErrors) ([]request
 		}
 	}
 	return errs, nil
+}
+
+func (lr *LoginRequest) Validate() ([]request.ValidationErrorDetail, error) {
+	if lr.VerifyToken != nil {
+		return nil, nil
+	}
+
+	if lr.Email == nil {
+		return []request.ValidationErrorDetail{{
+			Msg:  "Email is required",
+			Code: request.REQUIRED_FIELD,
+		}}, nil
+	}
+
+	if lr.Password == nil {
+		return []request.ValidationErrorDetail{{
+			Msg:  "Password is required",
+			Code: request.REQUIRED_FIELD,
+		}}, nil
+	}
+
+	return nil, nil
 }
 
 // LoginResponse bundles the authenticated user and issued session tokens.

@@ -18,9 +18,11 @@ type AuthService interface {
 	IsPhoneTaken(ctx context.Context, phone string) (*domain.User, *error.AuthError)
 	// User operations
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, *error.AuthError)
+	GetUserByPhone(ctx context.Context, phone string) (*domain.User, *error.AuthError)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError)
 	RegisterUser(ctx context.Context, input domain.RegisterUserInput) (*domain.RegisterUserOutput, *error.AuthError)
-	Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError)
+	LoginEmail(ctx context.Context, email string, password string) (*domain.LoginResult, *error.AuthError)
+	LoginPhone(ctx context.Context, phone string) (*domain.LoginResult, *error.AuthError)
 	RecordFailedLogin(ctx context.Context, input domain.FailedLoginAttemptInput) *error.AuthError
 	RecordSuccessfulLogin(ctx context.Context, userID string, sessionId string, device request.DeviceInfo, location request.IpAddressInfo) *error.AuthError
 	RefreshToken(ctx context.Context, refreshToken string, deviceID string) (*domain.RefreshTokenResult, *error.AuthError)

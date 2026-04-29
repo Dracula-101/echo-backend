@@ -16,9 +16,7 @@ import (
 )
 
 func (h *AuthHandler) Login(handler *req.RequestHandler) {
-	ctx := handler.Context()
 	requestID := handler.GetRequestID()
-	correlationID := handler.GetCorrelationID()
 
 	h.log.Info("Login request received",
 		logger.String("service", authErrors.ServiceName),
@@ -31,18 +29,21 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	if cacheErr := h.authCache.CheckIPBlocked(ctx, handler.GetClientIP()); cacheErr != nil {
-		if cacheErr.Code == authErrors.CodeIPBlocked {
-			h.log.Warn("Blocked login attempt from IP",
-				logger.String("service", authErrors.ServiceName),
-				logger.String("ip_address", handler.GetClientIP()),
-			)
-			response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Too many failed login attempts from this IP. Please try again later.", nil)
-			return
-		}
+	if loginRequest.VerifyToken != nil {
+		h.loginWithPhone(handler, loginRequest)
+	} else {
+		h.loginWithEmail(handler, loginRequest)
+	}
+}
+
+func (h *AuthHandler) loginWithEmail(handler *req.RequestHandler, loginRequest *dto.LoginRequest) {
+	ctx := handler.Context()
+
+	if h.isIPBlocked(ctx, handler) {
+		return
 	}
 
-	if len(loginRequest.Password) > 128 {
+	if len(*loginRequest.Password) > 128 {
 		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid credentials - please check your email and password.", nil)
 		return
 	}
@@ -53,7 +54,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	locationInfo, _ := req.GetIPAddressInfoFromContext(ctx)
 	locationInfo.IP = handler.GetClientIP()
 
-	user, authErr := h.authService.GetUserByEmail(ctx, loginRequest.Email)
+	user, authErr := h.authService.GetUserByEmail(ctx, *loginRequest.Email)
 	if authErr != nil {
 		h.log.Error("Failed to fetch user during login", logger.Error(authErr.Error))
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
@@ -62,45 +63,26 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	if user == nil {
 		// Delay to mitigate user enumeration.
 		utils.SleepWithContext(ctx, time.Millisecond*200)
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), fmt.Sprintf("User does not exist with email %s", loginRequest.Email), nil)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), fmt.Sprintf("User does not exist with email %s", *loginRequest.Email), nil)
 		return
 	}
 
 	// Prevent race conditions in session-limit enforcement from concurrent logins for the same user.
-	acquired, lockErr := h.rateLimiter.AcquireLoginLock(ctx, user.ID)
+	acquired, ok := h.tryAcquireLoginLock(ctx, handler, user.ID)
 	defer func() {
 		if acquired {
 			h.rateLimiter.ReleaseLoginLock(ctx, user.ID)
 		}
 	}()
-	if lockErr != nil {
-		h.log.Error("Failed to acquire login lock",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("user_id", user.ID),
-			logger.Error(lockErr),
-		)
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", lockErr)
-		return
-	}
-	if !acquired {
-		response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusConflict, "A login request for this account is already in progress. Please retry shortly.", pkgErrors.New(
-			authErrors.CodeConcurrentLoginDetected,
-			"Concurrent login attempt detected for user",
-		))
+	if !ok {
 		return
 	}
 
-	if statusErr := user.CanLogin(); statusErr != nil {
-		h.handleAccountStatusError(ctx, handler, user, statusErr)
+	if !h.checkCanLogin(ctx, handler, user) {
 		return
 	}
 
-	userResult, authErr := h.authService.Login(ctx, domain.LoginInput{
-		Email:        loginRequest.Email,
-		Password:     loginRequest.Password,
-		DeviceInfo:   deviceInfo,
-		LocationInfo: &locationInfo,
-	})
+	userResult, authErr := h.authService.LoginEmail(ctx, *loginRequest.Email, *loginRequest.Password)
 	if authErr != nil {
 		h.handleFailedLogin(ctx, user.ID, handler, *authErr)
 		h.authService.RecordFailedLogin(ctx, domain.FailedLoginAttemptInput{
@@ -114,7 +96,107 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		return
 	}
 
-	// Check Trusted Device and New Location
+	h.completeLogin(handler, loginRequest, userResult, deviceInfo, browserInfo, userAgent, locationInfo)
+}
+
+func (h *AuthHandler) loginWithPhone(handler *req.RequestHandler, loginRequest *dto.LoginRequest) {
+	ctx := handler.Context()
+	requestID := handler.GetRequestID()
+
+	if h.firebaseClient == nil {
+		h.log.Error("Firebase client not configured",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+		)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Phone login is not available", nil)
+		return
+	}
+
+	if h.isIPBlocked(ctx, handler) {
+		return
+	}
+
+	firebaseToken, err := h.firebaseClient.VerifyIDToken(ctx, *loginRequest.VerifyToken)
+	if err != nil {
+		h.log.Warn("Firebase ID token verification failed",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.Error(err),
+		)
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid or expired verification token", err)
+		return
+	}
+
+	phoneNumber, ok := firebaseToken.Claims["phone_number"].(string)
+	if !ok || phoneNumber == "" {
+		h.log.Warn("Firebase token missing phone_number claim",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("request_id", requestID),
+			logger.String("uid", firebaseToken.UID),
+		)
+		response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid verification token: no phone number", nil)
+		return
+	}
+
+	deviceInfo := handler.GetDeviceInfo()
+	browserInfo := handler.GetBrowserInfo()
+	userAgent := handler.GetUserAgent()
+	locationInfo, _ := req.GetIPAddressInfoFromContext(ctx)
+	locationInfo.IP = handler.GetClientIP()
+
+	user, authErr := h.authService.GetUserByPhone(ctx, phoneNumber)
+	if authErr != nil {
+		h.log.Error("Failed to fetch user by phone during login", logger.Error(authErr.Error))
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
+		return
+	}
+	if user == nil {
+		utils.SleepWithContext(ctx, time.Millisecond*200)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "No account found for this phone number", nil)
+		return
+	}
+
+	acquired, ok := h.tryAcquireLoginLock(ctx, handler, user.ID)
+	defer func() {
+		if acquired {
+			h.rateLimiter.ReleaseLoginLock(ctx, user.ID)
+		}
+	}()
+	if !ok {
+		return
+	}
+
+	if !h.checkCanLogin(ctx, handler, user) {
+		return
+	}
+
+	userResult, authErr := h.authService.LoginPhone(ctx, phoneNumber)
+	if authErr != nil {
+		h.log.Error("Failed to login via phone",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", user.ID),
+			logger.Error(authErr.Error),
+		)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", authErr.Error)
+		return
+	}
+
+	h.completeLogin(handler, loginRequest, userResult, deviceInfo, browserInfo, userAgent, locationInfo)
+}
+
+func (h *AuthHandler) completeLogin(
+	handler *req.RequestHandler,
+	loginRequest *dto.LoginRequest,
+	userResult *domain.LoginResult,
+	deviceInfo req.DeviceInfo,
+	browserInfo req.BrowserInfo,
+	userAgent string,
+	locationInfo req.IpAddressInfo,
+) {
+	ctx := handler.Context()
+	requestID := handler.GetRequestID()
+	correlationID := handler.GetCorrelationID()
+
 	isTrustedDevice, trustErr := h.authService.IsDeviceTrusted(ctx, userResult.User.ID, deviceInfo.ID)
 	if trustErr != nil {
 		h.log.Error("Failed to determine device trust",
@@ -143,7 +225,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 	}
 
 	session := &domain.CreateSessionOutput{}
-	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, user.ID, deviceInfo.ID)
+	activeSession, sessErr := h.sessionService.GetSessionByUserId(ctx, userResult.User.ID, deviceInfo.ID)
 	if sessErr != nil {
 		h.log.Error("Failed to fetch active session during login", logger.Error(sessErr))
 		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", sessErr)
@@ -210,7 +292,7 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 		logger.String("session_id", session.SessionId),
 	)
 
-	authErr = h.authService.RecordSuccessfulLogin(ctx, userResult.User.ID, session.SessionId, deviceInfo, locationInfo)
+	authErr := h.authService.RecordSuccessfulLogin(ctx, userResult.User.ID, session.SessionId, deviceInfo, locationInfo)
 	if authErr != nil {
 		h.log.Error("Failed to record successful login",
 			logger.String("service", authErrors.ServiceName),
@@ -235,6 +317,55 @@ func (h *AuthHandler) Login(handler *req.RequestHandler) {
 			locationInfo,
 		),
 	)
+}
+
+// isIPBlocked writes a 400 and returns true if the client IP is currently blocked.
+func (h *AuthHandler) isIPBlocked(ctx context.Context, handler *req.RequestHandler) bool {
+	cacheErr := h.authCache.CheckIPBlocked(ctx, handler.GetClientIP())
+	if cacheErr != nil && cacheErr.Code == authErrors.CodeIPBlocked {
+		h.log.Warn("Blocked login attempt from IP",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("ip_address", handler.GetClientIP()),
+		)
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Too many failed login attempts from this IP. Please try again later.", nil)
+		return true
+	}
+	return false
+}
+
+// tryAcquireLoginLock acquires the per-user login lock, writes the appropriate response on failure,
+// and returns (acquired, ok). If ok is false the caller must return immediately.
+// The caller is responsible for deferring ReleaseLoginLock when acquired is true.
+func (h *AuthHandler) tryAcquireLoginLock(ctx context.Context, handler *req.RequestHandler, userID string) (acquired bool, ok bool) {
+	var lockErr error
+	acquired, lockErr = h.rateLimiter.AcquireLoginLock(ctx, userID)
+	if lockErr != nil {
+		h.log.Error("Failed to acquire login lock",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("user_id", userID),
+			logger.Error(lockErr),
+		)
+		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", lockErr)
+		return false, false
+	}
+	if !acquired {
+		response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusConflict, "A login request for this account is already in progress. Please retry shortly.", pkgErrors.New(
+			authErrors.CodeConcurrentLoginDetected,
+			"Concurrent login attempt detected for user",
+		))
+		return false, false
+	}
+	return true, true
+}
+
+// checkCanLogin calls user.CanLogin and writes the appropriate error response if the account
+// is not allowed to log in. Returns false when the caller must return immediately.
+func (h *AuthHandler) checkCanLogin(ctx context.Context, handler *req.RequestHandler, user *domain.User) bool {
+	if statusErr := user.CanLogin(); statusErr != nil {
+		h.handleAccountStatusError(ctx, handler, user, statusErr)
+		return false
+	}
+	return true
 }
 
 func (h *AuthHandler) handleAccountStatusError(ctx context.Context, handler *req.RequestHandler, user *domain.User, statusErr error) {

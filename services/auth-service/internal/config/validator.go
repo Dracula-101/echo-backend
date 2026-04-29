@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -15,6 +16,7 @@ func ValidateAndSetDefaults(cfg *Config) error {
 		validateCache,
 		validateAuth,
 		validateSms,
+		validateFirebase,
 		validateSecurity,
 		validateLogging,
 		validateEmail,
@@ -263,6 +265,19 @@ func validateSms(cfg *Config) error {
 		if cfg.Sms.Twilio.FromNumber == "" {
 			return fmt.Errorf("sms.twilio.from_number is required when provider is 'twilio'")
 		}
+	}
+
+	return nil
+}
+
+func validateFirebase(cfg *Config) error {
+	if cfg.Firebase.CredentialsFile == "" {
+		return fmt.Errorf("firebase.credentials_file is required when Firebase integration is enabled")
+	}
+	if _, err := os.Stat(cfg.Firebase.CredentialsFile); os.IsNotExist(err) {
+		return fmt.Errorf("firebase.credentials_file does not exist: %s", cfg.Firebase.CredentialsFile)
+	} else if err != nil {
+		return fmt.Errorf("failed to access firebase.credentials_file: %w", err)
 	}
 
 	return nil

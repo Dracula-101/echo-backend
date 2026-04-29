@@ -62,6 +62,40 @@ func (s *authService) GetUserByEmail(ctx context.Context, email string) (*domain
 	}, nil
 }
 
+func (s *authService) GetUserByPhone(ctx context.Context, phone string) (*domain.User, *error.AuthError) {
+	user, err := s.repo.GetUserByPhone(ctx, phone)
+	if err != nil {
+		return nil, &error.AuthError{
+			Message: "Failed to get user by phone",
+			Code:    authErrors.CodeDatabaseError,
+			Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get user by phone").
+				WithService(authErrors.ServiceName).
+				WithDetail("phone", phone),
+		}
+	}
+	if user == nil {
+		return nil, nil
+	}
+	return &domain.User{
+		ID:                     user.ID,
+		Email:                  user.Email,
+		PhoneNumber:            user.PhoneNumber,
+		PhoneCountryCode:       user.PhoneCountryCode,
+		EmailVerified:          user.EmailVerified,
+		PhoneVerified:          user.PhoneVerified,
+		AccountStatus:          user.AccountStatus,
+		TwoFactorEnabled:       user.TwoFactorEnabled,
+		PasswordHash:           user.PasswordHash,
+		PasswordLastChanged:    user.PasswordLastChanged,
+		AccountLockedUntil:     user.AccountLockedUntil,
+		FailedLoginAttempts:    user.FailedLoginAttempts,
+		RequiresPasswordChange: user.RequiresPasswordChange,
+		CreatedAt:              user.CreatedAt,
+		DeletedAt:              user.DeletedAt,
+		UpdatedAt:              user.UpdatedAt,
+	}, nil
+}
+
 func (s *authService) GetUserByID(ctx context.Context, userID string) (*domain.User, *error.AuthError) {
 	s.log.Info("Fetching user by ID",
 		logger.String("service", authErrors.ServiceName),

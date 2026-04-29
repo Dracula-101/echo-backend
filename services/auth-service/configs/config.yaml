@@ -81,6 +81,9 @@ kafka:
     max_in_flight: ${KAFKA_MAX_IN_FLIGHT:5}
     dial_timeout: ${KAFKA_DIAL_TIMEOUT:10s}
 
+firebase:
+  credentials_file: ${FIREBASE_CREDENTIALS_FILE:}
+
 auth:
   jwt:
     access_token_ttl: ${JWT_ACCESS_TOKEN_TTL:15m}

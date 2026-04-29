@@ -93,9 +93,9 @@ func (s *authService) RegisterUser(ctx context.Context, input domain.RegisterUse
 // User Authentication
 // ============================================================================
 
-func (s *authService) Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResult, *error.AuthError) {
-	email := utils.NormalizeEmail(input.Email)
-	s.log.Info("User login",
+func (s *authService) LoginEmail(ctx context.Context, email string, password string) (*domain.LoginResult, *error.AuthError) {
+	email = utils.NormalizeEmail(email)
+	s.log.Info("User login via email",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", email),
 	)
@@ -147,7 +147,7 @@ func (s *authService) Login(ctx context.Context, input domain.LoginInput) (*doma
 		}
 	}
 
-	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, input.Password, user.PasswordHash)
+	success, algo, verifyErr := s.hashingService.VerifyPassword(ctx, password, user.PasswordHash)
 	if verifyErr != nil {
 		return nil, &error.AuthError{
 			Message: "Password verification failed",
@@ -243,6 +243,88 @@ func (s *authService) Login(ctx context.Context, input domain.LoginInput) (*doma
 			UpdatedAt:              user.UpdatedAt,
 			DeletedAt:              user.DeletedAt,
 		},
+		AccessToken:  accessToken.Token,
+		RefreshToken: refreshToken.Token,
+		ExpiresAt:    expiresAt,
+		ExpiresIn:    int64(s.cfg.JWT.AccessTokenTTL.Seconds()),
+	}, nil
+}
+
+func (s *authService) LoginPhone(ctx context.Context, phone string) (*domain.LoginResult, *error.AuthError) {
+	s.log.Info("User login via phone",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("phone", phone),
+	)
+
+	user, err := s.repo.GetUserByPhone(ctx, phone)
+	if err != nil {
+		return nil, &error.AuthError{
+			Message: "Failed to get user by phone",
+			Code:    authErrors.CodeDatabaseError,
+			Error: pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to get user by phone").
+				WithService(authErrors.ServiceName).
+				WithDetail("phone", phone).
+				WithDetail("operation", "login"),
+		}
+	}
+	if user == nil {
+		s.log.Warn("Login attempt for non-existent phone",
+			logger.String("service", authErrors.ServiceName),
+			logger.String("phone", phone),
+		)
+		return nil, &error.AuthError{
+			Message: "User not found",
+			Code:    authErrors.CodeUserNotFound,
+			Error: pkgErrors.New(authErrors.CodeUserNotFound, "no account for this phone number").
+				WithService(authErrors.ServiceName).
+				WithDetail("phone", phone),
+		}
+	}
+
+	accessToken, tokenErr := s.tokenService.IssueAccessToken(ctx, user.ID, token.IssueOptions{
+		ExpiresIn: s.cfg.JWT.AccessTokenTTL,
+		Metadata: map[string]interface{}{
+			"purpose": "access_token",
+			"user_id": user.ID,
+			"email":   user.Email,
+		},
+		Audience: []string{s.cfg.JWT.Audience},
+	})
+	if tokenErr != nil {
+		return nil, &error.AuthError{
+			Message: "Failed to generate token",
+			Code:    authErrors.CodeTokenGenerationFailed,
+			Error: pkgErrors.FromError(tokenErr, authErrors.CodeTokenGenerationFailed, "failed to generate access token").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", user.ID),
+		}
+	}
+
+	expiresAt := accessToken.Claims.IssuedAt.Add(s.cfg.JWT.RefreshTokenTTL)
+	refreshToken, refreshErr := s.tokenService.IssueRefreshToken(ctx, user.ID, token.IssueOptions{
+		ExpiresIn: s.cfg.JWT.RefreshTokenTTL,
+		Metadata: map[string]interface{}{
+			"purpose": "refresh_token",
+		},
+		Audience: []string{s.cfg.JWT.Audience},
+	})
+	if refreshErr != nil {
+		return nil, &error.AuthError{
+			Message: "Failed to generate token",
+			Code:    authErrors.CodeTokenGenerationFailed,
+			Error: pkgErrors.FromError(refreshErr, authErrors.CodeTokenGenerationFailed, "failed to generate refresh token").
+				WithService(authErrors.ServiceName).
+				WithDetail("user_id", user.ID),
+		}
+	}
+
+	s.log.Info("User logged in via phone successfully",
+		logger.String("service", authErrors.ServiceName),
+		logger.String("user_id", user.ID),
+	)
+
+	return &domain.LoginResult{
+		User:         user,
 		AccessToken:  accessToken.Token,
 		RefreshToken: refreshToken.Token,
 		ExpiresAt:    expiresAt,

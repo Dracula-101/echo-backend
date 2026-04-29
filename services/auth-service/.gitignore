@@ -42,3 +42,6 @@ temp/
 build-errors.log
 
 *.pem
+
+# Firebase credentials
+configs/firebase_credentials.json

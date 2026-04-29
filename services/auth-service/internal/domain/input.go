@@ -17,13 +17,6 @@ type RegisterUserInput struct {
 	AcceptTerms      bool
 }
 
-type LoginInput struct {
-	Email        string
-	Password     string
-	DeviceInfo   request.DeviceInfo
-	LocationInfo *request.IpAddressInfo
-}
-
 type FailedLoginAttemptInput struct {
 	UserID        string
 	Device        request.DeviceInfo

@@ -18,6 +18,11 @@ type Config struct {
 	Observability   ObservabilityConfig   `yaml:"observability" mapstructure:"observability"`
 	Shutdown        ShutdownConfig        `yaml:"shutdown" mapstructure:"shutdown"`
 	Features        FeaturesConfig        `yaml:"features" mapstructure:"features"`
+	Firebase        FirebaseConfig        `yaml:"firebase" mapstructure:"firebase"`
+}
+
+type FirebaseConfig struct {
+	CredentialsFile string `yaml:"credentials_file" mapstructure:"credentials_file"`
 }
 
 // KafkaConfig groups producer configuration for the auth-service.

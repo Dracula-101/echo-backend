@@ -5,6 +5,7 @@ import (
 	"auth-service/api/v1/middleware"
 	ratelimiter "auth-service/api/v1/rate_limiter"
 	"auth-service/internal/config"
+	"auth-service/internal/firebase"
 	"auth-service/internal/health"
 	"auth-service/internal/health/checkers"
 	repository "auth-service/internal/repo"
@@ -581,6 +582,19 @@ func main() {
 		}
 	}()
 
+	var firebaseClient *firebase.Client
+	if cfg.Firebase.CredentialsFile != "" {
+		firebaseClient, err = firebase.New(context.Background(), firebase.Config{
+			CredentialsFile: cfg.Firebase.CredentialsFile,
+		})
+		if err != nil {
+			log.Fatal("Failed to initialize Firebase client", logger.Error(err))
+		}
+		log.Info("Firebase client initialized successfully")
+	} else {
+		log.Warn("Firebase credentials not configured — phone login will be unavailable")
+	}
+
 	authCache := authCache.NewAuthCache(cacheClient, log)
 	sessionCache := sessionSvc.NewSessionCache(cacheClient, log)
 	rateLimiter := createRateLimiter(cacheClient, windowStore, log)
@@ -623,7 +637,7 @@ func main() {
 		WithLogger(log).
 		Build()
 
-	authHandler := handler.NewAuthHandler(authService, sessionService, *locationService, authCache, *rateLimiter, log)
+	authHandler := handler.NewAuthHandler(authService, sessionService, *locationService, authCache, *rateLimiter, firebaseClient, log)
 
 	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
 	healthHandler := health.NewHandler(healthMgr)
