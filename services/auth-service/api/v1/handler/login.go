@@ -152,7 +152,18 @@ func (h *AuthHandler) loginWithPhone(handler *req.RequestHandler, loginRequest *
 	}
 	if user == nil {
 		utils.SleepWithContext(ctx, time.Millisecond*200)
-		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "No account found for this phone number", nil)
+		response.BadRequestError(
+			ctx,
+			handler.Request(),
+			handler.Writer(),
+			"No account found for this phone number",
+			authErrors.AuthError{
+				Code:    authErrors.CodeUserNotFound,
+				Message: fmt.Sprintf("User does not exist with phone number %s", phoneNumber),
+				Error:   pkgErrors.New(authErrors.CodeUserNotFound, "User not found with phone number"),
+				Detail:  map[string]any{"phone_number": phoneNumber},
+			}.Error,
+		)
 		return
 	}
 
@@ -177,7 +188,20 @@ func (h *AuthHandler) loginWithPhone(handler *req.RequestHandler, loginRequest *
 			logger.String("user_id", user.ID),
 			logger.Error(authErr.Error),
 		)
-		response.InternalServerError(ctx, handler.Request(), handler.Writer(), "Failed to process login", authErr.Error)
+		switch authErr.Code {
+		case authErrors.CodeInvalidToken:
+			response.UnauthorizedError(ctx, handler.Request(), handler.Writer(), "Invalid or expired verification token", authErr.Error)
+		default:
+			response.InternalServerError(ctx, handler.Request(), handler.Writer(), authErr.Message, authErr.Error)
+		}
+		h.authService.RecordFailedLogin(ctx, domain.FailedLoginAttemptInput{
+			UserID:      user.ID,
+			Device:      deviceInfo,
+			Location:    &locationInfo,
+			UserAgent:   userAgent,
+			Reason:      fmt.Sprintf("[%s] - %s", authErr.Code, authErr.Message),
+			LoginMethod: "phone",
+		})
 		return
 	}
 
