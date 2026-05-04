@@ -31,7 +31,7 @@ cache:
     host: ${REDIS_HOST:localhost}
     port: ${REDIS_PORT:6379}
     password: ${REDIS_PASSWORD:}
-    db: ${REDIS_DB:0}
+    db: ${REDIS_DB:3}
     max_retries: ${REDIS_MAX_RETRIES:3}
     pool_size: ${REDIS_POOL_SIZE:10}
     min_idle_conns: ${REDIS_MIN_IDLE_CONNS:5}
@@ -71,6 +71,7 @@ kafka:
     brokers:
       - ${KAFKA_BROKERS:localhost:9092}
     client_id: ${KAFKA_PRODUCER_CLIENT_ID:ws-service-producer}
+    delivery_topic: ${KAFKA_DELIVERY_TOPIC:delivery-events}
     compression: ${KAFKA_COMPRESSION:snappy}
     acks: ${KAFKA_ACKS:all}
     enable_idempotence: ${KAFKA_ENABLE_IDEMPOTENCE:true}
@@ -83,7 +84,7 @@ kafka:
       - ${KAFKA_BROKERS:localhost:9092}
     client_id: ${KAFKA_CONSUMER_CLIENT_ID:ws-service}
     topic: ${KAFKA_TOPIC:chat-messages}
-    group_id: ${KAFKA_GROUP_ID:ws-service-delivery-group}
+    group_id: ${KAFKA_GROUP_ID:ws-service-delivery}
     session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
     heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
 

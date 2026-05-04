@@ -133,6 +133,14 @@ func ValidateAndSetDefaults(cfg *Config) error {
 		cfg.WebSocket.BroadcastBuffer = 1024
 	}
 
+	// Kafka validation
+	if cfg.Kafka.Producer.DeliveryTopic == "" {
+		cfg.Kafka.Producer.DeliveryTopic = "delivery-events"
+	}
+	if cfg.Kafka.Consumer.GroupID == "" {
+		cfg.Kafka.Consumer.GroupID = "ws-service-delivery"
+	}
+
 	// Logging validation
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"

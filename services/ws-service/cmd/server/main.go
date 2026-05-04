@@ -516,7 +516,7 @@ func main() {
 	}
 
 	// Create delivery publisher and wire to manager
-	deliveryPublisher := service.NewKafkaDeliveryPublisher(kafkaProducer, log)
+	deliveryPublisher := service.NewKafkaDeliveryPublisher(kafkaProducer, cfg.Kafka.Producer.DeliveryTopic, log)
 	manager.SetDeliveryPublisher(deliveryPublisher)
 	log.Info("Delivery publisher wired to WebSocket manager")
 

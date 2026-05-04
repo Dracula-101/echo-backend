@@ -114,6 +114,7 @@ type KafkaConfig struct {
 type KafkaProducerConfig struct {
 	Brokers           []string      `yaml:"brokers" mapstructure:"brokers"`
 	ClientID          string        `yaml:"client_id" mapstructure:"client_id"`
+	DeliveryTopic     string        `yaml:"delivery_topic" mapstructure:"delivery_topic"`
 	Compression       string        `yaml:"compression" mapstructure:"compression"`
 	Acks              string        `yaml:"acks" mapstructure:"acks"`
 	EnableIdempotence bool          `yaml:"enable_idempotence" mapstructure:"enable_idempotence"`

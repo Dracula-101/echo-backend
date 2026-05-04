@@ -36,20 +36,25 @@ type DeliveryEventPublisher interface {
 // KafkaDeliveryPublisher implements DeliveryEventPublisher using Kafka
 type KafkaDeliveryPublisher struct {
 	producer messaging.Producer
+	topic    string
 	log      logger.Logger
 }
 
 // NewKafkaDeliveryPublisher creates a new Kafka delivery event publisher
-func NewKafkaDeliveryPublisher(producer messaging.Producer, log logger.Logger) *KafkaDeliveryPublisher {
+func NewKafkaDeliveryPublisher(producer messaging.Producer, topic string, log logger.Logger) *KafkaDeliveryPublisher {
+	if topic == "" {
+		topic = "delivery-events"
+	}
+
 	return &KafkaDeliveryPublisher{
 		producer: producer,
+		topic:    topic,
 		log:      log,
 	}
 }
 
 // PublishDeliveryEvent publishes a delivery event to Kafka
 func (p *KafkaDeliveryPublisher) PublishDeliveryEvent(ctx context.Context, event *DeliveryEvent) error {
-	topic := "delivery-events"
 	key := event.ConversationID.String()
 
 	eventJSON, err := json.Marshal(event)
@@ -68,10 +73,11 @@ func (p *KafkaDeliveryPublisher) PublishDeliveryEvent(ctx context.Context, event
 		WithHeader("event_type", string(event.EventType)).
 		WithHeader("user_id", event.UserID.String())
 
-	err = p.producer.Send(ctx, topic, kafkaMsg)
+	err = p.producer.Send(ctx, p.topic, kafkaMsg)
 	if err != nil {
 		p.log.Error("Failed to publish delivery event",
 			logger.Error(err),
+			logger.String("topic", p.topic),
 			logger.String("event_type", string(event.EventType)),
 			logger.String("user_id", event.UserID.String()),
 		)
@@ -79,6 +85,7 @@ func (p *KafkaDeliveryPublisher) PublishDeliveryEvent(ctx context.Context, event
 	}
 
 	p.log.Debug("Published delivery event",
+		logger.String("topic", p.topic),
 		logger.String("event_type", string(event.EventType)),
 		logger.String("user_id", event.UserID.String()),
 		logger.Int("message_count", len(event.MessageIDs)),

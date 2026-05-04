@@ -25,9 +25,9 @@ const (
 	ChannelPresence  = "ws:presence:events"
 	ChannelTyping    = "ws:typing:events"
 
-	TTLTyping     = 5 * time.Second
-	TTLPresence   = 5 * time.Minute
-	TTLConnection = 24 * time.Hour
+	TTLTyping     = 8 * time.Second
+	TTLPresence   = 35 * time.Second
+	TTLConnection = 35 * time.Second
 
 	MaxSubscriptionsPerConn = 100
 )
