@@ -10,12 +10,21 @@ import (
 )
 
 type KafkaEventPublisher struct {
-	producer messaging.Producer
-	log      logger.Logger
+	producer      messaging.Producer
+	deliveryTopic string
+	log           logger.Logger
 }
 
-func NewKafkaEventPublisher(producer messaging.Producer, log logger.Logger) *KafkaEventPublisher {
-	return &KafkaEventPublisher{producer: producer, log: log}
+func NewKafkaEventPublisher(producer messaging.Producer, deliveryTopic string, log logger.Logger) *KafkaEventPublisher {
+	if deliveryTopic == "" {
+		deliveryTopic = "delivery-events"
+	}
+
+	return &KafkaEventPublisher{
+		producer:      producer,
+		deliveryTopic: deliveryTopic,
+		log:           log,
+	}
 }
 
 func (p *KafkaEventPublisher) publish(
@@ -79,7 +88,7 @@ func (p *KafkaEventPublisher) PublishMessageEvent(ctx context.Context, event *do
 }
 
 func (p *KafkaEventPublisher) PublishDeliveryEvent(ctx context.Context, event *DeliveryEvent) error {
-	return p.publish(ctx, "delivery-events", event.ConversationID.String(), string(event.EventType),
+	return p.publish(ctx, p.deliveryTopic, event.ConversationID.String(), string(event.EventType),
 		map[string]string{
 			"type":    "delivery_event",
 			"user_id": event.UserID.String(),

@@ -222,6 +222,21 @@ func (s *messageService) ForwardMessage(ctx context.Context, messageID string, u
 		UpdatedAt:              time.Now(),
 	}
 
+	if persistErr := s.ProcessChatMessage(ctx, &messageEvent); persistErr != nil {
+		s.logger.Error("Failed to persist forwarded message before publishing event",
+			logger.String("service", msgError.ServiceName),
+			logger.String("message_id", messageEvent.ID.String()),
+			logger.String("conversation_id", parsedTargetID.String()),
+			logger.String("sender_user_id", parsedUserID.String()),
+			logger.Error(persistErr),
+		)
+		return nil, &msgError.MsgError{
+			Message: "Failed to forward message",
+			Code:    msgError.CodeForwardFailed,
+			Error:   persistErr,
+		}
+	}
+
 	publishErr := s.eventPublisher.PublishChatMessage(ctx, &messageEvent)
 	if publishErr != nil {
 		return nil, &msgError.MsgError{

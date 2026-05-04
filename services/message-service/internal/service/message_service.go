@@ -224,6 +224,13 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 	mentionsJSON := marshalMentions(req.Mentions)
 
 	now := time.Now()
+	messageID := uuid.New()
+	if parsedID, parseErr := uuid.Parse(req.IdempotencyKey); parseErr == nil {
+		// The send handler requires a UUID idempotency key. Reusing it as the
+		// message ID keeps DB-first retries idempotent if Kafka publish fails.
+		messageID = parsedID
+	}
+
 	var forwardedFrom *string
 	if req.ForwardedFrom != nil {
 		s := req.ForwardedFrom.String()
@@ -231,7 +238,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 	}
 
 	messageEvent := domain.ChatMessageEvent{
-		ID:                     uuid.New(),
+		ID:                     messageID,
 		ConversationID:         req.ConversationID,
 		SenderUserID:           req.SenderUserID,
 		RecipientIDs:           recipientIDs,
@@ -268,6 +275,21 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 	if req.ExpireAfter != nil {
 		expiry := now.Add(time.Duration(*req.ExpireAfter) * time.Second)
 		messageEvent.ExpiresAt = &expiry
+	}
+
+	if persistErr := s.ProcessChatMessage(ctx, &messageEvent); persistErr != nil {
+		s.logger.Error("Failed to persist chat message before publishing event",
+			logger.String("service", msgError.ServiceName),
+			logger.String("message_id", messageEvent.ID.String()),
+			logger.String("conversation_id", req.ConversationID.String()),
+			logger.String("sender_user_id", req.SenderUserID.String()),
+			logger.Error(persistErr),
+		)
+		return nil, &msgError.MsgError{
+			Message: "Failed to persist message",
+			Code:    msgError.CodeDBError,
+			Error:   persistErr,
+		}
 	}
 
 	publishErr := s.eventPublisher.PublishChatMessage(ctx, &messageEvent)

@@ -1,39 +1,43 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
-	"media-service/api/v1/handler"
-	"media-service/api/v1/middleware"
-	"media-service/internal/config"
-	"media-service/internal/health"
-	"media-service/internal/health/checkers"
-	repository "media-service/internal/repo"
-	"media-service/internal/service"
-
-	"shared/pkg/cache"
-	"shared/pkg/cache/redis"
-	"shared/pkg/database"
-	"shared/pkg/database/postgres"
 	"shared/pkg/logger"
 	adapter "shared/pkg/logger/adapter"
-	"shared/pkg/media"
-	"shared/pkg/messaging"
-	"shared/pkg/messaging/kafka"
-	prommetrics "shared/pkg/monitoring/metrics/prometheus"
-	"shared/pkg/storage/r2"
 	env "shared/server/env"
-	"shared/server/headers"
-	coreMiddleware "shared/server/middleware"
-	"shared/server/request"
-	"shared/server/response"
-	"shared/server/router"
-	"shared/server/server"
-	"shared/server/shutdown"
+
+	"media-service/internal/app"
+	"media-service/internal/config"
 )
 
-func createLogger(name string) logger.Logger {
+func main() {
+	env.LoadEnv()
+
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to load configuration: %v", err))
+	}
+
+	log := mustCreateLogger(cfg.Service.Name)
+	defer log.Sync()
+
+	log.Info("Initializing application",
+		logger.String("service", cfg.Service.Name),
+		logger.String("version", cfg.Service.Version),
+	)
+
+	a, err := app.New(cfg, log)
+	if err != nil {
+		log.Fatal("Failed to build application", logger.Error(err))
+	}
+
+	if err := a.Run(); err != nil {
+		log.Fatal("Server error", logger.Error(err))
+	}
+}
+
+func mustCreateLogger(name string) logger.Logger {
 	log, err := adapter.NewZap(logger.Config{
 		Level:      logger.GetLoggerLevel(),
 		Format:     logger.GetLoggerFormat(),
@@ -45,396 +49,4 @@ func createLogger(name string) logger.Logger {
 		panic(fmt.Sprintf("Failed to create logger: %v", err))
 	}
 	return log
-}
-
-func loadConfig() (*config.Config, error) {
-	log := createLogger("config-loader")
-	defer log.Sync()
-
-	configPath := env.GetEnv("CONFIG_PATH")
-	environment := env.GetEnv("APP_ENV")
-
-	var cfg *config.Config
-	var err error
-	log.Debug("Loading config from file",
-		logger.String("configPath", configPath),
-		logger.String("environment", environment),
-	)
-	cfg, err = config.Load(configPath, environment)
-	if err != nil {
-		log.Error("Failed to load config", logger.Error(err))
-		return nil, err
-	}
-	log.Debug("Config loaded successfully")
-	return cfg, nil
-}
-
-func createDBClient(dbConfig config.DatabaseConfig, log logger.Logger) (database.Database, error) {
-	log.Debug("Creating Postgres client - configuration",
-		logger.String("host", dbConfig.Postgres.Host),
-		logger.Int("port", dbConfig.Postgres.Port),
-		logger.String("user", dbConfig.Postgres.User),
-		logger.String("database", dbConfig.Postgres.DBName),
-	)
-	dbClient, err := postgres.New(database.Config{
-		Host:            dbConfig.Postgres.Host,
-		Port:            dbConfig.Postgres.Port,
-		User:            dbConfig.Postgres.User,
-		Password:        dbConfig.Postgres.Password,
-		Database:        dbConfig.Postgres.DBName,
-		SSLMode:         dbConfig.Postgres.SSLMode,
-		MaxOpenConns:    dbConfig.Postgres.MaxOpenConns,
-		MaxIdleConns:    dbConfig.Postgres.MaxIdleConns,
-		ConnMaxLifetime: dbConfig.Postgres.ConnMaxLifetime,
-		ConnMaxIdleTime: dbConfig.Postgres.ConnMaxIdleTime,
-	})
-	if err != nil {
-		log.Error("Failed to create Postgres client", logger.Error(err))
-		return nil, err
-	}
-	log.Info("Postgres client created successfully")
-	return dbClient, nil
-}
-
-func createCacheClient(cacheConfig config.CacheConfig, log logger.Logger) (cache.Cache, error) {
-	log.Debug("Creating Redis cache client - configuration",
-		logger.String("host", cacheConfig.RedisConfig.RedisHost),
-		logger.Int("port", cacheConfig.RedisConfig.RedisPort),
-		logger.Int("db", cacheConfig.RedisConfig.RedisDB),
-	)
-	cacheClient, err := redis.New(cache.Config{
-		Host:         cacheConfig.RedisConfig.RedisHost,
-		Port:         cacheConfig.RedisConfig.RedisPort,
-		Password:     cacheConfig.RedisConfig.RedisPassword,
-		DB:           cacheConfig.RedisConfig.RedisDB,
-		DialTimeout:  cacheConfig.RedisConfig.RedisDialTimeout,
-		PoolSize:     cacheConfig.RedisConfig.RedisPoolSize,
-		MinIdleConns: cacheConfig.RedisConfig.RedisMinIdleConns,
-	})
-	if err != nil {
-		log.Error("Failed to create Redis client", logger.Error(err))
-		return nil, err
-	}
-	log.Info("Redis client created successfully")
-	return cacheClient, nil
-}
-
-func createKakfaProducer(p config.KafkaProducerConfig, log logger.Logger) (messaging.Producer, error) {
-	log.Debug("Creating Kafka producer - configuration",
-		logger.String("brokers", fmt.Sprintf("%v", p.Brokers)),
-		logger.String("topic", p.Topic),
-	)
-	producer, err := kafka.NewProducer(messaging.ProducerConfig{
-		Brokers:           p.Brokers,
-		ClientID:          p.ClientID,
-		MaxRetries:        p.MaxRetries,
-		RetryBackoff:      p.RetryBackoff,
-		Compression:       p.Compression,
-		Acks:              p.Acks,
-		EnableIdempotence: p.EnableIdempotence,
-		MaxInFlight:       p.MaxInFlight,
-		DialTimeout:       p.DialTimeout,
-	})
-	if err != nil {
-		log.Error("Failed to create Kafka producer", logger.Error(err))
-		return nil, err
-	}
-	log.Info("Kafka producer created successfully")
-	return producer, nil
-}
-
-func createStorageProvider(cfg *config.Config, log logger.Logger) (service.StorageProvider, error) {
-	log.Debug("Creating storage provider",
-		logger.String("provider", cfg.Storage.Provider),
-		logger.String("bucket", cfg.Storage.Bucket),
-	)
-
-	switch cfg.Storage.Provider {
-	case "r2":
-		r2Provider, err := r2.New(r2.Config{
-			AccountID:       env.GetEnv("R2_ACCOUNT_ID"),
-			AccessKeyID:     cfg.Storage.AccessKeyID,
-			SecretAccessKey: cfg.Storage.SecretAccessKey,
-			Bucket:          cfg.Storage.Bucket,
-			PublicURL:       cfg.Storage.PublicURL,
-			CDNBaseURL:      cfg.Storage.CDNBaseURL,
-			UseCDN:          cfg.Storage.UseCDN,
-			ImageQuality:    cfg.Features.ImageProcessing.Quality,
-		}, log)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create R2 provider: %w", err)
-		}
-		log.Info("R2 storage provider created successfully")
-		return r2Provider, nil
-	default:
-		return nil, fmt.Errorf("unsupported storage provider: %s", cfg.Storage.Provider)
-	}
-}
-func setupHealthChecks(dbClient database.Database, cacheClient cache.Cache, cfg *config.Config) *health.Manager {
-	healthMgr := health.NewManager(cfg.Service.Name, cfg.Service.Version)
-
-	// Register database health checker
-	if dbClient != nil {
-		healthMgr.RegisterChecker(checkers.NewDatabaseChecker(dbClient))
-	}
-
-	// Register cache health checker
-	if cacheClient != nil && cfg.Cache.Enabled {
-		healthMgr.RegisterChecker(checkers.NewCacheChecker(cacheClient))
-		healthMgr.RegisterChecker(checkers.NewCachePerformanceChecker(cacheClient))
-	}
-
-	return healthMgr
-}
-
-func setupRoutes(builder *router.Builder, h *handler.Handler, cfg *config.Config, log logger.Logger) *router.Builder {
-	log.Debug("Registering media routes")
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Post("/upload", coreMiddleware.ApplyMiddlewares(
-			request.Adapt(h.Upload),
-			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
-		))
-
-		r.Post("/profile-photo", coreMiddleware.ApplyMiddlewares(
-			request.Adapt(h.UploadProfilePhoto),
-			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Features.ImageProcessing.AllowedFormats),
-		))
-
-		r.Post("/message-media", coreMiddleware.ApplyMiddlewares(
-			request.Adapt(h.UploadMessageMedia),
-			middleware.FileOnlyMultipart(log, cfg.Security.MaxBodySize, cfg.Storage.AllowedTypes),
-		))
-
-		r.Get("/files/{file_id}", request.Adapt(h.GetFile))
-		r.Put("/files/{file_id}", request.Adapt(h.UpdateFile))
-		r.Delete("/files/{file_id}", request.Adapt(h.DeleteFile))
-		r.Get("/files", request.Adapt(h.ListFiles))
-		r.Post("/albums", request.Adapt(h.CreateAlbum))
-		r.Get("/albums/{id}", request.Adapt(h.GetAlbum))
-		r.Get("/albums", request.Adapt(h.ListAlbums))
-		r.Put("/albums/{id}", request.Adapt(h.UpdateAlbum))
-		r.Delete("/albums/{id}", request.Adapt(h.DeleteAlbum))
-		r.Post("/albums/{id}/files", request.Adapt(h.AddFileToAlbum))
-		r.Delete("/albums/{id}/files/{file_id}", request.Adapt(h.RemoveFileFromAlbum))
-
-		r.Post("/shares", request.Adapt(h.CreateShare))
-		r.Get("/shares/{id}", request.Adapt(h.GetShare))
-		r.Get("/shares", request.Adapt(h.ListShares))
-		r.Delete("/shares/{id}", request.Adapt(h.RevokeShare))
-
-		r.Get("/stats", request.Adapt(h.GetStorageStats))
-	})
-	log.Debug("Media routes registered successfully")
-	return builder
-}
-
-func createRouter(h *handler.Handler, healthHandler *health.Handler, cfg *config.Config, log logger.Logger) (*router.Router, error) {
-
-	builder := router.NewBuilder().
-		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
-			healthHandler.Health(rh.Writer(), rh.Request())
-		}).
-		WithMetricsEndpoint("/metrics", func(rh request.RequestHandler) {
-			prommetrics.Handler().ServeHTTP(rh.Writer(), rh.Request())
-		}).
-		WithNotFoundHandler(func(rh request.RequestHandler) {
-			response.NotFoundError(rh.Context(), rh.Request(), rh.Writer(), fmt.Sprintf("Endpoint %s not found", rh.Request().URL.Path))
-		}).
-		WithMethodNotAllowedHandler(func(rh request.RequestHandler) {
-			response.MethodNotAllowedError(rh.Context(), rh.Request(), rh.Writer())
-		}).
-		WithEarlyMiddleware(
-			router.Middleware(coreMiddleware.InterceptRequestID(headers.XRequestID)),
-			router.Middleware(coreMiddleware.InterceptCorrelationID(headers.XCorrelationID)),
-			router.Middleware(coreMiddleware.RequestReceivedLogger(log)),
-			router.Middleware(coreMiddleware.InterceptUserId()),
-		).
-		WithLateMiddleware(
-			router.Middleware(coreMiddleware.Recovery(log)),
-			router.Middleware(coreMiddleware.RequestCompletedLogger(log)),
-		)
-
-	// Health endpoints without authentication
-	builder = builder.WithRoutes(func(r *router.Router) {
-		r.Get("/live", healthHandler.Liveness)
-		r.Get("/ready", healthHandler.Readiness)
-		r.Get("/health/liveness", healthHandler.Liveness)
-		r.Get("/health/readiness", healthHandler.Readiness)
-	})
-
-	builder = setupRoutes(builder, h, cfg, log)
-	routerInstance := builder.Build()
-	return routerInstance, nil
-}
-
-func setupShutdownManager(srv *server.Server, kafkaProducer messaging.Producer, log logger.Logger, cfg *config.Config) *shutdown.Manager {
-	shutdownMgr := shutdown.New(
-		shutdown.WithTimeout(cfg.Server.ShutdownTimeout),
-		shutdown.WithLogger(log),
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"kafka-producer",
-		shutdown.Hook(func(ctx context.Context) error {
-			log.Info("Closing Kafka producer")
-			return kafkaProducer.Close()
-		}),
-		shutdown.PriorityHigh,
-	)
-
-	shutdownMgr.RegisterWithPriority(
-		"http-server",
-		shutdown.ServerShutdownHook(srv),
-		shutdown.PriorityHigh,
-	)
-
-	if cfg.Shutdown.WaitForConnections && cfg.Shutdown.DrainTimeout > 0 {
-		shutdownMgr.RegisterWithOptions(
-			"drain-connections",
-			shutdown.DelayHook(cfg.Shutdown.DrainTimeout),
-			shutdown.PriorityHigh,
-			cfg.Shutdown.DrainTimeout,
-		)
-	}
-
-	shutdownMgr.RegisterWithPriority(
-		"logger-sync",
-		shutdown.Hook(func(ctx context.Context) error {
-			log.Info("Syncing logger before shutdown")
-			return log.Sync()
-		}),
-		shutdown.PriorityLow,
-	)
-
-	return shutdownMgr
-}
-
-func waitForShutdown(shutdownMgr *shutdown.Manager) <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if err := shutdownMgr.Wait(); err != nil {
-		}
-	}()
-	return done
-}
-
-func main() {
-	env.LoadEnv()
-
-	cfg, err := loadConfig()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to load configuration: %v", err))
-	}
-
-	log := createLogger(cfg.Service.Name)
-	defer log.Sync()
-
-	dbClient, err := createDBClient(cfg.Database, log)
-	if err != nil {
-		log.Fatal("Failed to create database client", logger.Error(err))
-	}
-	defer func() {
-		if dbClient != nil {
-			log.Info("Closing database connection")
-			if err := dbClient.Close(); err != nil {
-				log.Error("Failed to close database connection", logger.Error(err))
-			}
-		}
-	}()
-
-	var cacheClient cache.Cache
-	if cfg.Cache.Enabled {
-		cacheClient, err = createCacheClient(cfg.Cache, log)
-		if err != nil {
-			log.Fatal("Failed to create cache client", logger.Error(err))
-		}
-		defer func() {
-			if cacheClient != nil {
-				log.Info("Closing cache connection")
-				if err := cacheClient.Close(); err != nil {
-					log.Error("Failed to close cache connection", logger.Error(err))
-				}
-			}
-		}()
-	} else {
-		log.Info("Cache is disabled in configuration")
-	}
-
-	producer, err := createKakfaProducer(cfg.Kafka.Producer, log)
-	if err != nil {
-		log.Fatal("Failed to create Kafka producer", logger.Error(err))
-	}
-
-	// Create storage provider
-	storageProvider, err := createStorageProvider(cfg, log)
-	if err != nil {
-		log.Fatal("Failed to create storage provider", logger.Error(err))
-	}
-
-	// Create repositories
-	fileRepo := repository.NewFileRepository(dbClient, log)
-
-	// Create service
-	mediaService := service.NewMediaServiceBuilder().
-		WithFileRepo(fileRepo).
-		WithCache(cacheClient).
-		WithConfig(cfg).
-		WithLogger(log).
-		WithStorageProvider(storageProvider).
-		WithProducer(producer).
-		Build()
-
-	mediaProcessor := media.NewProcessor()
-
-	// Create handlers
-	mediaHandler := handler.NewHandler(mediaService, mediaProcessor, cfg, log)
-
-	// Setup health checks
-	healthMgr := setupHealthChecks(dbClient, cacheClient, cfg)
-	healthHandler := health.NewHandler(healthMgr)
-
-	// Create router
-	routerInstance, err := createRouter(mediaHandler, healthHandler, cfg, log)
-	if err != nil {
-		log.Fatal("Failed to create router", logger.Error(err))
-	}
-
-	// Create HTTP server
-	serverCfg := server.Config{
-		Host:           cfg.Server.Host,
-		Port:           cfg.Server.Port,
-		ReadTimeout:    cfg.Server.ReadTimeout,
-		WriteTimeout:   cfg.Server.WriteTimeout,
-		IdleTimeout:    cfg.Server.IdleTimeout,
-		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
-		Handler:        routerInstance.Mux(),
-	}
-
-	srv, err := server.New(&serverCfg, log)
-	if err != nil {
-		log.Fatal("Failed to create server", logger.Error(err))
-	}
-
-	shutdownMgr := setupShutdownManager(srv, producer, log, cfg)
-
-	serverErrors := make(chan error, 1)
-	go func() {
-		log.Info("Starting Media Service server",
-			logger.String("host", cfg.Server.Host),
-			logger.Int("port", cfg.Server.Port),
-		)
-		serverErrors <- srv.Start()
-	}()
-
-	select {
-	case err := <-serverErrors:
-		if err != nil && !server.IsServerDownErr(err) {
-			log.Fatal("Server error", logger.Error(err))
-		}
-		log.Info("Server stopped")
-
-	case <-waitForShutdown(shutdownMgr):
-		log.Info("Media Service stopped gracefully")
-	}
 }
