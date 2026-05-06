@@ -19,6 +19,7 @@ import (
 	redisWindowStore "shared/pkg/windowstore/redis"
 	"shared/server/common/hashing"
 	"shared/server/common/token"
+	"shared/server/env"
 
 	"auth-service/internal/config"
 	"auth-service/internal/firebase"
@@ -106,6 +107,7 @@ func newEmailService(cfg *config.Config, log logger.Logger) *email.EmailService 
 			Domain:  cfg.Email.Mailgun.Domain,
 			APIKey:  cfg.Email.Mailgun.APIKey,
 			BaseURL: cfg.Email.Mailgun.BaseURL,
+			IsDebug: cfg.Service.Environment == env.EnvDevelopment,
 		})
 		log.Info("Mailgun email service initialized")
 	default:

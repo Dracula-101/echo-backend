@@ -15,11 +15,13 @@ type MailgunConfig struct {
 	Domain  string
 	APIKey  string
 	BaseURL string // optional, for EU region
+	IsDebug bool
 }
 
 type MailgunService struct {
-	mg     *mailgun.Client
-	domain string
+	mg      *mailgun.Client
+	domain  string
+	isDebug bool
 }
 
 // ---------- INIT ----------
@@ -33,8 +35,9 @@ func New(config MailgunConfig) *MailgunService {
 	}
 
 	return &MailgunService{
-		mg:     mg,
-		domain: config.Domain,
+		mg:      mg,
+		domain:  config.Domain,
+		isDebug: config.IsDebug,
 	}
 }
 
@@ -128,8 +131,10 @@ func (s *MailgunService) SendEmailVerificationEmail(to, token string) error {
 	if err != nil {
 		return err
 	}
-
 	verificationLink := fmt.Sprintf("https://%s/verify-email?token=%s", s.domain, token)
+	if s.isDebug {
+		verificationLink += "&debug=true"
+	}
 	name := strings.Split(to, "@")[0] // simple name extraction from email
 	body := replace(tpl, map[string]string{
 		"name":       name,

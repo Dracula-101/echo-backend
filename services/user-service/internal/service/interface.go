@@ -14,6 +14,7 @@ import (
 // UserServiceInterface defines the contract for user service operations
 type UserService interface {
 	// Profile operations
+	UsernameExists(ctx context.Context, username string) (bool, pkgErrors.AppError)
 	GetProfile(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError)
 	GetProfileByUsername(ctx context.Context, currentUserID string, username string) (*domain.Profile, pkgErrors.AppError)
 	GetProfileByPhone(ctx context.Context, currentUserID string, phone string) (*domain.Profile, pkgErrors.AppError)

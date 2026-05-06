@@ -1,6 +1,8 @@
 package email
 
-import "shared/pkg/email/mailgun"
+import (
+	"shared/pkg/email/mailgun"
+)
 
 type EmailService interface {
 	SendWelcomeEmail(toEmail string, name string) error
@@ -12,4 +14,5 @@ type EmailService interface {
 type EmailConfig struct {
 	Provider string
 	Mailgun  mailgun.MailgunConfig
+	env      string
 }

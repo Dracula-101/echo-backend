@@ -34,9 +34,9 @@ server:
       - /api/v1/auth/refresh-token
       - /api/v1/auth/forgot-password
       - /api/v1/users/profile
+      - /api/v1/users/username-exists
       - /**/health
       - /**/metrics
-
 
 services:
   auth-service:
@@ -189,12 +189,12 @@ ratelimit:
   redis_addr: ${REDIS_ADDR:redis:6379}
   redis_password: ${REDIS_PASSWORD}
   redis_db: ${REDIS_DB:0}
-  
+
   global:
     requests: 100000
     window: 1m
     strategy: token_bucket
-  
+
   endpoints:
     /auth/login:
       requests: 5
@@ -244,7 +244,8 @@ security:
     Referrer-Policy: "strict-origin-when-cross-origin"
     Permissions-Policy: "geolocation=(), microphone=(), camera=()"
   max_body_size: 10485760
-  path_limits:    # TODO: Customize per-path body size limits
+  path_limits:
+    # TODO: Customize per-path body size limits
     /api/v1/media/upload: 104857600
 
 loadbalance:

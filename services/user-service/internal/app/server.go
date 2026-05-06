@@ -70,7 +70,7 @@ func buildRouter(
 	healthHandler *health.Handler,
 	log logger.Logger,
 ) *router.Router {
-	skipPaths := []string{"/health", "/metrics", "/live", "/ready", "/health/liveness", "/health/readiness"}
+	skipPaths := []string{"/username-exists", "/health", "/metrics", "/live", "/ready", "/health/liveness", "/health/readiness"}
 
 	builder := router.NewBuilder().
 		WithHealthEndpoint("/health", func(rh request.RequestHandler) {
@@ -116,6 +116,10 @@ func registerUserRoutes(builder *router.Builder, h *handler.UserHandler, rl rate
 		uid, _ := request.GetUserIDFromContext(req.Context())
 		return uid
 	}
+
+	builder = builder.WithRoutes(func(r *router.Router) {
+		r.Get("/username-exists", request.Adapt(h.UsernameExists))
+	})
 
 	builder = builder.WithRoutesGroup("/me", func(rg *router.RouteGroup) {
 		rg.Get("", request.Adapt(h.GetMyProfile))

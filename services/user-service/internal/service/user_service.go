@@ -47,6 +47,61 @@ func NewUserService(
 	}
 }
 
+func (s *userService) UsernameExists(ctx context.Context, username string) (bool, pkgErrors.AppError) {
+	s.log.Info("Checking if username exists",
+		logger.String("username", username),
+	)
+	
+	// check cache first
+	cachedUserID, cacheErr := s.cache.GetUserIDByUsername(ctx, username)
+	if cacheErr != nil {
+		s.log.Error("Cache error while checking username existence",
+			logger.String("username", username),
+			logger.Error(cacheErr),
+		)
+	} else if cachedUserID != nil {
+		// cachedUserID == "" indicates a cached negative (non-existent) result
+		if *cachedUserID == "" {
+			s.log.Info("Username cached as non-existent",
+				logger.String("username", username),
+			)
+		} else {
+			s.log.Info("Username exists in cache",
+				logger.String("username", username),
+				logger.String("user_id", *cachedUserID),
+			)
+			return true, nil
+		}
+	}
+
+	exists, err := s.userRepo.UsernameExists(ctx, username)
+	if err != nil {
+		s.log.Error("Failed to check if username exists",
+			logger.String("username", username),
+			logger.Error(err),
+		)
+		return false, err
+	}
+
+	// Cache the negative result to prevent cache penetration, with a short TTL
+	if !exists {
+		cacheErr := s.cache.SetUserIDByUsername(ctx, username, "")
+		if cacheErr != nil {
+			s.log.Error("Cache error while setting non-existent username",
+				logger.String("username", username),
+				logger.Error(cacheErr),
+			)
+		}
+	}
+
+	s.log.Info("Username existence check completed",
+		logger.String("username", username),
+		logger.Bool("exists", exists),
+	)
+
+	return exists, nil
+}
+
 func (s *userService) GenerateUsername(ctx context.Context, displayName string) (string, pkgErrors.AppError) {
 	s.log.Info("Generating username",
 		logger.String("display_name", displayName),
