@@ -30,4 +30,9 @@ const (
 	MsgTypePresenceChanged  MessageType = "presence.changed"
 	MsgTypeConnectionStatus MessageType = "connection.status"
 	MsgTypeSyncRequired     MessageType = "sync.required"
+	MsgTypeCatchup          MessageType = "catchup"
+	MsgTypeSessionRevoked   MessageType = "session.revoked"
+	MsgTypeServerShutdown   MessageType = "server.shutdown"
+	MsgTypeTokenExpiring    MessageType = "token.expiring"
+	MsgTypeRefreshToken     MessageType = "refresh.token"
 )

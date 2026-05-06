@@ -104,10 +104,12 @@ type ShutdownConfig struct {
 }
 
 // KafkaConfig groups producer and consumer configuration for the ws-service.
-// WS-service is both a producer (delivery events) and a consumer (chat messages).
+// WS-service is both a producer (delivery events) and a consumer (chat messages
+// + auth events).
 type KafkaConfig struct {
-	Producer KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
-	Consumer KafkaConsumerConfig `yaml:"consumer" mapstructure:"consumer"`
+	Producer   KafkaProducerConfig `yaml:"producer" mapstructure:"producer"`
+	Consumer   KafkaConsumerConfig `yaml:"consumer" mapstructure:"consumer"`
+	AuthEvents KafkaConsumerConfig `yaml:"auth_events" mapstructure:"auth_events"`
 }
 
 // KafkaProducerConfig holds producer-specific Kafka settings.
@@ -132,4 +134,10 @@ type KafkaConsumerConfig struct {
 	GroupID           string        `yaml:"group_id" mapstructure:"group_id"`
 	SessionTimeout    time.Duration `yaml:"session_timeout" mapstructure:"session_timeout"`
 	HeartbeatInterval time.Duration `yaml:"heartbeat_interval" mapstructure:"heartbeat_interval"`
+	// ReturnOnError stops the consume loop on first handler failure so the
+	// rebalance replays from the last committed offset (at-least-once).
+	ReturnOnError bool `yaml:"return_on_error" mapstructure:"return_on_error"`
+	// DisableAutoCommit removes Sarama's periodic offset commit; offsets only
+	// commit on explicit MarkMessage at session-close.
+	DisableAutoCommit bool `yaml:"disable_auto_commit" mapstructure:"disable_auto_commit"`
 }

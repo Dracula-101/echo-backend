@@ -15,9 +15,10 @@ import (
 )
 
 type consumer struct {
-	group   sarama.ConsumerGroup
-	handler messaging.Handler
-	wg      sync.WaitGroup
+	group         sarama.ConsumerGroup
+	handler       messaging.Handler
+	wg            sync.WaitGroup
+	returnOnError bool
 }
 
 func NewConsumer(cfg messaging.ConsumerConfig) (messaging.Consumer, error) {
@@ -41,6 +42,9 @@ func NewConsumer(cfg messaging.ConsumerConfig) (messaging.Consumer, error) {
 	if cfg.HeartbeatInterval > 0 {
 		config.Consumer.Group.Heartbeat.Interval = cfg.HeartbeatInterval
 	}
+	if cfg.DisableAutoCommit {
+		config.Consumer.Offsets.AutoCommit.Enable = false
+	}
 
 	group, err := sarama.NewConsumerGroup(cfg.Brokers, cfg.GroupID, config)
 	if err != nil {
@@ -48,7 +52,8 @@ func NewConsumer(cfg messaging.ConsumerConfig) (messaging.Consumer, error) {
 	}
 
 	return &consumer{
-		group: group,
+		group:         group,
+		returnOnError: cfg.ReturnOnError,
 	}, nil
 }
 
@@ -164,6 +169,12 @@ func (c *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			if err := c.handler.Handle(session.Context(), msg); err != nil {
 				fmt.Printf("Handler error: %v\n", err)
+				if c.returnOnError {
+					// Don't advance past the failed message — let the rebalance
+					// replay from the last committed offset.
+					batch = batch[:0]
+					return err
+				}
 				continue
 			}
 

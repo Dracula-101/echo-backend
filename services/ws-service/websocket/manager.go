@@ -14,6 +14,7 @@ import (
 	"shared/server/websocket/hub"
 	"shared/server/websocket/router"
 	"ws-service/internal/protocol"
+	internalRedis "ws-service/internal/redis"
 	"ws-service/internal/repo"
 	"ws-service/internal/service"
 	"ws-service/websocket/middleware"
@@ -48,6 +49,22 @@ type Manager struct {
 	authzService      service.AuthorizationService
 	deliveryPublisher service.DeliveryEventPublisher
 	wsService         service.WSService
+
+	// Cross-instance fan-out (set via SetPubSub; nil ⇒ single-instance mode)
+	pubsub     *internalRedis.PubSub
+	instanceID string
+
+	// Reconnect buffer + Postgres catch-up (P1.2)
+	pendingStore *internalRedis.PendingStore
+	deliveryRepo repo.DeliveryStatusRepository
+
+	// Resume tokens + per-conversation seq (P1.3)
+	seqCounter        *internalRedis.SeqCounter
+	resumeTokenSecret []byte
+
+	// Drain flag (P1.5) — atomic read in the upgrade path so new connections
+	// get rejected with 503 once shutdown begins.
+	draining atomic.Bool
 
 	state          ManagerState
 	startTime      time.Time
@@ -353,6 +370,33 @@ func (m *Manager) registerHandlers() {
 	m.messageRouter.Register(string(protocol.MsgTypeCallICE), m.handleCallICE)
 	m.messageRouter.Register(string(protocol.MsgTypeCallHangup), m.handleCallHangup)
 	m.messageRouter.Register(string(protocol.MsgTypePing), m.handlePing)
+	m.messageRouter.Register(string(protocol.MsgTypeRefreshToken), m.handleRefreshToken)
+}
+
+// handleRefreshToken accepts an inbound refresh.token frame carrying a freshly
+// minted access token. We don't re-validate against auth-service here — the
+// HTTP gateway path will reject any future request with a stale token, so the
+// only state we need to update is the connection metadata for any later
+// validation paths. Refresh logic itself lives in the REST API.
+func (m *Manager) handleRefreshToken(_ context.Context, msg *router.Message) error {
+	conn, ok := m.getConnection(msg)
+	if !ok {
+		return nil
+	}
+
+	var payload protocol.RefreshTokenPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		return err
+	}
+	if payload.AccessToken == "" {
+		return m.sendError(conn, m.getRequestID(msg), protocol.ErrCodeInvalidPayload, "access_token is required")
+	}
+
+	conn.SetMetadata("access_token", payload.AccessToken)
+	m.log.Info("refreshed connection access token",
+		logger.String("conn_id", conn.ID()),
+	)
+	return nil
 }
 
 func (m *Manager) HandleMessage(ctx context.Context, conn *connection.Connection, data []byte) error {
@@ -507,9 +551,21 @@ func (m *Manager) sendErrorWithDetails(conn *connection.Connection, requestID st
 
 func (m *Manager) sendConnectionStatus(conn *connection.Connection, status, reason string) {
 	event := protocol.ConnectionStatusEvent{
-		Status:    status,
-		Reason:    reason,
-		Timestamp: time.Now(),
+		Status:     status,
+		Reason:     reason,
+		Timestamp:  time.Now(),
+		InstanceID: m.instanceID,
+	}
+
+	if status == "connected" && len(m.resumeTokenSecret) > 0 {
+		userID, hasUser := m.getUserID(conn)
+		deviceID, _ := m.getDeviceID(conn)
+		if hasUser {
+			tok := protocol.NewResumeToken(userID.String(), deviceID, nil)
+			if signed, err := protocol.SignResumeToken(tok, m.resumeTokenSecret); err == nil {
+				event.ResumeToken = signed
+			}
+		}
 	}
 
 	m.sendResponse(conn, "", protocol.MsgTypeConnectionStatus, event)
@@ -561,6 +617,50 @@ func (m *Manager) SetDeliveryPublisher(publisher service.DeliveryEventPublisher)
 	m.deliveryPublisher = publisher
 }
 
+// SetPubSub wires the cross-instance Redis pub/sub. Without this the manager
+// only delivers to clients connected to the local pod — fine for dev, broken
+// for any multi-instance deployment because Kafka partitions are per-pod.
+func (m *Manager) SetPubSub(pubsub *internalRedis.PubSub, instanceID string) {
+	m.pubsub = pubsub
+	m.instanceID = instanceID
+	pubsub.OnMessage(internalRedis.ChannelBroadcast, m.handleRelayBroadcast)
+}
+
+// SetPendingStore enables reconnect-buffer behavior: messages targeted at
+// users with no live connection are stored briefly so a fast reconnect can
+// replay them without touching Postgres.
+func (m *Manager) SetPendingStore(store *internalRedis.PendingStore) {
+	m.pendingStore = store
+}
+
+// SetDeliveryRepo wires the delivery_status repo used for Postgres catch-up
+// on reconnect (P1.2) and the safety-net insert in the consumer (P1.1).
+func (m *Manager) SetDeliveryRepo(r repo.DeliveryStatusRepository) {
+	m.deliveryRepo = r
+}
+
+// SetSeqCounter wires per-conversation sequence numbering. Used by the chat
+// consumer to stamp each frame with a monotonic seq the client can use to
+// detect gaps after a reconnect.
+func (m *Manager) SetSeqCounter(s *internalRedis.SeqCounter) {
+	m.seqCounter = s
+}
+
+func (m *Manager) SeqCounter() *internalRedis.SeqCounter {
+	return m.seqCounter
+}
+
+// SetResumeTokenSecret installs the HMAC key used to sign resume tokens.
+// Without it, no resume token is issued on connect; clients fall back to the
+// time-windowed catch-up.
+func (m *Manager) SetResumeTokenSecret(secret []byte) {
+	m.resumeTokenSecret = secret
+}
+
+func (m *Manager) InstanceID() string {
+	return m.instanceID
+}
+
 // autoSubscribeAndSync subscribes the connection to all user's conversations
 // and sends sync metadata for conversations with unread messages.
 // Runs in a goroutine to avoid blocking the connect flow.
@@ -588,6 +688,13 @@ func (m *Manager) autoSubscribeAndSync(conn *connection.Connection, userID uuid.
 		logger.String("conn_id", conn.ID()),
 		logger.Int("conversation_count", len(conversations)),
 	)
+
+	// Drain reconnect buffer first — these are the freshest, in-order frames
+	// that arrived while the user was momentarily offline.
+	m.drainPendingForUser(ctx, conn, userID)
+
+	// Catch-up from Postgres for messages older than the pending TTL.
+	m.sendCatchupFromPostgres(ctx, conn, userID)
 
 	// Send sync metadata for conversations with unread messages
 	syncStates, err := m.conversationRepo.GetUserConversationSyncState(ctx, userID)
@@ -644,4 +751,173 @@ func (m *Manager) autoSubscribeAndSync(conn *connection.Connection, userID uuid.
 		logger.String("user_id", userID.String()),
 		logger.Int("conversations_with_unread", len(syncStates)),
 	)
+}
+
+// drainPendingForUser sends out any pre-buffered frames for this user. The
+// frames are already JSON-encoded ServerMessages, so we can write them to
+// the connection unmodified.
+func (m *Manager) drainPendingForUser(ctx context.Context, conn *connection.Connection, userID uuid.UUID) {
+	if m.pendingStore == nil {
+		return
+	}
+	frames, err := m.pendingStore.Drain(ctx, userID.String())
+	if err != nil {
+		m.log.Warn("failed to drain pending buffer",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return
+	}
+	for _, frame := range frames {
+		if err := conn.Send(frame); err != nil {
+			m.log.Warn("failed to send pending frame",
+				logger.String("user_id", userID.String()),
+				logger.Error(err),
+			)
+			return
+		}
+	}
+	if len(frames) > 0 {
+		m.log.Info("drained pending frames on reconnect",
+			logger.String("user_id", userID.String()),
+			logger.Int("frame_count", len(frames)),
+		)
+	}
+}
+
+// sendCatchupFromPostgres queries delivery_status for messages still marked
+// 'sent' and pushes them as a single catchup frame.
+func (m *Manager) sendCatchupFromPostgres(ctx context.Context, conn *connection.Connection, userID uuid.UUID) {
+	if m.deliveryRepo == nil {
+		return
+	}
+
+	const catchupLimit = 500
+	undelivered, err := m.deliveryRepo.GetUndelivered(ctx, userID, catchupLimit)
+	if err != nil {
+		m.log.Warn("catch-up query failed",
+			logger.String("user_id", userID.String()),
+			logger.Error(err),
+		)
+		return
+	}
+	if len(undelivered) == 0 {
+		return
+	}
+
+	payload := protocol.CatchupPayload{
+		Messages: make([]protocol.CatchupMessage, 0, len(undelivered)),
+		HasMore:  len(undelivered) >= catchupLimit,
+	}
+	for _, m := range undelivered {
+		payload.Messages = append(payload.Messages, protocol.CatchupMessage{
+			MessageID:      m.MessageID.String(),
+			ConversationID: m.ConversationID.String(),
+			SenderUserID:   m.SenderUserID.String(),
+			Content:        json.RawMessage(m.Content),
+			CreatedAt:      m.CreatedAt,
+		})
+	}
+
+	msg := protocol.NewServerMessage(protocol.MsgTypeCatchup, "").WithPayload(payload)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	conn.Send(data)
+	m.log.Info("sent Postgres catchup on reconnect",
+		logger.String("user_id", userID.String()),
+		logger.Int("message_count", len(undelivered)),
+		logger.Bool("has_more", payload.HasMore),
+	)
+}
+
+// IsDraining reports whether the manager has been put into draining state.
+// The HTTP upgrade path checks this and rejects new connections with 503.
+func (m *Manager) IsDraining() bool { return m.draining.Load() }
+
+// SetDraining flips the drain flag. After this returns true reads, new
+// connection upgrades should be refused.
+func (m *Manager) SetDraining(v bool) { m.draining.Store(v) }
+
+// BroadcastShutdown asks all locally-connected clients to reconnect after a
+// short delay. The client picks a different pod (consistent-hash LB plus the
+// drain key set in Redis means traffic shifts away). The connections aren't
+// force-closed here — that happens at hard-shutdown deadline. This separation
+// gives well-behaved clients time to reconnect cleanly.
+func (m *Manager) BroadcastShutdown(reconnectAfterMs int, reason string) {
+	payload := protocol.ServerShutdownPayload{
+		ReconnectAfterMs: reconnectAfterMs,
+		Reason:           reason,
+	}
+	data := m.marshalPayload(string(protocol.MsgTypeServerShutdown), payload)
+
+	for _, client := range m.hub.GetAllClients() {
+		for _, conn := range client.GetAllConnections() {
+			conn.Send(data)
+		}
+	}
+	m.log.Info("broadcast server.shutdown to all local clients",
+		logger.Int("reconnect_after_ms", reconnectAfterMs),
+		logger.String("reason", reason),
+	)
+}
+
+// RevokeUserSessions sends a session.revoked frame to every active connection
+// of the given user and closes them. sessionID is informational — until
+// auth-service includes device_id in the payload, we can't scope to a single
+// connection, so all of the user's devices are kicked.
+func (m *Manager) RevokeUserSessions(userID uuid.UUID, sessionID, reason string) {
+	client, ok := m.hub.GetClient(userID)
+	if !ok {
+		// Not connected to this instance. Relay so the owning instance handles it.
+		if m.pubsub != nil {
+			payload := protocol.SessionRevokedPayload{
+				Reason:  reason,
+				Message: "Your session was revoked.",
+			}
+			data := m.marshalPayload(string(protocol.MsgTypeSessionRevoked), payload)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = m.pubsub.PublishBroadcast(ctx, &internalRedis.BroadcastMessage{
+				Type:       "user",
+				TargetType: "user",
+				TargetID:   userID.String(),
+				Payload:    data,
+			})
+		}
+		return
+	}
+
+	payload := protocol.SessionRevokedPayload{
+		Reason:  reason,
+		Message: "Your session was revoked.",
+	}
+	data := m.marshalPayload(string(protocol.MsgTypeSessionRevoked), payload)
+	for _, conn := range client.GetAllConnections() {
+		conn.Send(data)
+		conn.Close()
+	}
+
+	m.log.Info("revoked user sessions",
+		logger.String("user_id", userID.String()),
+		logger.String("session_id", sessionID),
+		logger.String("reason", reason),
+	)
+}
+
+// bufferIfOffline pushes the marshalled frame to the user's pending list
+// when there's no live connection anywhere in the cluster. Caller already
+// confirmed local connection lookup miss; this also checks the Redis-backed
+// user-conns set to know if the user is on another pod.
+func (m *Manager) bufferIfOffline(userID uuid.UUID, data []byte) {
+	if m.pendingStore == nil {
+		return
+	}
+	if m.hub.IsOnline(userID) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = m.pendingStore.Push(ctx, userID.String(), data)
 }

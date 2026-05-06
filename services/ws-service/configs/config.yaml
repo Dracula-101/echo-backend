@@ -87,6 +87,18 @@ kafka:
     group_id: ${KAFKA_GROUP_ID:ws-service-delivery}
     session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
     heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
+    return_on_error: ${KAFKA_RETURN_ON_ERROR:true}
+    disable_auto_commit: ${KAFKA_DISABLE_AUTO_COMMIT:true}
+  auth_events:
+    brokers:
+      - ${KAFKA_BROKERS:localhost:9092}
+    client_id: ${KAFKA_AUTH_EVENTS_CLIENT_ID:ws-service-auth-events}
+    topic: ${KAFKA_AUTH_EVENTS_TOPIC:auth-events}
+    group_id: ${KAFKA_AUTH_EVENTS_GROUP_ID:ws-service-auth-events}
+    session_timeout: ${KAFKA_SESSION_TIMEOUT:10s}
+    heartbeat_interval: ${KAFKA_HEARTBEAT_INTERVAL:3s}
+    return_on_error: ${KAFKA_AUTH_EVENTS_RETURN_ON_ERROR:false}
+    disable_auto_commit: ${KAFKA_AUTH_EVENTS_DISABLE_AUTO_COMMIT:false}
 
 logging:
   level: ${LOG_LEVEL:info}

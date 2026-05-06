@@ -20,16 +20,27 @@ const (
 	PrefixConnection   = "ws:conn:"
 	PrefixUserConns    = "ws:user:conns:"
 	PrefixInstance     = "ws:instance:"
+	PrefixDelivered    = "ws:delivered:"
+	PrefixPending      = "ws:pending:"
+	PrefixSeq          = "ws:seq:"
+	PrefixDrain        = "ws:drain:"
+	PrefixRLAuth       = "ws:rl:auth:"
 
 	ChannelBroadcast = "ws:broadcast"
 	ChannelPresence  = "ws:presence:events"
 	ChannelTyping    = "ws:typing:events"
+	ChannelControl   = "ws:control"
 
 	TTLTyping     = 8 * time.Second
 	TTLPresence   = 35 * time.Second
 	TTLConnection = 35 * time.Second
+	TTLDelivered  = 1 * time.Hour
+	TTLPending    = 5 * time.Minute
+	TTLDrain      = 10 * time.Minute
+	TTLRLAuth     = 1 * time.Minute
 
 	MaxSubscriptionsPerConn = 100
+	MaxPendingMessages      = 100
 )
 
 func SubscriptionKey(topic, resource string) string {
@@ -62,4 +73,24 @@ func UserConnsKey(userID string) string {
 
 func InstanceKey(instanceID string) string {
 	return PrefixInstance + instanceID
+}
+
+func DeliveredKey(messageID, userID string) string {
+	return PrefixDelivered + messageID + ":" + userID
+}
+
+func PendingKey(userID string) string {
+	return PrefixPending + userID
+}
+
+func SeqKey(conversationID string) string {
+	return PrefixSeq + conversationID
+}
+
+func DrainKey(instanceID string) string {
+	return PrefixDrain + instanceID
+}
+
+func RLAuthKey(ip string) string {
+	return PrefixRLAuth + ip
 }

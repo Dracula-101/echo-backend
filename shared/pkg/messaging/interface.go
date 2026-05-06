@@ -79,4 +79,16 @@ type ConsumerConfig struct {
 	SessionTimeout time.Duration
 	// HeartbeatInterval is how often the consumer sends heartbeats to the broker.
 	HeartbeatInterval time.Duration
+	// ReturnOnError, when true, terminates the partition consume loop on the
+	// first handler error, triggering a rebalance and replay from the last
+	// committed offset. When false (default), the consumer logs and skips the
+	// failed message — which combined with Sarama's auto-commit can silently
+	// drop messages if a later message in the same partition succeeds.
+	// Set to true for any consumer that requires at-least-once correctness.
+	ReturnOnError bool
+	// DisableAutoCommit, when true, turns off Sarama's periodic AutoCommit.
+	// Marked offsets are still committed at session-close. Combined with
+	// ReturnOnError this gives stricter at-least-once semantics: a crash mid-batch
+	// reprocesses every uncommitted record.
+	DisableAutoCommit bool
 }

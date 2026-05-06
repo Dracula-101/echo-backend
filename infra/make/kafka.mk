@@ -43,6 +43,13 @@ kafka-create-topics:
 	@echo ""
 	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic messages --partitions 3 --replication-factor 1
 	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic notifications --partitions 3 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic chat-messages --partitions 16 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic message-events --partitions 8 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic conversation-events --partitions 8 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic delivery-events --partitions 8 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic auth-events --partitions 4 --replication-factor 1
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic chat-messages-dlq --partitions 4 --replication-factor 1 --config retention.ms=604800000
+	@docker exec echo-kafka kafka-topics --create --if-not-exists --bootstrap-server localhost:9092 --topic ws-events-dlq --partitions 2 --replication-factor 1 --config retention.ms=604800000
 	@echo ""
 	@echo "$(BRIGHT_GREEN)$(CHECK) Topics created$(NC)"
 	@echo ""

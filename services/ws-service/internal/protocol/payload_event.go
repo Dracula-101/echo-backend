@@ -36,7 +36,9 @@ type PresenceChangedEvent struct {
 }
 
 type ConnectionStatusEvent struct {
-	Status    string    `json:"status"`
-	Reason    string    `json:"reason,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
+	Status      string    `json:"status"`
+	Reason      string    `json:"reason,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
+	ResumeToken string    `json:"resume_token,omitempty"`
+	InstanceID  string    `json:"instance_id,omitempty"`
 }

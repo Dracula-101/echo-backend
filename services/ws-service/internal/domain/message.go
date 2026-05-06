@@ -101,6 +101,7 @@ type MessagePayload struct {
 	CreatedAt              time.Time         `json:"created_at"`
 	UpdatedAt              time.Time         `json:"updated_at"`
 	Metadata               json.RawMessage   `json:"metadata,omitempty"`
+	Seq                    int64             `json:"seq,omitempty"`
 }
 
 // ToPayload converts ChatMessageEvent to MessagePayload for WebSocket delivery
