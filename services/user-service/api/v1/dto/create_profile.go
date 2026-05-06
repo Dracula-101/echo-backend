@@ -9,6 +9,7 @@ import (
 type CreateProfileRequest struct {
 	UserID            string `json:"user_id" validate:"required,uuid4"`
 	DisplayName       string `json:"display_name" validate:"required,max=50"`
+	Username          string `json:"username,omitempty"`
 	FirstName         string `json:"first_name" validate:"max=30"`
 	LastName          string `json:"last_name" validate:"max=30"`
 	Bio               string `json:"bio" validate:"max=160"`

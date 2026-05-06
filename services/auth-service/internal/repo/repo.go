@@ -91,7 +91,7 @@ func (r *authRepository) ExistsByEmail(ctx context.Context, email string) (*dbMo
 // User Creation
 // ============================================================================
 
-func (r *authRepository) CreateUser(ctx context.Context, params repoModels.CreateUserParams) (string, pkgErrors.AppError) {
+func (r *authRepository) CreateUser(ctx context.Context, params repoModels.CreateUserParams) (*domain.User, pkgErrors.AppError) {
 	r.log.Info("Creating user",
 		logger.String("service", authErrors.ServiceName),
 		logger.String("email", params.Email),
@@ -120,19 +120,25 @@ func (r *authRepository) CreateUser(ctx context.Context, params repoModels.Creat
 	}
 	metaDataJson := utils.MarshalRawMessageSafe(metaData)
 	id, err := r.db.Insert(ctx, &dbModels.AuthUser{
-		Email:                  params.Email,
-		PhoneNumber:            params.PhoneNumber,
-		PhoneCountryCode:       params.PhoneCountryCode,
-		PasswordHash:           params.PasswordHash,
-		PasswordSalt:           params.PasswordSalt,
-		PasswordAlgorithm:      params.PasswordAlgorithm,
-		EmailVerified:          false,
-		PhoneVerified:          false,
-		PasswordLastChangedAt:  nil,
-		TwoFactorEnabled:       false,
-		TwoFactorSecret:        nil,
-		TwoFactorBackupCodes:   nil,
-		AccountStatus:          dbModels.AccountStatusPending,
+		Email:                 params.Email,
+		PhoneNumber:           params.PhoneNumber,
+		PhoneCountryCode:      params.PhoneCountryCode,
+		PasswordHash:          params.PasswordHash,
+		PasswordSalt:          params.PasswordSalt,
+		PasswordAlgorithm:     params.PasswordAlgorithm,
+		EmailVerified:         false,
+		PhoneVerified:         false,
+		PasswordLastChangedAt: nil,
+		TwoFactorEnabled:      false,
+		TwoFactorSecret:       nil,
+		TwoFactorBackupCodes:  nil,
+		AccountStatus: func() dbModels.AccountStatus {
+			if params.PhoneNumber != nil && params.PhoneCountryCode != nil {
+				return dbModels.AccountStatusActive
+			} else {
+				return dbModels.AccountStatusPending
+			}
+		}(),
 		AccountLockedUntil:     nil,
 		FailedLoginAttempts:    0,
 		LastFailedLoginAt:      nil,
@@ -145,7 +151,7 @@ func (r *authRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		MetaData:               &metaDataJson,
 	})
 	if err != nil {
-		return "", pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to create user").
 			WithDetail("email", params.Email)
 	}
 
@@ -155,7 +161,36 @@ func (r *authRepository) CreateUser(ctx context.Context, params repoModels.Creat
 		logger.String("email", params.Email),
 	)
 
-	return *id, nil
+	// get user
+	var createdUser dbModels.AuthUser
+	err = r.db.FindByID(ctx, &createdUser, *id)
+	if err != nil {
+		return nil, pkgErrors.FromError(err, pkgErrors.CodeDatabaseError, "failed to fetch created user").
+			WithDetail("user_id", *id)
+	}
+	return &domain.User{
+		ID:                     createdUser.ID,
+		Email:                  createdUser.Email,
+		PhoneNumber:            utils.DerefString(createdUser.PhoneNumber),
+		PhoneCountryCode:       utils.DerefString(createdUser.PhoneCountryCode),
+		PasswordHash:           createdUser.PasswordHash,
+		PasswordSalt:           createdUser.PasswordSalt,
+		PasswordAlgorithm:      createdUser.PasswordAlgorithm,
+		EmailVerified:          createdUser.EmailVerified,
+		PhoneVerified:          createdUser.PhoneVerified,
+		TwoFactorEnabled:       createdUser.TwoFactorEnabled,
+		TwoFactorSecret:        utils.DerefString(createdUser.TwoFactorSecret),
+		AccountStatus:          createdUser.AccountStatus,
+		AccountLockedUntil:     createdUser.AccountLockedUntil,
+		FailedLoginAttempts:    createdUser.FailedLoginAttempts,
+		LastFailedLoginAt:      createdUser.LastFailedLoginAt,
+		RequiresPasswordChange: createdUser.RequiresPasswordChange,
+		PasswordLastChanged:    createdUser.PasswordLastChangedAt,
+		LastSuccessfulLoginAt:  createdUser.LastSuccessfulLoginAt,
+		CreatedAt:              createdUser.CreatedAt,
+		DeletedAt:              createdUser.DeletedAt,
+		UpdatedAt:              createdUser.UpdatedAt,
+	}, nil
 }
 
 func (r *authRepository) LockUserAccount(ctx context.Context, userID string) pkgErrors.AppError {

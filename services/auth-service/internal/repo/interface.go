@@ -17,7 +17,7 @@ import (
 type AuthRepository interface {
 	// User management
 	ExistsByEmail(ctx context.Context, email string) (*models.AccountStatus, pkgErrors.AppError)
-	CreateUser(ctx context.Context, params model.CreateUserParams) (string, pkgErrors.AppError)
+	CreateUser(ctx context.Context, params model.CreateUserParams) (*domain.User, pkgErrors.AppError)
 	LockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	UnlockUserAccount(ctx context.Context, userID string) pkgErrors.AppError
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, pkgErrors.AppError)

@@ -239,28 +239,23 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 	)
 
 	// sending email verification
-	if output.NextStep == "verify_email" && output.VerificationEmailSentTo != nil {
-		h.log.Info("Verification email sent",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("email", *output.VerificationEmailSentTo),
-		)
-		emailSendErr := h.authService.SendEmailVerification(ctx, output.UserID, output.Email, locationInfo.IP, handler.GetUserAgent())
-		if emailSendErr != nil {
-			h.log.Error("Failed to send email verification",
+	if output.NextStep != nil {
+		if *output.NextStep == "verify_email" && output.VerificationEmailSentTo != nil {
+			h.log.Info("Verification email sent",
 				logger.String("service", authErrors.ServiceName),
 				logger.String("request_id", requestID),
 				logger.String("email", *output.VerificationEmailSentTo),
-				logger.Error(emailSendErr.Error),
 			)
+			emailSendErr := h.authService.SendEmailVerification(ctx, output.UserID, output.Email, locationInfo.IP, handler.GetUserAgent())
+			if emailSendErr != nil {
+				h.log.Error("Failed to send email verification",
+					logger.String("service", authErrors.ServiceName),
+					logger.String("request_id", requestID),
+					logger.String("email", *output.VerificationEmailSentTo),
+					logger.Error(emailSendErr.Error),
+				)
+			}
 		}
-	} else if output.NextStep == "verify_phone" {
-		h.log.Info("Phone verification required",
-			logger.String("service", authErrors.ServiceName),
-			logger.String("request_id", requestID),
-			logger.String("email", reqBody.Email),
-		)
-		// TODO: Trigger phone verification flow (e.g. send SMS with code)
 	}
 
 	response.JSONWithMessage(ctx, handler.Request(), handler.Writer(), response.StatusOK, "Registration successful", dto.NewRegisterResponse(
@@ -270,8 +265,20 @@ func (h *AuthHandler) Register(handler *req.RequestHandler) {
 		output.PhoneVerified,
 		output.AccountStatus,
 		output.NextStep,
-		utils.MaskEmail(*output.VerificationEmailSentTo),
-		"Registration successful. Please verify your email to complete the registration process.",
+		func() *string {
+			if output.VerificationEmailSentTo != nil {
+				maskedEmail := utils.MaskEmail(*output.VerificationEmailSentTo)
+				return &maskedEmail
+			}
+			return nil
+		}(),
+		// send custom message if account is pending verification, otherwise generic success message
+		func() string {
+			if output.NextStep != nil && *output.NextStep == "verify_email" {
+				return "Registration successful. Please check your email for the verification link."
+			}
+			return "Registration successful. You can now log in with your credentials."
+		}(),
 	))
 
 	defer func() {

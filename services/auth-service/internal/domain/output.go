@@ -17,7 +17,7 @@ type RegisterUserOutput struct {
 	EmailVerified           bool
 	PhoneVerified           bool
 	AccountStatus           string
-	NextStep                string
+	NextStep                *string
 	VerificationEmailSentTo *string
 }
 

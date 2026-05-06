@@ -11,7 +11,6 @@ import (
 	repoModels "auth-service/internal/repo/model"
 
 	"shared/pkg/database/postgres"
-	"shared/pkg/database/postgres/models"
 	pkgErrors "shared/pkg/errors"
 	"shared/pkg/logger"
 	"shared/pkg/utils"
@@ -50,7 +49,7 @@ func (s *authService) RegisterUser(ctx context.Context, input domain.RegisterUse
 		logger.String("algorithm", string(result.Algorithm)),
 	)
 
-	userID, err := s.repo.CreateUser(ctx, repoModels.CreateUserParams{
+	user, err := s.repo.CreateUser(ctx, repoModels.CreateUserParams{
 		Email:             input.Email,
 		PasswordHash:      result.Encoded,
 		PasswordSalt:      base64.StdEncoding.EncodeToString(result.Salt),
@@ -75,18 +74,31 @@ func (s *authService) RegisterUser(ctx context.Context, input domain.RegisterUse
 
 	s.log.Info("User registered successfully",
 		logger.String("service", authErrors.ServiceName),
-		logger.String("user_id", userID),
+		logger.String("user_id", user.ID),
 		logger.String("email", input.Email),
 	)
-	return &domain.RegisterUserOutput{
-		UserID:                  userID,
-		Email:                   input.Email,
-		EmailVerified:           false,
-		PhoneVerified:           false,
-		AccountStatus:           models.AccountStatusPending.String(),
-		NextStep:                "verify_email",
-		VerificationEmailSentTo: &input.Email,
-	}, nil
+	// if phone number provided say registration successful or send email verification if email provided, if both provided send email verification and say phone verification pending
+	if input.PhoneNumber != nil && input.Email != "" {
+		return &domain.RegisterUserOutput{
+			UserID:        user.ID,
+			Email:         input.Email,
+			PhoneVerified: user.EmailVerified,
+			EmailVerified: user.PhoneVerified,
+			NextStep:      nil,
+			AccountStatus: user.AccountStatus.String(),
+		}, nil
+	} else {
+		maskedEmail := utils.MaskEmail(input.Email)
+		return &domain.RegisterUserOutput{
+			UserID:                  user.ID,
+			Email:                   input.Email,
+			PhoneVerified:           user.EmailVerified,
+			EmailVerified:           user.PhoneVerified,
+			AccountStatus:           user.AccountStatus.String(),
+			NextStep:                utils.PtrString("verify_email"),
+			VerificationEmailSentTo: &maskedEmail,
+		}, nil
+	}
 }
 
 // ============================================================================

@@ -99,12 +99,12 @@ type RegisterResponse struct {
 	EmailVerified           bool    `json:"email_verified"`
 	PhoneVerified           bool    `json:"phone_verified"`
 	AccountStatus           string  `json:"account_status"`
-	NextStep                string  `json:"next_step"`
+	NextStep                *string `json:"next_step,omitempty"`
 	VerificationEmailSentTo *string `json:"verification_email_sent_to,omitempty"` // masked email if sent, null if not sent
 	Message                 string  `json:"message"`
 }
 
-func NewRegisterResponse(userID, email string, emailVerified, phoneVerified bool, accountStatus, nextStep string, verificationEmailSentTo string, message string) *RegisterResponse {
+func NewRegisterResponse(userID, email string, emailVerified, phoneVerified bool, accountStatus string, nextStep *string, verificationEmailSentTo *string, message string) *RegisterResponse {
 	return &RegisterResponse{
 		UserID:                  userID,
 		Email:                   email,
@@ -112,7 +112,7 @@ func NewRegisterResponse(userID, email string, emailVerified, phoneVerified bool
 		PhoneVerified:           phoneVerified,
 		AccountStatus:           accountStatus,
 		NextStep:                nextStep,
-		VerificationEmailSentTo: &verificationEmailSentTo,
+		VerificationEmailSentTo: verificationEmailSentTo,
 		Message:                 message,
 	}
 }
