@@ -9,7 +9,7 @@ import (
 type CreateProfileRequest struct {
 	UserID            string `json:"user_id" validate:"required,uuid4"`
 	DisplayName       string `json:"display_name" validate:"required,max=50"`
-	Username          string `json:"username,omitempty"`
+	Username          string `json:"username" validate:"required,min=3,max=30"`
 	FirstName         string `json:"first_name" validate:"max=30"`
 	LastName          string `json:"last_name" validate:"max=30"`
 	Bio               string `json:"bio" validate:"max=160"`
@@ -52,6 +52,16 @@ func (r *CreateProfileRequest) ValidateErrors(ve validator.ValidationErrors) ([]
 				addValidationError(&errors, "User ID is required", request.REQUIRED_FIELD)
 			case "uuid4":
 				addValidationError(&errors, "User ID must be a valid UUIDv4", request.INVALID_FORMAT)
+			}
+
+		case "Username":
+			switch tag {
+			case "required":
+				addValidationError(&errors, "Username is required", request.REQUIRED_FIELD)
+			case "min":
+				addValidationError(&errors, "Username must be at least 3 characters long", request.TOO_SHORT)
+			case "max":
+				addValidationError(&errors, "Username must be at most 30 characters long", request.TOO_LONG)
 			}
 
 		case "DisplayName":

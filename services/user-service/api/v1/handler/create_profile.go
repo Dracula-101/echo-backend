@@ -37,25 +37,27 @@ func (h *UserHandler) CreateMyProfile(handler *req.RequestHandler) {
 		return
 	}
 
-	userName, err := h.userService.GenerateUsername(ctx, createProfileRequest.DisplayName)
-	h.log.Debug("generated username for user",
-		logger.String("username", userName),
-		logger.String("user_id", userId),
-	)
+	exists, err := h.userService.UsernameExists(ctx, createProfileRequest.Username)
 	if err != nil {
-		h.log.Error("failed to generate username", logger.Error(err))
-		response.InternalServerError(ctx, r, w, "Failed to generate username", err)
+		h.log.Error("failed to check username existence", logger.String("username", createProfileRequest.Username), logger.Error(err))
+		response.InternalServerError(ctx, r, w, "Failed to check username availability", err)
+		return
+	}
+	if exists {
+		h.log.Info("username already exists", logger.String("username", createProfileRequest.Username))
+		response.BadRequestError(ctx, handler.Request(), handler.Writer(), "Username already exists", nil)
 		return
 	}
 	h.log.Info("creating profile",
 		logger.String("user_id", userId),
-		logger.String("username", userName),
+		logger.String("username", createProfileRequest.Username),
 		logger.String("display_name", createProfileRequest.DisplayName),
 		logger.String("timezone", location.Timezone),
 		logger.String("country", location.Country),
 		logger.String("ip", handler.GetClientIP()),
 	)
 	profile, err := h.userService.CreateProfile(ctx, userId, &domain.CreateProfileInput{
+		UserName:          createProfileRequest.Username,
 		DisplayName:       createProfileRequest.DisplayName,
 		FirstName:         createProfileRequest.FirstName,
 		Bio:               createProfileRequest.Bio,

@@ -131,7 +131,7 @@ func registerAuthRoutes(builder *router.Builder, h *handler.AuthHandler, rl rate
 		r.Post("/register", req.Adapt(h.Register), middleware.RateLimit(
 			func(ctx context.Context, key string, limit int64) (bool, int64, error) {
 				return rl.AllowRegisterIP(ctx, key, limit)
-			}, clientIP, 5,
+			}, clientIP, 15,
 		))
 		r.Post("/login", req.Adapt(h.Login), middleware.RateLimit(
 			func(ctx context.Context, key string, limit int64) (bool, int64, error) {

@@ -39,6 +39,7 @@ type Profile struct {
 
 // CreateProfileInput represents the input for creating a profile
 type CreateProfileInput struct {
+	UserName          string
 	DisplayName       string
 	FirstName         string
 	LastName          string

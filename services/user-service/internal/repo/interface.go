@@ -13,7 +13,6 @@ type UserRepository interface {
 	GetProfileByUserIDs(ctx context.Context, userIDs []string, requesterUserId *string) (map[string]*domain.Profile, pkgErrors.AppError)
 	GetProfileByUsername(ctx context.Context, username string) (*domain.Profile, pkgErrors.AppError)
 	GetProfileByPhone(ctx context.Context, phone string) (*domain.Profile, pkgErrors.AppError)
-	GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, pkgErrors.AppError)
 	CreateProfile(ctx context.Context, userId string, profile CreateProfileInput) (*domain.Profile, pkgErrors.AppError)
 	UpdateProfile(ctx context.Context, userId string, params UpdateProfileParams) (*domain.Profile, pkgErrors.AppError)
 	SearchProfilesByUsername(ctx context.Context, query string, limit, offset int) ([]*domain.Profile, int64, pkgErrors.AppError)

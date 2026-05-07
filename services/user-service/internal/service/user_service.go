@@ -51,7 +51,7 @@ func (s *userService) UsernameExists(ctx context.Context, username string) (bool
 	s.log.Info("Checking if username exists",
 		logger.String("username", username),
 	)
-	
+
 	// check cache first
 	cachedUserID, cacheErr := s.cache.GetUserIDByUsername(ctx, username)
 	if cacheErr != nil {
@@ -100,23 +100,6 @@ func (s *userService) UsernameExists(ctx context.Context, username string) (bool
 	)
 
 	return exists, nil
-}
-
-func (s *userService) GenerateUsername(ctx context.Context, displayName string) (string, pkgErrors.AppError) {
-	s.log.Info("Generating username",
-		logger.String("display_name", displayName),
-	)
-
-	username, err := s.userRepo.GenerateUniqueUsername(ctx, displayName)
-	if err != nil {
-		s.log.Error("Failed to generate username",
-			logger.String("display_name", displayName),
-			logger.Error(err),
-		)
-		return "", err
-	}
-
-	return *username, nil
 }
 
 func (s *userService) GetProfile(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError) {
@@ -408,6 +391,7 @@ func (s *userService) CreateProfile(ctx context.Context, userID string, input *d
 	)
 
 	result, err := s.userRepo.CreateProfile(ctx, userID, repository.CreateProfileInput{
+		UserName:          input.UserName,
 		DisplayName:       utils.PtrString(input.DisplayName),
 		FirstName:         utils.PtrString(input.FirstName),
 		LastName:          utils.PtrString(input.LastName),

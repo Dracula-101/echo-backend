@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
-	"regexp"
 	"strings"
 	"time"
 
@@ -35,75 +33,6 @@ func NewUserRepository(db database.Database, log logger.Logger) UserRepository {
 		panic("Logger is required for UserRepository")
 	}
 	return &userRepository{db: db, log: log}
-}
-
-func (r *userRepository) GenerateUniqueUsername(ctx context.Context, baseUsername string) (*string, pkgErrors.AppError) {
-	base := strings.ToLower(strings.TrimSpace(baseUsername))
-	re := regexp.MustCompile(`[^a-z0-9._-]+`)
-	base = re.ReplaceAllString(base, "")
-
-	if base == "" {
-		base = fmt.Sprintf("user%d", time.Now().Unix()%10000)
-	}
-
-	const maxLen = 30
-	if len(base) > maxLen {
-		base = base[:maxLen]
-	}
-
-	username := base
-	query := `SELECT EXISTS(SELECT 1 FROM users.profiles WHERE username = $1 AND deactivated_at IS NULL)`
-	rand.Seed(time.Now().UnixNano())
-	maxAttempts := 1000
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		var exists bool
-		err := r.db.QueryRow(ctx, query, username).Scan(&exists)
-		if err != nil {
-			r.log.Error("Failed to check username existence",
-				logger.String("username", username),
-				logger.Error(err),
-			)
-			return nil, pkgErrors.FromError(err, userErrors.ErrCodeDatabaseError, "Failed to check username existence")
-		}
-
-		if !exists {
-			return &username, nil
-		}
-
-		if attempt < 50 {
-			suffix := attempt + 1
-			baseLimit := base
-			maxBaseLen := maxLen - len(fmt.Sprintf("%d", suffix))
-			if len(baseLimit) > maxBaseLen {
-				baseLimit = baseLimit[:maxBaseLen]
-			}
-			username = fmt.Sprintf("%s%d", baseLimit, suffix)
-		} else {
-			suffixLen := 4
-			suffix := randAlphaNum(suffixLen)
-			maxBaseLen := maxLen - suffixLen
-			baseLimit := base
-			if len(baseLimit) > maxBaseLen {
-				baseLimit = baseLimit[:maxBaseLen]
-			}
-			username = fmt.Sprintf("%s%s", baseLimit, suffix)
-		}
-	}
-
-	return nil, pkgErrors.FromError(
-		fmt.Errorf("unable to generate unique username after %d attempts", maxAttempts),
-		userErrors.ErrCodeUsernameGenerationFailed,
-		"Failed to generate unique username",
-	)
-}
-
-func randAlphaNum(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
 }
 
 func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string, requesterUserId *string) (*domain.Profile, pkgErrors.AppError) {
@@ -361,6 +290,7 @@ func (r *userRepository) GetProfileByPhone(ctx context.Context, phone string) (*
 }
 
 type CreateProfileInput struct {
+	UserName          string
 	DisplayName       *string
 	FirstName         *string
 	LastName          *string
@@ -376,14 +306,10 @@ type CreateProfileInput struct {
 }
 
 func (r *userRepository) CreateProfile(ctx context.Context, userId string, profile CreateProfileInput) (*domain.Profile, pkgErrors.AppError) {
-	userName, err := r.GenerateUniqueUsername(ctx, *profile.DisplayName)
-	if err != nil {
-		return nil, err
-	}
 
 	profileModel := dbModels.Profile{
 		UserID:            userId,
-		Username:          *userName,
+		Username:          profile.UserName,
 		DisplayName:       profile.DisplayName,
 		FirstName:         profile.FirstName,
 		LastName:          profile.LastName,
