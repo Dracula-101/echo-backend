@@ -107,13 +107,14 @@ func (c *Client) Insert(ctx context.Context, model database.Model) (*string, *da
 func (c *Client) Upsert(ctx context.Context, model database.Model) *database.DBError {
 	table := model.TableName()
 	pkField := getPrimaryKeyField(model)
+	conflictField := getConflictKeyField(model, pkField)
 
 	fields, values := getInsertableFieldsAndValues(model, pkField)
 	if len(fields) == 0 {
 		return c.log.NoFieldsError("Upsert", table)
 	}
 
-	query := buildUpsertQuery(table, fields, pkField)
+	query := buildUpsertQuery(table, fields, pkField, conflictField)
 	args := normalizeArgs(values)
 
 	c.log.QueryStart("Upsert", table, len(fields))
@@ -462,7 +463,7 @@ func buildInsertQuery(table string, fields []string, pkField string) string {
 	)
 }
 
-func buildUpsertQuery(table string, fields []string, pkField string) string {
+func buildUpsertQuery(table string, fields []string, pkField, conflictField string) string {
 	placeholders := make([]string, len(fields))
 	for i := range placeholders {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
@@ -470,7 +471,7 @@ func buildUpsertQuery(table string, fields []string, pkField string) string {
 
 	updateParts := make([]string, 0, len(fields))
 	for _, field := range fields {
-		if field != pkField && field != "created_at" {
+		if field != pkField && field != conflictField && field != "created_at" {
 			updateParts = append(updateParts, fmt.Sprintf("%s = EXCLUDED.%s", field, field))
 		}
 	}
@@ -480,7 +481,7 @@ func buildUpsertQuery(table string, fields []string, pkField string) string {
 		table,
 		strings.Join(fields, ", "),
 		strings.Join(placeholders, ", "),
-		pkField,
+		conflictField,
 		strings.Join(updateParts, ", "),
 		pkField,
 	)

@@ -9,7 +9,7 @@ import (
 
 type Profile struct {
 	ID                 string            `db:"id" json:"id" pk:"true"`
-	UserID             string            `db:"user_id" json:"user_id"`
+	UserID             string            `db:"user_id" json:"user_id" conflict_key:"true"`
 	Username           string            `db:"username" json:"username"`
 	DisplayName        *string           `db:"display_name" json:"display_name,omitempty"`
 	FirstName          *string           `db:"first_name" json:"first_name,omitempty"`

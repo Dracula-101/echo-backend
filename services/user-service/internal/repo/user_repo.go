@@ -326,8 +326,7 @@ func (r *userRepository) CreateProfile(ctx context.Context, userId string, profi
 		CreatedAt:         utils.Ptr(time.Now()),
 		UpdatedAt:         utils.Ptr(time.Now()),
 	}
-	id, dbErr := r.db.Insert(ctx, &profileModel)
-	if dbErr != nil {
+	if dbErr := r.db.Upsert(ctx, &profileModel); dbErr != nil {
 		r.log.Error("Failed to create profile",
 			logger.String("user_id", userId),
 			logger.Error(dbErr),
@@ -339,7 +338,6 @@ func (r *userRepository) CreateProfile(ctx context.Context, userId string, profi
 	if err != nil {
 		r.log.Error("Failed to retrieve created profile",
 			logger.String("user_id", userId),
-			logger.String("profile_id", *id),
 			logger.Error(err),
 		)
 		return nil, err

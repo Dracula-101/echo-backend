@@ -147,7 +147,6 @@ func isPointerField(field reflect.StructField) bool {
 	return field.Type.Kind() == reflect.Ptr
 }
 
-// getPrimaryKeyField finds the primary key field name from db tags.
 func getPrimaryKeyField(model interface{}) string {
 	v := reflect.ValueOf(model)
 	if v.Kind() == reflect.Ptr {
@@ -162,7 +161,22 @@ func getPrimaryKeyField(model interface{}) string {
 		}
 	}
 
-	return "id" // Default primary key field
+	return "id"
+}
+
+func getConflictKeyField(model interface{}, pkField string) string {
+	v := reflect.ValueOf(model)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.Tag.Get("conflict_key") == "true" {
+			return field.Tag.Get("db")
+		}
+	}
+	return pkField
 }
 
 // setPrimaryKeyValue sets the primary key field on a model after insert.
