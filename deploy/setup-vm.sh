@@ -34,7 +34,9 @@ step "[1/8] System packages"
 # ---------------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   sudo apt-get update -y
-  sudo apt-get install -y ca-certificates curl gnupg git ufw jq \
+  # `make` ships separately from build-essential on cloud-minimal images;
+  # add it explicitly so the operator-facing make targets work.
+  sudo apt-get install -y ca-certificates curl gnupg git ufw jq make \
                           unattended-upgrades apt-listchanges
 
   sudo install -m 0755 -d /etc/apt/keyrings
