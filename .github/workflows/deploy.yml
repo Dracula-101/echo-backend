@@ -166,7 +166,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: infra/database/Dockerfile
+          file: infra/docker/database/Dockerfile
           push: true
           tags: |
             ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
