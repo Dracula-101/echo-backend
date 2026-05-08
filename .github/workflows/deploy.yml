@@ -294,6 +294,44 @@ jobs:
             echo "- Trigger: \`${{ github.event_name }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Decode the base64-encoded Firebase service account JSON from a
+      # GH secret and write it to /opt/echo-backend/secrets/firebase-credentials.json.
+      # auth-service mounts this into the container at /etc/firebase/credentials.json.
+      #
+      # To set the secret:
+      #   openssl base64 -A -in firebase-credentials.json | pbcopy
+      #   then paste into the FIREBASE_CREDENTIALS_JSON repo secret.
+      - name: Sync Firebase credentials to VM
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          FIREBASE_CREDENTIALS_B64: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+        with:
+          host: ${{ secrets.VM_SSH_HOST }}
+          username: ${{ secrets.VM_SSH_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          command_timeout: 2m
+          envs: FIREBASE_CREDENTIALS_B64
+          script: |
+            set -euo pipefail
+            if [ -z "${FIREBASE_CREDENTIALS_B64:-}" ]; then
+              echo "::error::FIREBASE_CREDENTIALS_JSON secret is empty or missing"
+              echo "  Add at: https://github.com/${{ github.repository }}/settings/secrets/actions"
+              echo "  Value: openssl base64 -A -in firebase-credentials.json"
+              exit 1
+            fi
+            mkdir -p /opt/echo-backend/secrets
+            chmod 700 /opt/echo-backend/secrets
+            printf '%s' "$FIREBASE_CREDENTIALS_B64" | base64 -d \
+              > /opt/echo-backend/secrets/firebase-credentials.json
+            chmod 600 /opt/echo-backend/secrets/firebase-credentials.json
+            # Sanity-check: must be valid JSON with a private_key field.
+            if ! grep -q '"private_key"' /opt/echo-backend/secrets/firebase-credentials.json; then
+              echo "::error::Decoded Firebase credentials don't look like a service account JSON"
+              exit 1
+            fi
+            echo "  firebase-credentials.json synced ($(wc -c < /opt/echo-backend/secrets/firebase-credentials.json) bytes)"
+
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
         with:

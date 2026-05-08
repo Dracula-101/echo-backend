@@ -529,6 +529,13 @@ services:
       SERVER_PORT: 8081
       REDIS_DB: 0
       LOCATION_SERVICE_URL: http://location-service:8090
+      # Path INSIDE the container (matches the volume mount below).
+      FIREBASE_CREDENTIALS_FILE: /etc/firebase/credentials.json
+    volumes:
+      # Bind-mount the Firebase service account JSON written by the
+      # workflow's "Sync Firebase credentials" step. File is gitignored
+      # locally; on the VM it's at /opt/echo-backend/secrets/firebase-credentials.json.
+      - ${APP_DIR:-${PWD}}/secrets/firebase-credentials.json:/etc/firebase/credentials.json:ro
     depends_on: *depends-db
     healthcheck:
       <<: *healthcheck
