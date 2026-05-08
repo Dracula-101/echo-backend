@@ -155,7 +155,7 @@ jobs:
         id: ns
         run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - name: Trivy scan ${{ matrix.service }}
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ${{ steps.ns.outputs.ns }}/${{ matrix.service }}:sha-${{ github.sha }}
           format: table

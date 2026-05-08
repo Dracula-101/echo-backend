@@ -222,9 +222,12 @@ services:
   postgres:
     image: postgres:15-alpine
     restart: always
-    <<: *security
-    # postgres needs a writable PGDATA but we keep the rest of the FS RO.
-    read_only: true
+    # NOTE: do NOT set read_only here. Postgres's docker-entrypoint script
+    # writes to /var/lib/postgresql (parent of PGDATA) on init, and the
+    # server itself touches several paths outside the data dir. We still
+    # apply the rest of the hardening (cap_drop + no-new-privileges).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
     tmpfs:
       - /tmp
       - /run/postgresql
