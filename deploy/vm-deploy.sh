@@ -102,6 +102,15 @@ if [[ "$deploy_failed" == true ]]; then
   echo "[deploy] dumping diagnostics:" >&2
   bash "$APP_DIR/deploy/health-gate.sh" "$PROFILES" || true
 
+  # One-shot services (db-init, migrate) don't appear in health-gate
+  # because they exit. Dump their logs explicitly — they're the most
+  # common cause of cascade failure in the dependency chain.
+  for svc in db-init migrate; do
+    echo
+    echo "[deploy] === last 80 lines from $svc ===" >&2
+    "${COMPOSE[@]}" logs --tail=80 --no-color "$svc" 2>&1 | sed 's/^/  /' >&2 || true
+  done
+
   if [[ -n "$PREV_SHA" ]] && [[ "$PREV_SHA" != "${SHA:0:12}" ]]; then
     echo
     echo "[deploy] AUTO-ROLLBACK to previous sha $PREV_SHA"

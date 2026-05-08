@@ -475,18 +475,14 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
+      MIGRATIONS_DIR: /migrations
     volumes:
       - ${APP_DIR:-${PWD}}/database/migrations:/migrations:ro
+      - ${APP_DIR:-${PWD}}/infra/scripts/apply-migrations.sh:/apply-migrations.sh:ro
     networks: [echo-internal]
     logging: *logging
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -eu
-        count=0
-        for f in $$(ls /migrations/*.sql 2>/dev/null | sort); do
-          echo "[migrate] applying $$f"
-          
+    entrypoint: ["bash", "/apply-migrations.sh"]
+
 
   # ---------------------------------------------------------------------------
   # Application services

@@ -106,3 +106,18 @@ vm-prune: ## Aggressively prune dangling images and old build cache
 	docker image prune -af --filter "until=72h"
 	docker builder prune -f --keep-storage 1GB || true
 	docker volume prune -f
+
+.PHONY: vm-reset-data
+vm-reset-data: ## DESTRUCTIVE — wipe Postgres + Kafka + Redis volumes (after explicit confirm)
+	@echo "$(BRIGHT_RED)This will DELETE all Postgres / Redis / Kafka / Zookeeper data.$(NC)"
+	@echo "Type the word 'wipe' to continue:"
+	@read -r confirm; [ "$$confirm" = "wipe" ] || { echo "aborted"; exit 1; }
+	$(VM_COMPOSE) $(VM_PROFILE_FLAGS) down --remove-orphans
+	docker volume rm -f \
+		echo-backend_postgres_data \
+		echo-backend_redis_data \
+		echo-backend_kafka_data \
+		echo-backend_zookeeper_data \
+		echo-backend_zookeeper_logs \
+		echo-backend_meilisearch_data || true
+	@echo "$(BRIGHT_GREEN)Volumes deleted. Next 'make vm-up' will re-init the schema.$(NC)"
