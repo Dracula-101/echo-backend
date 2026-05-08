@@ -9,15 +9,17 @@ RUN apk add --no-cache git make
 # Set working directory
 WORKDIR /app
 
-# Copy go workspace files
-COPY go.work go.work.sum ./
-
 # Copy service files
-COPY services/ws-service /app/services/ws-service
 COPY shared /app/shared
+COPY services/ws-service /app/services/ws-service
+
+# Use go.mod replace instead of go.work so the build doesn't need the other
+# unbuilt modules listed in the workspace.
+WORKDIR /app/services/ws-service
+RUN go mod edit -replace shared=../../shared
+RUN go mod download
 
 # Build the application
-WORKDIR /app/services/ws-service
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/ws-service cmd/server/main.go
 
 # Runtime stage
