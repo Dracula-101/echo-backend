@@ -22,7 +22,11 @@ VM_COMPOSE := docker compose \
 VM_PROFILES ?=
 VM_PROFILE_FLAGS := $(foreach p,$(VM_PROFILES),--profile $(p))
 
-.PHONY: vm-check
+.PHONY: vm-check vm-preflight
+vm-preflight: ## Run the full preflight (delegated to deploy/preflight.sh)
+	@PROFILES="$(or $(VM_PROFILES),caddy)" bash deploy/preflight.sh
+
+# Lightweight check used as a prerequisite for other targets.
 vm-check:
 	@if [ ! -f .env.prod ]; then \
 		echo "$(BRIGHT_RED).env.prod missing.$(NC) Copy from .env.prod.example or scp from laptop."; \

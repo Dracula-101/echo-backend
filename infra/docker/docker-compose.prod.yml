@@ -80,7 +80,7 @@ x-env-app: &env-app
 # Build context for Go services. Only triggered when --build is passed
 # (i.e., the prod-local overlay). Real prod uses `image:` exclusively.
 x-build-go: &build-go
-  context: ${PWD}
+  context: ${APP_DIR:-${PWD}}
   target: production
 
 x-healthcheck: &healthcheck
@@ -120,7 +120,7 @@ x-service-base: &service-base
   # need (EMAIL_ENABLED, MAILGUN_*, TWILIO_*, OAUTH_*, etc.) and ignore
   # the rest. Inline `environment:` blocks below override per-service.
   env_file:
-    - ${PWD}/.env.prod
+    - ${APP_DIR:-${PWD}}/.env.prod
   <<: *security
 
 # Resource budgets. Every limit is env-driven so you can right-size the
@@ -437,8 +437,8 @@ services:
       DATABASE_DIR: /database
       PGPASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ${PWD}/database:/database:ro
-      - ${PWD}/infra/scripts/init-db.sh:/init-db.sh:ro
+      - ${APP_DIR:-${PWD}}/database:/database:ro
+      - ${APP_DIR:-${PWD}}/infra/scripts/init-db.sh:/init-db.sh:ro
     networks: [echo-internal]
     logging: *logging
     entrypoint: ["bash", "/init-db.sh"]
@@ -470,7 +470,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
     volumes:
-      - ${PWD}/database/migrations:/migrations:ro
+      - ${APP_DIR:-${PWD}}/database/migrations:/migrations:ro
     networks: [echo-internal]
     logging: *logging
     entrypoint: ["/bin/sh", "-c"]
@@ -699,11 +699,11 @@ services:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
-      - ${PWD}/infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${APP_DIR:-${PWD}}/infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro
       # Origin certs (Cloudflare Origin Cert or any PEM pair).
       # If the secrets dir is empty, Caddy falls back to ACME via Let's
       # Encrypt — see the Caddyfile for the conditional.
-      - ${PWD}/secrets:/etc/caddy/certs:ro
+      - ${APP_DIR:-${PWD}}/secrets:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     networks: [echo-internal]

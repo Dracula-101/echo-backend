@@ -106,3 +106,4 @@ include infra/make/monitoring.mk
 include infra/make/utils.mk
 include infra/make/prod.mk
 include infra/make/vm.mk
+include infra/make/deploy.mk
