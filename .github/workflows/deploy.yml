@@ -46,8 +46,21 @@ jobs:
               api-gateway auth-service user-service message-service ws-service \
             )
 
+            # Reclaim space from previous failed builds before starting.
+            # Keeps base images but throws away dangling layers + builder cache.
+            docker container prune -f
+            docker image prune -f
+            docker builder prune -f
+            df -h /var/lib/docker
+
+            # Build serially — parallel builds blow out the 30 GB docker disk
+            # on e2-small (each Go builder reserves ~2.5 GB cache).
+            # COMPOSE_PARALLEL_LIMIT=1 forces sequential builds.
+            COMPOSE_PARALLEL_LIMIT=1 docker compose "${COMPOSE_FILES[@]}" --env-file .env \
+              build "${ESSENTIAL_SERVICES[@]}"
+
             docker compose "${COMPOSE_FILES[@]}" --env-file .env \
-              up -d --build --remove-orphans "${ESSENTIAL_SERVICES[@]}"
+              up -d --remove-orphans "${ESSENTIAL_SERVICES[@]}"
 
             # Show what's running so the workflow log captures it.
             docker compose "${COMPOSE_FILES[@]}" ps

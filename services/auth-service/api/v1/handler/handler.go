@@ -1,7 +1,7 @@
 package handler
 
 import (
-	ratelimiter "auth-service/api/v1/rate_limiter"
+	ratelimiter "shared/pkg/ratelimiter"
 	"auth-service/internal/firebase"
 	"auth-service/internal/service"
 	"auth-service/internal/service/cache"

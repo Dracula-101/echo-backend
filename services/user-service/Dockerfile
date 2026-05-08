@@ -19,7 +19,7 @@ COPY shared/ ../../shared/
 COPY services/user-service/ ./
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/user-service cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o bin/user-service cmd/server/main.go
 
 # Final stage
 FROM alpine:latest AS production

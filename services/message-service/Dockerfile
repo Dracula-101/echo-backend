@@ -15,7 +15,7 @@ RUN go mod edit -replace echo-backend/shared=../../shared
 RUN go mod download
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o main ./cmd/server
 
 # Final stage
 FROM alpine:latest AS production

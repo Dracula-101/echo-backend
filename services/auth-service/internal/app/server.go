@@ -17,7 +17,7 @@ import (
 
 	"auth-service/api/v1/handler"
 	"auth-service/api/v1/middleware"
-	ratelimiter "auth-service/api/v1/rate_limiter"
+	ratelimiter "shared/pkg/ratelimiter"
 	"auth-service/internal/config"
 	"auth-service/internal/health"
 	"auth-service/internal/health/checkers"

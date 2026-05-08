@@ -1,7 +1,7 @@
 package service
 
 import (
-	ratelimiter "auth-service/api/v1/rate_limiter"
+	ratelimiter "shared/pkg/ratelimiter"
 	"auth-service/internal/error"
 	"context"
 	"fmt"

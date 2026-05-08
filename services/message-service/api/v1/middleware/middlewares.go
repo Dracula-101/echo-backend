@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	ratelimiter "auth-service/api/v1/rate_limiter"
+	ratelimiter "shared/pkg/ratelimiter"
 	"context"
 	"net/http"
 	"shared/server/headers"

@@ -20,7 +20,7 @@ RUN go mod edit -replace shared=../../shared
 RUN go mod download
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/ws-service cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o bin/ws-service cmd/server/main.go
 
 # Runtime stage
 FROM alpine:latest AS production

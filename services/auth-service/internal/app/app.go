@@ -10,7 +10,7 @@ import (
 	"shared/server/shutdown"
 
 	"auth-service/api/v1/handler"
-	ratelimiter "auth-service/api/v1/rate_limiter"
+	ratelimiter "shared/pkg/ratelimiter"
 	"auth-service/internal/config"
 	repository "auth-service/internal/repo"
 	"auth-service/internal/repo/email_verification"
