@@ -442,6 +442,7 @@ services:
   # Location Service
   # ---------------------------------------------------------------------------
   location-service:
+    profiles: ["full"]
     <<: *service-base
     build:
       <<: *build-base
@@ -471,6 +472,7 @@ services:
   # Media Service
   # ---------------------------------------------------------------------------
   media-service:
+    profiles: ["full"]
     <<: *service-base
     build:
       <<: *build-base
@@ -510,6 +512,7 @@ services:
   # Presence Service
   # ---------------------------------------------------------------------------
   presence-service:
+    profiles: ["full"]
     <<: *service-base
     build:
       <<: *build-base

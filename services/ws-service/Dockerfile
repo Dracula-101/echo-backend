@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Multi-stage build for production
 
 # Build stage
@@ -17,10 +18,14 @@ COPY services/ws-service /app/services/ws-service
 # unbuilt modules listed in the workspace.
 WORKDIR /app/services/ws-service
 RUN go mod edit -replace shared=../../shared
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o bin/ws-service cmd/server/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -o bin/ws-service cmd/server/main.go
 
 # Runtime stage
 FROM alpine:latest AS production

@@ -3,6 +3,25 @@
 .gitignore
 .gitattributes
 
+# Claude / agent worktrees — these alone are hundreds of MB each
+.claude/
+
+# Local data + DB dumps — never wanted in any build
+data/
+db-dump.sql
+*.dump
+*.sql.gz
+
+# Per-service .env files (gitignored anyway, never wanted in image)
+**/.env
+**/.env.*
+
+# Compose files don't need to live inside the builder
+infra/docker/docker-compose*.yml
+
+# Deploy scripts and runbook
+deploy/
+
 # Documentation
 *.md
 README.md

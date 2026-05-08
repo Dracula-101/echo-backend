@@ -12,7 +12,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Trigger remote deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -21,7 +21,7 @@ jobs:
           username: ${{ secrets.VM_SSH_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_SSH_PORT || 22 }}
-          command_timeout: 20m
+          command_timeout: 25m
           script: |
             set -euo pipefail
 
@@ -29,42 +29,36 @@ jobs:
             git fetch --all --prune
             git checkout ${{ github.sha }}
 
-            # docker compose v2 + buildx are installed by deploy/setup-vm.sh.
-            # --build means we rebuild images from source on the VM. Slower on
-            # first deploy; cached on subsequent ones.
-            #
-            # On 2 GB e2-small we run only the essential services. The e2small
-            # overlay tunes JVM heaps + GOMEMLIMIT to fit. Stub services are
-            # omitted from the `up` line, not deleted from the compose.
             COMPOSE_FILES=( \
               -f infra/docker/docker-compose.yml \
               -f infra/docker/docker-compose.prod.yml \
               -f infra/docker/docker-compose.e2small.yml \
             )
-            ESSENTIAL_SERVICES=( \
-              postgres redis zookeeper kafka \
-              api-gateway auth-service user-service message-service ws-service \
-            )
 
-            # Reclaim space from previous failed builds before starting.
-            # Keeps base images but throws away dangling layers + builder cache.
+            # Pre-build cleanup. Keeps the base images but drops dangling layers
+            # and stale build cache from previous failed runs.
             docker container prune -f
             docker image prune -f
             docker builder prune -f
             df -h /var/lib/docker
 
-            # Build serially — parallel builds blow out the 30 GB docker disk
-            # on e2-small (each Go builder reserves ~2.5 GB cache).
-            # COMPOSE_PARALLEL_LIMIT=1 forces sequential builds.
-            COMPOSE_PARALLEL_LIMIT=1 docker compose "${COMPOSE_FILES[@]}" --env-file .env \
-              build "${ESSENTIAL_SERVICES[@]}"
+            # BuildKit on; cache mounts in the Dockerfiles persist /go/pkg/mod
+            # and /root/.cache/go-build between builds. After the first deploy,
+            # subsequent rebuilds compile in seconds.
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+
+            # Serial builds — parallel builds peak the 30 GB docker disk on
+            # e2-small. Profile-gated services (location/media/presence)
+            # are skipped automatically because we don't pass --profile full.
+            COMPOSE_PARALLEL_LIMIT=1 docker compose "${COMPOSE_FILES[@]}" \
+              --env-file .env build
 
             docker compose "${COMPOSE_FILES[@]}" --env-file .env \
-              up -d --remove-orphans "${ESSENTIAL_SERVICES[@]}"
+              up -d --remove-orphans
 
-            # Show what's running so the workflow log captures it.
             docker compose "${COMPOSE_FILES[@]}" ps
 
-            # Aggressive cleanup on 30 GB disk — every layer counts.
+            # Trim aggressively post-deploy.
             docker image prune -f
             docker builder prune -f --keep-storage 2GB
