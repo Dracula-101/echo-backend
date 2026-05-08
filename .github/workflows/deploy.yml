@@ -129,13 +129,64 @@ jobs:
             VERSION=${{ github.sha }}
 
   # ===========================================================================
+  # Build the custom Postgres image (postgres:15 + pg_cron).
+  # Kept separate from the Go service matrix — different Dockerfile path,
+  # no `target: production` stage.
+  # ===========================================================================
+  build-postgres:
+    if: github.event_name == 'push' || inputs.sha == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lower-case image namespace
+        id: ns
+        run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          short=$(echo "${{ github.sha }}" | cut -c1-12)
+          {
+            echo "image=${{ steps.ns.outputs.ns }}/postgres"
+            echo "sha_tag=sha-${short}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/database/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.image }}:latest
+          cache-from: |
+            type=gha,scope=postgres
+            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
+          cache-to: |
+            type=gha,scope=postgres,mode=max
+            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache,mode=max
+          provenance: false
+
+  # ===========================================================================
   # Optional vulnerability scan. Non-blocking by default — flip
   # exit-code: '1' to gate the deploy on findings once you've triaged the
   # baseline.
   # ===========================================================================
   scan:
     if: github.event_name == 'push' || inputs.sha == ''
-    needs: [build]
+    needs: [build, build-postgres]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -168,7 +219,7 @@ jobs:
   # migrations (via dependency chain), up --wait, and diagnostics.
   # ===========================================================================
   deploy:
-    needs: [build]
+    needs: [build, build-postgres]
     # Run when build succeeded OR was intentionally skipped (rollback path).
     if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest

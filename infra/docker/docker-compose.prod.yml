@@ -176,12 +176,14 @@ x-res-caddy: &res-caddy
 x-depends-db: &depends-db
   postgres: { condition: service_healthy }
   redis:    { condition: service_healthy }
+  db-init:  { condition: service_completed_successfully }
   migrate:  { condition: service_completed_successfully }
 
 x-depends-full: &depends-full
   postgres: { condition: service_healthy }
   redis:    { condition: service_healthy }
   kafka:    { condition: service_healthy }
+  db-init:  { condition: service_completed_successfully }
   migrate:  { condition: service_completed_successfully }
 
 # -----------------------------------------------------------------------------
@@ -220,7 +222,7 @@ services:
   # Postgres
   # ---------------------------------------------------------------------------
   postgres:
-    image: postgres:15-alpine
+    image: ${IMAGE_REGISTRY}/postgres:${IMAGE_TAG:-latest}
     restart: always
     # NOTE: do NOT set read_only here. Postgres's docker-entrypoint script
     # writes to /var/lib/postgresql (parent of PGDATA) on init, and the
@@ -228,7 +230,6 @@ services:
     # apply the rest of the hardening (cap_drop + no-new-privileges).
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     tmpfs:
       - /tmp
       - /run/postgresql
@@ -243,6 +244,8 @@ services:
     # not a compose edit.
     command: >
       postgres
+        -c shared_preload_libraries=pg_cron,pg_stat_statements
+        -c cron.database_name=${POSTGRES_DB}
         -c shared_buffers=${PG_SHARED_BUFFERS:-128MB}
         -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-256MB}
         -c work_mem=${PG_WORK_MEM:-4MB}
@@ -309,7 +312,6 @@ services:
     restart: always
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -370,23 +372,19 @@ services:
       com.echo.tier: messaging
 
   # ---------------------------------------------------------------------------
-  # One-shot DB migrations.
+  # One-shot DB initializer (first deploy only).
   #
-  # Applies database/migrations/*.sql in filename order on every deploy.
-  # These files MUST be idempotent — re-running is the contract.
+  # Loads the full schema — extensions, schemas, functions, triggers, RLS,
+  # indexes — wrapped in a single transaction so any failure rolls back
+  # cleanly. On subsequent deploys it detects the `auth` schema and exits 0
+  # immediately, so it never re-runs against a live database.
   #
-  # Initial schema (database/schemas/, functions/, indexes/, etc.) is NOT
-  # applied here — those files use bare CREATE TABLE and would fail on the
-  # second deploy. Bootstrap a fresh Postgres once with:
-  #
-  #   docker compose ... exec -T postgres psql -U $POSTGRES_USER \
-  #     -d $POSTGRES_DB < db-dump.sql
-  #
-  # App services depend on this with `service_completed_successfully`, so
-  # a migration failure aborts the deploy.
+  # Uses postgres:15 (not alpine) to get GNU coreutils and a full bash.
+  # The database/ directory is mounted read-only; nothing is written to the
+  # container filesystem, so read_only: true is safe.
   # ---------------------------------------------------------------------------
-  migrate:
-    image: postgres:15-alpine
+  db-init:
+    image: ${IMAGE_REGISTRY}/postgres:${IMAGE_TAG:-latest}
     restart: "no"
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
@@ -394,6 +392,114 @@ services:
     tmpfs: [/tmp]
     depends_on:
       postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ${PWD}/database:/database:ro
+    networks: [echo-internal]
+    logging: *logging
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+
+        echo "[db-init] checking if schema exists..."
+        INITIALIZED=$$(psql -tAc \
+          "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='auth'" \
+          2>/dev/null || echo "0")
+
+        if [ "$$INITIALIZED" = "1" ]; then
+          echo "[db-init] schema already exists — skipping init"
+          exit 0
+        fi
+
+        echo "[db-init] fresh database detected — loading initial schema"
+
+        run() {
+          local f="$$1"
+          if [ -f "$$f" ]; then
+            echo "[db-init]   $$f"
+            psql -v ON_ERROR_STOP=1 -f "$$f" --quiet
+          else
+            echo "[db-init]   SKIP (not found): $$f"
+          fi
+        }
+
+        # Build and execute one transaction — if any file fails the whole
+        # thing rolls back and the deploy aborts cleanly.
+        {
+          echo "BEGIN;"
+
+          # 1. Extensions (CREATE EXTENSION IF NOT EXISTS — safe to re-run)
+          [ -f /database/extensions.sql ] && cat /database/extensions.sql
+
+          # 2. Schemas
+          for f in auth user message media notification analytics location; do
+            [ -f "/database/schemas/$${f}.schema.sql" ] \
+              && cat "/database/schemas/$${f}.schema.sql"
+          done
+
+          # 3. Functions
+          for f in \
+            auth.functions auth.trigger_functions \
+            users.functions users.trigger_functions \
+            media.functions media.trigger_functions \
+            messages.functions messages.trigger_functions \
+            notifications.functions notifications.trigger_functions
+          do
+            [ -f "/database/functions/$${f}.sql" ] \
+              && cat "/database/functions/$${f}.sql"
+          done
+
+          # 4. Triggers (all .sql files under each subdirectory, sorted)
+          for dir in auth users media messages notifications; do
+            if [ -d "/database/triggers/$$dir" ]; then
+              find "/database/triggers/$$dir" -maxdepth 1 -name '*.sql' \
+                | sort | xargs -I{} cat {}
+            fi
+          done
+
+          # 5. RLS policies
+          for f in auth users media messages notifications; do
+            [ -f "/database/rls/$${f}.rls.sql" ] \
+              && cat "/database/rls/$${f}.rls.sql"
+          done
+
+          # 6. Indexes
+          for f in auth users media messages notifications; do
+            [ -f "/database/indexes/$${f}.indexes.sql" ] \
+              && cat "/database/indexes/$${f}.indexes.sql"
+          done
+
+          echo "COMMIT;"
+        } | psql -v ON_ERROR_STOP=1 --quiet
+
+        echo "[db-init] schema loaded successfully"
+
+  # ---------------------------------------------------------------------------
+  # One-shot DB migrations.
+  #
+  # Applies database/migrations/*.sql in filename order on every deploy.
+  # These files MUST be idempotent — re-running is the contract.
+  # Runs after db-init so the schema is always present first.
+  #
+  # App services depend on this with `service_completed_successfully`, so
+  # a migration failure aborts the deploy.
+  # ---------------------------------------------------------------------------
+  migrate:
+    image: ${IMAGE_REGISTRY}/postgres:${IMAGE_TAG:-latest}
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      postgres: { condition: service_healthy }
+      db-init:  { condition: service_completed_successfully }
     environment:
       PGHOST: postgres
       PGPORT: 5432
@@ -411,10 +517,7 @@ services:
         count=0
         for f in $$(ls /migrations/*.sql 2>/dev/null | sort); do
           echo "[migrate] applying $$f"
-          psql -v ON_ERROR_STOP=1 -f "$$f"
-          count=$$((count+1))
-        done
-        echo "[migrate] applied $$count migration(s)"
+          
 
   # ---------------------------------------------------------------------------
   # Application services
