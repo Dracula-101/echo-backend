@@ -71,6 +71,12 @@ jobs:
             bash -n "$f"
           done
 
+      # The prod compose declares `env_file: .env.prod` on every service,
+      # so `compose config` fails if the file isn't present even when
+      # we pass --env-file pointing elsewhere. Stub it from the example.
+      - name: Stub .env.prod from .env.prod.example
+        run: cp .env.prod.example .env.prod
+
       - name: Compose config (prod)
         run: |
           docker compose \
