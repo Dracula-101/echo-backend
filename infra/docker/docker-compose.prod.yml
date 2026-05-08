@@ -284,9 +284,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    <<: *security
-    read_only: true
-    tmpfs: [/tmp]
+    # No cap_drop / read_only here — same reason as postgres: the
+    # entrypoint chowns /data and drops from root → redis user via gosu,
+    # both of which need CAP_CHOWN + CAP_SETUID + CAP_SETGID.
     command: >
       redis-server
         --appendonly yes
@@ -319,8 +319,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     restart: always
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    # Hardening removed — Confluent's entrypoint chowns /var/lib/zookeeper.
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -352,8 +351,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     restart: always
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    # Hardening removed — same reason as zookeeper.
     depends_on:
       zookeeper: { condition: service_healthy }
     environment:
@@ -395,8 +393,8 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.5
     restart: always
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    # Hardening removed for the same reason as postgres/redis: the
+    # entrypoint needs to chown /meili_data on first start.
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_ENV: production
