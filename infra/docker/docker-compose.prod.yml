@@ -228,6 +228,7 @@ services:
     # apply the rest of the hardening (cap_drop + no-new-privileges).
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     tmpfs:
       - /tmp
       - /run/postgresql
@@ -308,6 +309,7 @@ services:
     restart: always
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
