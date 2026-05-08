@@ -60,6 +60,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # location-service's Dockerfile COPYs services/location-service/data,
+      # which holds GeoLite2 .mmdb files (gitignored). Fetch them from a
+      # community mirror so the COPY finds them — no MaxMind license key
+      # needed. NOTE: this redistribution is unaffiliated with MaxMind and
+      # may violate their TOS for commercial / production use. Switch to
+      # MaxMind's official download if that matters to you.
+      - name: Fetch GeoLite2 databases (location-service only)
+        if: matrix.service == 'location-service'
+        run: |
+          MIRROR="https://github.com/P3TERX/GeoLite.mmdb/raw/download"
+          mkdir -p services/location-service/data
+          for db in GeoLite2-ASN GeoLite2-City GeoLite2-Country; do
+            echo "→ fetching $db.mmdb"
+            curl -sSL --fail --retry 3 --retry-delay 2 \
+              -o "services/location-service/data/${db}.mmdb" \
+              "${MIRROR}/${db}.mmdb"
+          done
+          ls -lh services/location-service/data/
+
       - name: Lower-case image namespace (GHCR rejects uppercase)
         id: ns
         run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
