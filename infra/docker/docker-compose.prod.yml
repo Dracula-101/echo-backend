@@ -231,12 +231,14 @@ services:
   postgres:
     image: ${IMAGE_REGISTRY}/postgres:${IMAGE_TAG:-latest}
     restart: always
-    # NOTE: do NOT set read_only here. Postgres's docker-entrypoint script
-    # writes to /var/lib/postgresql (parent of PGDATA) on init, and the
-    # server itself touches several paths outside the data dir. We still
-    # apply the rest of the hardening (cap_drop + no-new-privileges).
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    # No cap_drop / security_opt / read_only here:
+    #   - The entrypoint script chowns /var/lib/postgresql/data → CAP_CHOWN
+    #   - su-exec drops root → postgres user → CAP_SETUID + CAP_SETGID +
+    #     no-new-privileges would block it
+    #   - Postgres writes to /var/lib/postgresql (parent of PGDATA) on init,
+    #     so read_only also breaks startup
+    # The container is on the internal-only network and never exposed
+    # publicly, so the marginal hardening isn't worth the breakage risk.
     tmpfs:
       - /tmp
       - /run/postgresql
@@ -322,6 +324,10 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      # Whitelist the four-letter commands the healthcheck uses ("ruok"
+      # → "imok"). Without this, newer Zookeeper releases reject the
+      # command for security and the healthcheck never flips healthy.
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "ruok,stat,conf,isro,srvr"
       KAFKA_HEAP_OPTS: "${ZK_HEAP_OPTS:--Xmx128m -Xms96m}"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
