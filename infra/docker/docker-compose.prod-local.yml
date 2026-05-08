@@ -1,0 +1,63 @@
+# =============================================================================
+# Local prod-test overlay.
+#
+# Layered ON TOP of docker-compose.prod.yml to mirror the production stack
+# on your laptop. Two changes from real prod:
+#
+#   1) Images are BUILT locally instead of pulled from GHCR (PULL_POLICY
+#      defaults to never here so docker compose doesn't try to fetch them).
+#   2) Host ports are exposed for direct access — no Caddy needed.
+#
+# Usage:
+#   cp .env.prod.example .env.prod && $EDITOR .env.prod
+#   make prod-local-up
+#     # or:
+#   docker compose \
+#     -f infra/docker/docker-compose.prod.yml \
+#     -f infra/docker/docker-compose.prod-local.yml \
+#     --env-file .env.prod up -d --build --wait
+# =============================================================================
+name: echo-backend
+
+services:
+  postgres:
+    ports: ["127.0.0.1:5432:5432"]
+
+  redis:
+    ports: ["127.0.0.1:6379:6379"]
+
+  kafka:
+    ports: ["127.0.0.1:9092:29092"]
+
+  api-gateway:
+    ports: ["8080:8080"]
+    pull_policy: never
+
+  auth-service:
+    ports: ["8081:8081"]
+    pull_policy: never
+
+  user-service:
+    ports: ["8082:8082"]
+    pull_policy: never
+
+  message-service:
+    ports: ["8083:8083"]
+    pull_policy: never
+
+  ws-service:
+    ports: ["8086:8086"]
+    pull_policy: never
+
+  # Profiled services
+  location-service:
+    ports: ["8090:8090"]
+    pull_policy: never
+
+  media-service:
+    ports: ["8085:8085"]
+    pull_policy: never
+
+  presence-service:
+    ports: ["8084:8084"]
+    pull_policy: never

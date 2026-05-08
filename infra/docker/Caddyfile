@@ -1,0 +1,77 @@
+# Public reverse proxy for the echo-backend stack.
+#
+# DOMAIN values:
+#   - "api.example.com"  → automatic HTTPS via Let's Encrypt (ACME).
+#   - ":80"              → plain HTTP on every host (no TLS). Useful for
+#                          first-boot validation against the raw VM IP.
+#
+# Caddy doesn't support default values in env-var substitution, so .env.prod
+# MUST set DOMAIN to one of the two forms above. The example file ships
+# with `DOMAIN=:80` so a fresh deploy works without a domain configured.
+
+{
+	email {$ACME_EMAIL}
+	admin localhost:2019
+	# Servers tuning — let Caddy use HTTP/2 and HTTP/3 by default.
+	servers {
+		# Trust X-Forwarded-* only from upstream proxies. Empty list means
+		# "no upstream proxy" — Caddy itself is the edge.
+		trusted_proxies static private_ranges
+	}
+}
+
+# Reusable header snippet — modern browser hardening.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		Permissions-Policy        "geolocation=(), microphone=(), camera=()"
+		# Strip Caddy's banner.
+		-Server
+	}
+}
+
+(common_proxy) {
+	header_up X-Real-IP {remote_host}
+	header_up X-Forwarded-For {remote_host}
+	header_up X-Forwarded-Proto {scheme}
+	# Conservative timeouts so a slow upstream can't exhaust connections.
+	transport http {
+		dial_timeout       5s
+		response_header_timeout 30s
+		read_timeout       300s
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	import security_headers
+
+	# Caddy's own health endpoint (used by the container healthcheck).
+	handle /caddy-health {
+		respond "ok" 200
+	}
+
+	# WebSocket. Caddy detects the Upgrade header and keeps the connection
+	# long-lived; the read_timeout above is overridden for upgraded conns.
+	handle /ws* {
+		reverse_proxy ws-service:8086 {
+			import common_proxy
+		}
+	}
+
+	# Everything else → api-gateway.
+	handle {
+		reverse_proxy api-gateway:8080 {
+			import common_proxy
+		}
+	}
+
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}

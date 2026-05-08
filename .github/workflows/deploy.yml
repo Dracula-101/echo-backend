@@ -1,64 +1,183 @@
-name: Deploy to GCP E2 VM
+name: Build & Deploy
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Git SHA to deploy (defaults to the workflow's commit). Use to roll back."
+        required: false
+        type: string
+      profiles:
+        description: "Compose profiles to enable on the VM (space-separated)"
+        required: false
+        default: "caddy"
+        type: string
 
+# Build is fine to run in parallel branches, but deploy must serialize.
 concurrency:
   group: deploy-prod
-  cancel-in-progress: false  # don't cancel mid-deploy; risk of half-applied state
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NS:  ghcr.io/${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # for cosign / OIDC if you turn on signing later
 
 jobs:
-  deploy:
+  # ===========================================================================
+  # Build all service images on a beefy GHA runner and push them to GHCR.
+  # The VM never compiles Go — it just `docker compose pull`s.
+  #
+  # Skipped on workflow_dispatch with a custom `sha` (rollback path) — the
+  # images for that SHA are already in GHCR.
+  # ===========================================================================
+  build:
+    if: github.event_name == 'push' || inputs.sha == ''
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: true
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - user-service
+          - message-service
+          - ws-service
+          - location-service
+          - media-service
+          - presence-service
     steps:
-      - name: Trigger remote deploy
+      - uses: actions/checkout@v4
+
+      - name: Lower-case image namespace (GHCR rejects uppercase)
+        id: ns
+        run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          short=$(echo "${{ github.sha }}" | cut -c1-12)
+          {
+            echo "image=${{ steps.ns.outputs.ns }}/${{ matrix.service }}"
+            echo "sha_tag=sha-${short}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Two-tier cache:
+      #   - type=gha  → fastest, scoped to the repo + branch.
+      #   - type=registry → survives GHA cache eviction (7-day TTL).
+      # `mode=max` writes intermediate stages so the next builder gets full
+      # layer reuse, not just the final image.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          target: production
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.image }}:latest
+          cache-from: |
+            type=gha,scope=${{ matrix.service }}
+            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
+          cache-to: |
+            type=gha,scope=${{ matrix.service }},mode=max
+            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache,mode=max
+          provenance: false
+          # build args available to the Dockerfile if needed
+          build-args: |
+            VERSION=${{ github.sha }}
+
+  # ===========================================================================
+  # Optional vulnerability scan. Non-blocking by default — flip
+  # exit-code: '1' to gate the deploy on findings once you've triaged the
+  # baseline.
+  # ===========================================================================
+  scan:
+    if: github.event_name == 'push' || inputs.sha == ''
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - user-service
+          - message-service
+          - ws-service
+    steps:
+      - name: Lower-case image namespace
+        id: ns
+        run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: Trivy scan ${{ matrix.service }}
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.ns.outputs.ns }}/${{ matrix.service }}:sha-${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"   # informational; flip to "1" to gate deploys
+
+  # ===========================================================================
+  # SSH into the VM and run the deploy script. The script handles pull,
+  # migrations (via dependency chain), up --wait, and diagnostics.
+  # ===========================================================================
+  deploy:
+    needs: [build]
+    # Run when build succeeded OR was intentionally skipped (rollback path).
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve SHA & profiles
+        id: meta
+        run: |
+          sha="${{ inputs.sha || github.sha }}"
+          profiles="${{ inputs.profiles || 'caddy' }}"
+          {
+            echo "sha=$sha"
+            echo "profiles=$profiles"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_SSH_HOST }}
           username: ${{ secrets.VM_SSH_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_SSH_PORT || 22 }}
-          command_timeout: 25m
+          command_timeout: 12m
+          script_stop: true
+          envs: SHA,PROFILES
           script: |
             set -euo pipefail
-
+            export SHA='${{ steps.meta.outputs.sha }}'
+            export PROFILES='${{ steps.meta.outputs.profiles }}'
             cd /opt/echo-backend
-            git fetch --all --prune
-            git checkout ${{ github.sha }}
-
-            COMPOSE_FILES=( \
-              -f infra/docker/docker-compose.yml \
-              -f infra/docker/docker-compose.prod.yml \
-              -f infra/docker/docker-compose.e2small.yml \
-            )
-
-            # Pre-build cleanup. Keeps the base images but drops dangling layers
-            # and stale build cache from previous failed runs.
-            docker container prune -f
-            docker image prune -f
-            docker builder prune -f
-            df -h /var/lib/docker
-
-            # BuildKit on; cache mounts in the Dockerfiles persist /go/pkg/mod
-            # and /root/.cache/go-build between builds. After the first deploy,
-            # subsequent rebuilds compile in seconds.
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_DOCKER_CLI_BUILD=1
-
-            # Serial builds — parallel builds peak the 30 GB docker disk on
-            # e2-small. Profile-gated services (location/media/presence)
-            # are skipped automatically because we don't pass --profile full.
-            COMPOSE_PARALLEL_LIMIT=1 docker compose "${COMPOSE_FILES[@]}" \
-              --env-file .env build
-
-            docker compose "${COMPOSE_FILES[@]}" --env-file .env \
-              up -d --remove-orphans
-
-            docker compose "${COMPOSE_FILES[@]}" ps
-
-            # Trim aggressively post-deploy.
-            docker image prune -f
-            docker builder prune -f --keep-storage 2GB
+            bash deploy/vm-deploy.sh "$SHA"

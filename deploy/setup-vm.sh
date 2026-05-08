@@ -1,28 +1,46 @@
 #!/usr/bin/env bash
-# One-time bootstrap for a fresh GCP E2 VM (Ubuntu 22.04 LTS or Debian 12).
-# Run this AS THE DEPLOY USER (not root) over SSH:
+# =============================================================================
+# One-time bootstrap for a fresh Linux VM (Ubuntu 22.04+ or Debian 12+).
+# Works on any cloud — GCP, Hetzner, DigitalOcean, AWS, bare metal.
 #
-#   gcloud compute ssh echo-backend-vm --zone=us-central1-a \
-#     --command='bash -s' < deploy/setup-vm.sh
+# Run as the deploy user (NOT root):
 #
-# Idempotent — safe to re-run.
-
+#   ssh deploy@<VM_IP> 'bash -s' < deploy/setup-vm.sh
+#
+# Or with the repo URL pre-set:
+#
+#   ssh deploy@<VM_IP> "REPO_URL=https://github.com/you/echo-backend.git bash -s" \
+#     < deploy/setup-vm.sh
+#
+# Idempotent — re-running is safe.
+# =============================================================================
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/YOUR_USER/echo-backend.git}"
 APP_DIR="${APP_DIR:-/opt/echo-backend}"
+SWAP_SIZE="${SWAP_SIZE:-2G}"
+INFRA_IMAGES=(
+  postgres:15-alpine
+  redis:7-alpine
+  caddy:2-alpine
+  confluentinc/cp-kafka:7.5.0
+  confluentinc/cp-zookeeper:7.5.0
+)
 
-echo "[1/5] Installing Docker + git…"
+step() { echo; echo "==> $*"; }
+
+# ---------------------------------------------------------------------------
+step "[1/8] System packages"
+# ---------------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   sudo apt-get update -y
-  sudo apt-get install -y ca-certificates curl gnupg git ufw
+  sudo apt-get install -y ca-certificates curl gnupg git ufw jq \
+                          unattended-upgrades apt-listchanges
 
   sudo install -m 0755 -d /etc/apt/keyrings
-
-  # Detect distro family — Docker hosts separate repos for ubuntu and debian.
   DISTRO_ID=$(. /etc/os-release && echo "$ID")
   case "$DISTRO_ID" in
-    ubuntu|debian) : ;;  # supported
+    ubuntu|debian) : ;;
     *) echo "Unsupported distro: $DISTRO_ID"; exit 1 ;;
   esac
 
@@ -41,69 +59,114 @@ if ! command -v docker >/dev/null 2>&1; then
                           docker-buildx-plugin docker-compose-plugin
 
   sudo usermod -aG docker "$USER"
-  echo "    User '$USER' added to docker group; re-login may be needed."
+  echo "    Added '$USER' to docker group; re-login for docker without sudo."
 fi
 
-echo "[2/6] Configuring firewall (HTTP/HTTPS + SSH)…"
-# Use raw port rules — the "OpenSSH" application profile only exists on
-# Ubuntu, not Debian. Raw ports work on both.
-# `--force` is ONLY valid on `ufw enable/disable/reset`, not on `allow`.
+# ---------------------------------------------------------------------------
+step "[2/8] Firewall (SSH/HTTP/HTTPS only)"
+# ---------------------------------------------------------------------------
 sudo ufw allow 22/tcp
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
+sudo ufw allow 443/udp     # HTTP/3
 sudo ufw --force enable || true
 
-echo "[3/6] Cloning repo to $APP_DIR (or pulling if it exists)…"
+# ---------------------------------------------------------------------------
+step "[3/8] Auto security updates"
+# ---------------------------------------------------------------------------
+echo 'APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";' \
+  | sudo tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null
+sudo systemctl enable --now unattended-upgrades || true
+
+# ---------------------------------------------------------------------------
+step "[4/8] Repo at $APP_DIR"
+# ---------------------------------------------------------------------------
 if [ ! -d "$APP_DIR/.git" ]; then
   sudo mkdir -p "$APP_DIR"
   sudo chown -R "$USER:$USER" "$APP_DIR"
   git clone "$REPO_URL" "$APP_DIR"
 else
+  # Force the working tree to match origin/main. Bootstrap is a setup
+  # step, not a deploy step — vm-deploy.sh handles per-SHA checkouts.
   git -C "$APP_DIR" fetch --all --prune
+  git -C "$APP_DIR" checkout --quiet main
+  git -C "$APP_DIR" reset --hard --quiet origin/main
 fi
 
-echo "[4/6] Creating .env stub if missing…"
-if [ ! -f "$APP_DIR/.env" ]; then
-  cat > "$APP_DIR/.env" <<'EOF'
-# Fill in production values. The compose files reference these.
-POSTGRES_USER=echo
-POSTGRES_PASSWORD=CHANGE_ME
-POSTGRES_DB=echo_db
-REDIS_PASSWORD=CHANGE_ME
-JWT_SECRET_KEY=CHANGE_ME
-KAFKA_BROKERS=kafka:29092
-EOF
-  echo "    .env created at $APP_DIR/.env — EDIT THIS FILE before deploying."
+# ---------------------------------------------------------------------------
+step "[5/8] .env.prod"
+# ---------------------------------------------------------------------------
+if [ ! -f "$APP_DIR/.env.prod" ]; then
+  cp "$APP_DIR/.env.prod.example" "$APP_DIR/.env.prod"
+  chmod 600 "$APP_DIR/.env.prod"
+  echo "    Created $APP_DIR/.env.prod from the example."
+  echo "    EDIT IT BEFORE RUNNING THE FIRST DEPLOY."
 fi
 
-echo "[5/6] Setting up 2 GB swap (insurance for small VMs)…"
+# ---------------------------------------------------------------------------
+step "[6/8] ${SWAP_SIZE} swap (insurance for memory pressure)"
+# ---------------------------------------------------------------------------
 if ! sudo swapon --show | grep -q '/swapfile'; then
-  sudo fallocate -l 2G /swapfile
+  sudo fallocate -l "$SWAP_SIZE" /swapfile
   sudo chmod 600 /swapfile
   sudo mkswap /swapfile >/dev/null
   sudo swapon /swapfile
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
-  # Be conservative — only swap when memory is genuinely exhausted.
+  # Conservative — only swap when memory is genuinely exhausted.
   echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swappiness.conf > /dev/null
+  echo 'vm.overcommit_memory=1' | sudo tee -a /etc/sysctl.d/99-swappiness.conf > /dev/null
   sudo sysctl -p /etc/sysctl.d/99-swappiness.conf > /dev/null
-  echo "    2 GB swap enabled at /swapfile"
-else
-  echo "    swap already configured"
 fi
 
-echo "[6/6] Configuring Docker daemon for resource-constrained hosts…"
-# Cap log size so a noisy service can't fill the boot disk on a small VM.
+# ---------------------------------------------------------------------------
+step "[7/8] Docker daemon (capped logs, live-restore, BuildKit, IPv6 off)"
+# ---------------------------------------------------------------------------
 sudo mkdir -p /etc/docker
-echo '{
+sudo tee /etc/docker/daemon.json > /dev/null <<'JSON'
+{
   "log-driver": "json-file",
-  "log-opts": { "max-size": "10m", "max-file": "3" }
-}' | sudo tee /etc/docker/daemon.json > /dev/null
+  "log-opts": { "max-size": "10m", "max-file": "3" },
+  "live-restore": true,
+  "features": { "buildkit": true },
+  "default-ulimits": { "nofile": { "Name": "nofile", "Soft": 65536, "Hard": 65536 } },
+  "userland-proxy": false
+}
+JSON
 sudo systemctl restart docker || true
+sudo systemctl enable docker
 
-echo
-echo "Bootstrap complete. Next steps:"
-echo "  1. Edit $APP_DIR/.env with real production secrets."
-echo "  2. Push to main — the deploy workflow takes it from here."
-echo "     (Or run a first manual deploy: cd $APP_DIR && \\"
-echo "      docker compose -f infra/docker/docker-compose.yml \\"
-echo "        -f infra/docker/docker-compose.prod.yml --env-file .env up -d --build)"
+echo "    Pre-pulling infrastructure images (parallel — first deploy is faster)…"
+for img in "${INFRA_IMAGES[@]}"; do
+  ( docker pull --quiet "$img" >/dev/null 2>&1 && echo "      ✓ $img" ) &
+done
+wait
+
+# ---------------------------------------------------------------------------
+step "[8/8] Backup cron"
+# ---------------------------------------------------------------------------
+# Runs at 03:17 UTC nightly. Adjust the minute to a random value — every
+# tutorial uses 0/15/30/45 and the result is bursty load on cloud-storage.
+CRON_LINE="17 3 * * * $APP_DIR/infra/scripts/backup-postgres.sh >> /var/log/echo-backup.log 2>&1"
+( crontab -l 2>/dev/null | grep -vF "$APP_DIR/infra/scripts/backup-postgres.sh"; \
+  echo "$CRON_LINE" ) | crontab -
+sudo touch /var/log/echo-backup.log
+sudo chown "$USER:$USER" /var/log/echo-backup.log
+sudo chmod 0640 /var/log/echo-backup.log
+
+cat <<EOF
+
+==> Bootstrap complete.
+
+Next steps:
+  1. Edit $APP_DIR/.env.prod with real production secrets.
+       openssl rand -base64 48 | tr -d '\n='   # generate strong values
+  2. (Optional, only for private GHCR images)
+       echo <PAT> | docker login ghcr.io -u <github-user> --password-stdin
+  3. Push to main, or trigger the "Build & Deploy" workflow manually.
+
+Manual first deploy:
+  cd $APP_DIR
+  bash deploy/vm-deploy.sh \$(git rev-parse HEAD)
+EOF
