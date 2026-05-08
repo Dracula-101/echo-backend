@@ -126,6 +126,10 @@ fi
 step "[7/8] Docker daemon (capped logs, live-restore, BuildKit, IPv6 off)"
 # ---------------------------------------------------------------------------
 sudo mkdir -p /etc/docker
+# `registry-mirrors` routes Docker Hub pulls through Google's public
+# mirror — eliminates Docker Hub anonymous rate limits (100/6h per IP)
+# and is typically faster from a GCP VM. Affects only docker.io pulls;
+# ghcr.io (your service images) is untouched.
 sudo tee /etc/docker/daemon.json > /dev/null <<'JSON'
 {
   "log-driver": "json-file",
@@ -133,7 +137,8 @@ sudo tee /etc/docker/daemon.json > /dev/null <<'JSON'
   "live-restore": true,
   "features": { "buildkit": true },
   "default-ulimits": { "nofile": { "Name": "nofile", "Soft": 65536, "Hard": 65536 } },
-  "userland-proxy": false
+  "userland-proxy": false,
+  "registry-mirrors": ["https://mirror.gcr.io"]
 }
 JSON
 sudo systemctl restart docker || true
