@@ -115,6 +115,12 @@ x-service-base: &service-base
   restart: always
   networks: [echo-internal]
   logging: *logging
+  # Mirrors the dev compose pattern: any var in .env.prod flows to every
+  # service's process env. Service configs (config.yaml) read what they
+  # need (EMAIL_ENABLED, MAILGUN_*, TWILIO_*, OAUTH_*, etc.) and ignore
+  # the rest. Inline `environment:` blocks below override per-service.
+  env_file:
+    - ${PWD}/.env.prod
   <<: *security
 
 # Resource budgets. Every limit is env-driven so you can right-size the
@@ -210,6 +216,7 @@ volumes:
   zookeeper_logs:
   caddy_data:
   caddy_config:
+  meilisearch_data:
   media_storage:
     labels: { com.echo.backup: "critical" }
 
@@ -372,113 +379,69 @@ services:
       com.echo.tier: messaging
 
   # ---------------------------------------------------------------------------
-  # One-shot DB initializer (first deploy only).
+  # Meilisearch — search backend used by user-service.
+  # Small footprint (~50 MB RAM idle); exposed only on the internal network.
+  # ---------------------------------------------------------------------------
+  meilisearch:
+    image: getmeili/meilisearch:v1.5
+    restart: always
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: production
+      MEILI_LOG_LEVEL: WARN
+      MEILI_DB_PATH: /meili_data
+    volumes:
+      - meilisearch_data:/meili_data
+    networks: [echo-internal]
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--tries=1", "--spider", "http://localhost:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+        reservations: { cpus: "0.05", memory: 64M }
+    labels:
+      com.echo.service: meilisearch
+      com.echo.tier: search
+
+  # ---------------------------------------------------------------------------
+  # One-shot DB initializer (idempotent).
   #
-  # Loads the full schema — extensions, schemas, functions, triggers, RLS,
-  # indexes — wrapped in a single transaction so any failure rolls back
-  # cleanly. On subsequent deploys it detects the `auth` schema and exits 0
-  # immediately, so it never re-runs against a live database.
+  # Calls infra/scripts/init-db.sh — the same script used in dev. On a fresh
+  # database it loads extensions, schemas, functions, triggers, RLS,
+  # indexes, and pg_cron jobs in one transaction. On subsequent runs it
+  # detects auth.users and exits 0 immediately.
   #
-  # Uses postgres:15 (not alpine) to get GNU coreutils and a full bash.
-  # The database/ directory is mounted read-only; nothing is written to the
-  # container filesystem, so read_only: true is safe.
+  # Uses the custom postgres image (postgres:15 + pg_cron) so `psql` and
+  # bash are available. The database/ + script paths are bind-mounted ro.
   # ---------------------------------------------------------------------------
   db-init:
     image: ${IMAGE_REGISTRY}/postgres:${IMAGE_TAG:-latest}
     restart: "no"
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    read_only: true
-    tmpfs: [/tmp]
     depends_on:
       postgres: { condition: service_healthy }
     environment:
-      PGHOST: postgres
-      PGPORT: 5432
-      PGUSER: ${POSTGRES_USER}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DATABASE_DIR: /database
       PGPASSWORD: ${POSTGRES_PASSWORD}
-      PGDATABASE: ${POSTGRES_DB}
     volumes:
       - ${PWD}/database:/database:ro
+      - ${PWD}/infra/scripts/init-db.sh:/init-db.sh:ro
     networks: [echo-internal]
     logging: *logging
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - |
-        set -euo pipefail
-
-        echo "[db-init] checking if schema exists..."
-        INITIALIZED=$$(psql -tAc \
-          "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='auth'" \
-          2>/dev/null || echo "0")
-
-        if [ "$$INITIALIZED" = "1" ]; then
-          echo "[db-init] schema already exists — skipping init"
-          exit 0
-        fi
-
-        echo "[db-init] fresh database detected — loading initial schema"
-
-        run() {
-          local f="$$1"
-          if [ -f "$$f" ]; then
-            echo "[db-init]   $$f"
-            psql -v ON_ERROR_STOP=1 -f "$$f" --quiet
-          else
-            echo "[db-init]   SKIP (not found): $$f"
-          fi
-        }
-
-        # Build and execute one transaction — if any file fails the whole
-        # thing rolls back and the deploy aborts cleanly.
-        {
-          echo "BEGIN;"
-
-          # 1. Extensions (CREATE EXTENSION IF NOT EXISTS — safe to re-run)
-          [ -f /database/extensions.sql ] && cat /database/extensions.sql
-
-          # 2. Schemas
-          for f in auth user message media notification analytics location; do
-            [ -f "/database/schemas/$${f}.schema.sql" ] \
-              && cat "/database/schemas/$${f}.schema.sql"
-          done
-
-          # 3. Functions
-          for f in \
-            auth.functions auth.trigger_functions \
-            users.functions users.trigger_functions \
-            media.functions media.trigger_functions \
-            messages.functions messages.trigger_functions \
-            notifications.functions notifications.trigger_functions
-          do
-            [ -f "/database/functions/$${f}.sql" ] \
-              && cat "/database/functions/$${f}.sql"
-          done
-
-          # 4. Triggers (all .sql files under each subdirectory, sorted)
-          for dir in auth users media messages notifications; do
-            if [ -d "/database/triggers/$$dir" ]; then
-              find "/database/triggers/$$dir" -maxdepth 1 -name '*.sql' \
-                | sort | xargs -I{} cat {}
-            fi
-          done
-
-          # 5. RLS policies
-          for f in auth users media messages notifications; do
-            [ -f "/database/rls/$${f}.rls.sql" ] \
-              && cat "/database/rls/$${f}.rls.sql"
-          done
-
-          # 6. Indexes
-          for f in auth users media messages notifications; do
-            [ -f "/database/indexes/$${f}.indexes.sql" ] \
-              && cat "/database/indexes/$${f}.indexes.sql"
-          done
-
-          echo "COMMIT;"
-        } | psql -v ON_ERROR_STOP=1 --quiet
-
-        echo "[db-init] schema loaded successfully"
+    entrypoint: ["bash", "/init-db.sh"]
 
   # ---------------------------------------------------------------------------
   # One-shot DB migrations.
@@ -582,7 +545,13 @@ services:
       <<: *env-app
       SERVER_PORT: 8082
       REDIS_DB: 2
-    depends_on: *depends-db
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY}
+      MEILISEARCH_INDEX_NAME: users
+      MEILISEARCH_TIMEOUT: 5s
+    depends_on:
+      <<: *depends-db
+      meilisearch: { condition: service_healthy }
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "wget", "-qO-", "--tries=1", "--spider", "http://localhost:8082/health"]

@@ -1,9 +1,24 @@
 #!/bin/bash
+# =============================================================================
+# Echo Backend — database initializer.
+#
+# Used in TWO contexts:
+#   1) Local dev: invoked by a developer or a Makefile target. Reads
+#      $PROJECT_ROOT/.env for credentials.
+#   2) Production: called by the `db-init` compose service. Credentials
+#      come from container env (POSTGRES_HOST=postgres etc.). The repo is
+#      not laid out the same way, so DATABASE_DIR is supplied by the
+#      compose mount.
+#
+# Idempotent — exits 0 if the schema is already loaded.
+# =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DATABASE_DIR="$PROJECT_ROOT/database"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." 2>/dev/null && pwd || echo /)"
+# DATABASE_DIR is overrideable so the same script runs unmodified inside
+# the prod db-init container.
+DATABASE_DIR="${DATABASE_DIR:-$PROJECT_ROOT/database}"
 
 FORCE_RECREATE=false
 SKIP_INDEXES=false
@@ -19,7 +34,9 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-if [ -f "$PROJECT_ROOT/.env" ]; then
+# Source PROJECT_ROOT/.env only if present AND we don't already have
+# credentials from the container env.
+if [ -f "$PROJECT_ROOT/.env" ] && [ -z "${POSTGRES_HOST:-}" ]; then
     set -a
     source <(grep -v '^#' "$PROJECT_ROOT/.env" | grep '=')
     set +a

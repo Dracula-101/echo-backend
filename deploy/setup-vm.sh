@@ -144,7 +144,15 @@ done
 wait
 
 # ---------------------------------------------------------------------------
-step "[8/8] Backup cron"
+step "[8/9] Secrets directory"
+# ---------------------------------------------------------------------------
+# Caddy mounts $APP_DIR/secrets at /etc/caddy/certs. Create it now so the
+# bind mount won't fail on first up, even before the user SCPs cert files.
+mkdir -p "$APP_DIR/secrets"
+chmod 700 "$APP_DIR/secrets"
+
+# ---------------------------------------------------------------------------
+step "[9/9] Backup cron"
 # ---------------------------------------------------------------------------
 # Runs at 03:17 UTC nightly. Adjust the minute to a random value — every
 # tutorial uses 0/15/30/45 and the result is bursty load on cloud-storage.
@@ -157,16 +165,43 @@ sudo chmod 0640 /var/log/echo-backup.log
 
 cat <<EOF
 
+============================================================
 ==> Bootstrap complete.
+============================================================
 
-Next steps:
-  1. Edit $APP_DIR/.env.prod with real production secrets.
-       openssl rand -base64 48 | tr -d '\n='   # generate strong values
-  2. (Optional, only for private GHCR images)
-       echo <PAT> | docker login ghcr.io -u <github-user> --password-stdin
-  3. Push to main, or trigger the "Build & Deploy" workflow manually.
+What's done on the VM:
+  - Docker + compose installed; deploy user added to docker group
+  - ufw open for SSH + HTTP + HTTPS (incl. HTTP/3 over UDP)
+  - Repo cloned to $APP_DIR
+  - .env.prod created from .env.prod.example (still has placeholders)
+  - 2 GB swap, conservative swappiness, raised file descriptors
+  - Docker daemon: capped logs, live-restore, BuildKit
+  - Infra images pre-pulled (postgres, redis, caddy, kafka, zookeeper)
+  - $APP_DIR/secrets/ created (mode 700) for TLS certs
+  - Nightly Postgres backup cron at 03:17 UTC
 
-Manual first deploy:
-  cd $APP_DIR
-  bash deploy/vm-deploy.sh \$(git rev-parse HEAD)
+What you still need to do (from your laptop):
+  1. SCP the real .env.prod over the placeholder:
+       scp -i ~/.ssh/echo_deploy .env.prod \\
+         deploy@<VM_IP>:$APP_DIR/.env.prod
+
+  2. SCP your TLS certs (Cloudflare Origin Cert or Let's Encrypt):
+       scp -i ~/.ssh/echo_deploy cert.pem key.pem \\
+         deploy@<VM_IP>:$APP_DIR/secrets/
+
+  3. (Once) Add 3 GH repo secrets so CI can SSH in:
+       VM_SSH_HOST, VM_SSH_USER=deploy, VM_SSH_KEY=<contents of private key>
+
+  4. Push to main — the workflow builds images and runs vm-deploy.sh for you.
+
+Or, to deploy manually from inside this VM:
+  cd $APP_DIR && make vm-up
+
+Useful commands once running:
+  make vm-status                # what's healthy
+  make vm-logs SVC=ws-service   # tail logs
+  make vm-restart SVC=foo       # restart one service
+  make vm-psql                  # open a psql shell
+  make vm-backup                # ad-hoc backup right now
+  make vm-init-db               # re-run idempotent schema loader
 EOF

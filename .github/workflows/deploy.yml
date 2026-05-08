@@ -1,3 +1,20 @@
+# =============================================================================
+# Echo Backend — CI/CD pipeline.
+#
+# Stages (each fails fast for the whole run):
+#   1. verify  — compose config, Caddyfile, bash syntax. Runs in seconds.
+#   2. build   — matrix of all images (Go services + custom postgres).
+#                Pushes to GHCR with :sha-<short> and :latest tags.
+#                Two-tier cache: GHA (fast, evicts in 7d) + GHCR registry
+#                (survives, mode=max writes intermediate stages).
+#   3. scan    — Trivy CVE scan of app images (informational by default).
+#   4. deploy  — SSH into the VM, run deploy/vm-deploy.sh <sha>.
+#
+# Trigger paths:
+#   - push to main: full pipeline.
+#   - workflow_dispatch with `sha`: skip build/scan, deploy only (rollback).
+#   - workflow_dispatch without `sha`: full pipeline at HEAD.
+# =============================================================================
 name: Build & Deploy
 
 on:
@@ -7,19 +24,20 @@ on:
       - "docs/**"
       - "**/*.md"
       - ".github/ISSUE_TEMPLATE/**"
+      - "deploy/README.md"
   workflow_dispatch:
     inputs:
       sha:
-        description: "Git SHA to deploy (defaults to the workflow's commit). Use to roll back."
+        description: "Git SHA to deploy (omit to build+deploy HEAD; provide to rollback to a previous build)"
         required: false
         type: string
       profiles:
-        description: "Compose profiles to enable on the VM (space-separated)"
+        description: "Compose profiles for the deploy step (space-separated)"
         required: false
         default: "caddy"
         type: string
 
-# Build is fine to run in parallel branches, but deploy must serialize.
+# Build can fan out across branches; deploy must serialize against the VM.
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
@@ -31,68 +49,95 @@ env:
 permissions:
   contents: read
   packages: write
-  id-token: write # for cosign / OIDC if you turn on signing later
+  id-token: write   # for cosign / OIDC if added later
 
 jobs:
   # ===========================================================================
-  # Build all service images on a beefy GHA runner and push them to GHCR.
-  # The VM never compiles Go — it just `docker compose pull`s.
-  #
-  # Skipped on workflow_dispatch with a custom `sha` (rollback path) — the
-  # images for that SHA are already in GHCR.
+  # 1. Verify — fast static checks. Runs in ~20s.
+  # ===========================================================================
+  verify:
+    if: github.event_name == 'push' || inputs.sha == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash syntax (deploy + scripts)
+        run: |
+          set -e
+          for f in deploy/*.sh infra/scripts/*.sh; do
+            [ -f "$f" ] || continue
+            echo "→ $f"
+            bash -n "$f"
+          done
+
+      - name: Compose config (prod)
+        run: |
+          docker compose \
+            -f infra/docker/docker-compose.prod.yml \
+            --env-file .env.prod.example \
+            --profile caddy --profile full \
+            config --quiet
+          echo "OK — prod compose parses with all profiles"
+
+      - name: Compose config (prod-local overlay)
+        run: |
+          docker compose \
+            -f infra/docker/docker-compose.prod.yml \
+            -f infra/docker/docker-compose.prod-local.yml \
+            --env-file .env.prod.example \
+            config --quiet
+          echo "OK — prod-local overlay parses"
+
+      - name: Caddyfile syntax
+        env:
+          DOMAIN: ":80"
+          ACME_EMAIL: ""
+        run: |
+          docker run --rm \
+            -e DOMAIN -e ACME_EMAIL \
+            -v "$PWD/infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Summary
+        run: echo "::notice::All static checks passed."
+
+  # ===========================================================================
+  # 2. Build — fan out across services + postgres, push to GHCR.
   # ===========================================================================
   build:
+    needs: [verify]
     if: github.event_name == 'push' || inputs.sha == ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: true
       matrix:
-        service:
-          - api-gateway
-          - auth-service
-          - user-service
-          - message-service
-          - ws-service
-          - location-service
-          - media-service
-          - presence-service
+        include:
+          - service: api-gateway
+          - service: auth-service
+          - service: user-service
+          - service: message-service
+          - service: ws-service
+          - service: media-service
+          - service: presence-service
+          - service: location-service
+            # GeoLite2 .mmdb files are gitignored — fetch from a community
+            # mirror before docker build so the COPY in the Dockerfile finds
+            # them. Switch to MaxMind's official URL + license key if their
+            # TOS matters to you (see deploy/README.md).
+            pre_build: geolite
+          - service: postgres
+            dockerfile: infra/docker/database/Dockerfile
+            no_target: true   # postgres image is single-stage
+
     steps:
       - uses: actions/checkout@v4
 
-      # location-service's Dockerfile COPYs services/location-service/data,
-      # which holds GeoLite2 .mmdb files (gitignored). Fetch them from a
-      # community mirror so the COPY finds them — no MaxMind license key
-      # needed. NOTE: this redistribution is unaffiliated with MaxMind and
-      # may violate their TOS for commercial / production use. Switch to
-      # MaxMind's official download if that matters to you.
-      - name: Fetch GeoLite2 databases (location-service only)
-        if: matrix.service == 'location-service'
-        run: |
-          MIRROR="https://github.com/P3TERX/GeoLite.mmdb/raw/download"
-          mkdir -p services/location-service/data
-          for db in GeoLite2-ASN GeoLite2-City GeoLite2-Country; do
-            echo "→ fetching $db.mmdb"
-            curl -sSL --fail --retry 3 --retry-delay 2 \
-              -o "services/location-service/data/${db}.mmdb" \
-              "${MIRROR}/${db}.mmdb"
-          done
-          ls -lh services/location-service/data/
-
-      - name: Lower-case image namespace (GHCR rejects uppercase)
+      - name: Lower-case image namespace
         id: ns
         run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute tags
         id: tags
@@ -103,46 +148,18 @@ jobs:
             echo "sha_tag=sha-${short}"
           } >> "$GITHUB_OUTPUT"
 
-      # Two-tier cache:
-      #   - type=gha  → fastest, scoped to the repo + branch.
-      #   - type=registry → survives GHA cache eviction (7-day TTL).
-      # `mode=max` writes intermediate stages so the next builder gets full
-      # layer reuse, not just the final image.
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: services/${{ matrix.service }}/Dockerfile
-          target: production
-          push: true
-          tags: |
-            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
-            ${{ steps.tags.outputs.image }}:latest
-          cache-from: |
-            type=gha,scope=${{ matrix.service }}
-            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
-          cache-to: |
-            type=gha,scope=${{ matrix.service }},mode=max
-            type=registry,ref=${{ steps.tags.outputs.image }}:buildcache,mode=max
-          provenance: false
-          # build args available to the Dockerfile if needed
-          build-args: |
-            VERSION=${{ github.sha }}
-
-  # ===========================================================================
-  # Build the custom Postgres image (postgres:15 + pg_cron).
-  # Kept separate from the Go service matrix — different Dockerfile path,
-  # no `target: production` stage.
-  # ===========================================================================
-  build-postgres:
-    if: github.event_name == 'push' || inputs.sha == ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Lower-case image namespace
-        id: ns
-        run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: Pre-build — fetch GeoLite2 (location-service only)
+        if: matrix.pre_build == 'geolite'
+        run: |
+          MIRROR="https://github.com/P3TERX/GeoLite.mmdb/raw/download"
+          mkdir -p services/location-service/data
+          for db in GeoLite2-ASN GeoLite2-City GeoLite2-Country; do
+            echo "→ $db.mmdb"
+            curl -sSL --fail --retry 3 --retry-delay 2 \
+              -o "services/location-service/data/${db}.mmdb" \
+              "${MIRROR}/${db}.mmdb"
+          done
+          ls -lh services/location-service/data/
 
       - uses: docker/setup-buildx-action@v3
         with:
@@ -154,39 +171,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tags
-        id: tags
-        run: |
-          short=$(echo "${{ github.sha }}" | cut -c1-12)
-          {
-            echo "image=${{ steps.ns.outputs.ns }}/postgres"
-            echo "sha_tag=sha-${short}"
-          } >> "$GITHUB_OUTPUT"
-
-      - uses: docker/build-push-action@v6
+      - name: Build & push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: infra/docker/database/Dockerfile
+          file: ${{ matrix.dockerfile || format('services/{0}/Dockerfile', matrix.service) }}
+          target: ${{ matrix.no_target && '' || 'production' }}
           push: true
           tags: |
             ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.image }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp || github.run_started_at }}
+            com.echo.service=${{ matrix.service }}
           cache-from: |
-            type=gha,scope=postgres
+            type=gha,scope=${{ matrix.service }}
             type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
           cache-to: |
-            type=gha,scope=postgres,mode=max
+            type=gha,scope=${{ matrix.service }},mode=max
             type=registry,ref=${{ steps.tags.outputs.image }}:buildcache,mode=max
           provenance: false
+          build-args: |
+            VERSION=${{ github.sha }}
+
+      - name: Summary
+        run: |
+          echo "### ${{ matrix.service }} :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- image: \`${{ steps.tags.outputs.image }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- tags: \`${{ steps.tags.outputs.sha_tag }}\`, \`latest\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ===========================================================================
-  # Optional vulnerability scan. Non-blocking by default — flip
-  # exit-code: '1' to gate the deploy on findings once you've triaged the
-  # baseline.
+  # 3. Scan — Trivy CVE scan. Non-blocking; flip exit-code to 1 to gate.
   # ===========================================================================
   scan:
+    needs: [build]
     if: github.event_name == 'push' || inputs.sha == ''
-    needs: [build, build-postgres]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -205,22 +226,26 @@ jobs:
       - name: Lower-case image namespace
         id: ns
         run: echo "ns=$(echo '${{ env.IMAGE_NS }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Compute sha tag
+        id: tag
+        run: echo "sha_tag=sha-$(echo '${{ github.sha }}' | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - name: Trivy scan ${{ matrix.service }}
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ steps.ns.outputs.ns }}/${{ matrix.service }}:sha-${{ github.sha }}
+          image-ref: ${{ steps.ns.outputs.ns }}/${{ matrix.service }}:${{ steps.tag.outputs.sha_tag }}
           format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "0" # informational; flip to "1" to gate deploys
+          exit-code: "0"   # informational; flip to "1" once you triage baseline
 
   # ===========================================================================
-  # SSH into the VM and run the deploy script. The script handles pull,
-  # migrations (via dependency chain), up --wait, and diagnostics.
+  # 4. Deploy — SSH into the VM, run vm-deploy.sh.
+  #    Runs after build succeeds OR after build is skipped (rollback path).
   # ===========================================================================
   deploy:
-    needs: [build, build-postgres]
-    # Run when build succeeded OR was intentionally skipped (rollback path).
+    needs: [build]
     if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -232,8 +257,18 @@ jobs:
           profiles="${{ inputs.profiles || 'caddy' }}"
           {
             echo "sha=$sha"
+            echo "short=$(echo "$sha" | cut -c1-12)"
             echo "profiles=$profiles"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Pre-deploy summary
+        run: |
+          {
+            echo "### Deploying"
+            echo "- SHA: \`${{ steps.meta.outputs.sha }}\` (\`sha-${{ steps.meta.outputs.short }}\`)"
+            echo "- Profiles: \`${{ steps.meta.outputs.profiles }}\`"
+            echo "- Trigger: \`${{ github.event_name }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -251,3 +286,9 @@ jobs:
             export PROFILES='${{ steps.meta.outputs.profiles }}'
             cd /opt/echo-backend
             bash deploy/vm-deploy.sh "$SHA"
+
+      - name: Post-deploy health check (best effort)
+        if: ${{ success() }}
+        run: |
+          echo "::notice::Deploy step succeeded. Stack should be healthy on the VM."
+          echo "Run \`make vm-status\` on the box to verify."
