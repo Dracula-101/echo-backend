@@ -32,7 +32,8 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/services/api-gateway/main .
 COPY --from=builder /app/services/api-gateway/configs ./configs
-COPY --from=builder /app/services/api-gateway/tls ./tls
+# tls/ intentionally not copied — Caddy terminates HTTPS at the edge,
+# api-gateway listens plain HTTP on the internal network.
 
 EXPOSE 8080 9090
 

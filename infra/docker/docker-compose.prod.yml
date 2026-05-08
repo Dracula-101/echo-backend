@@ -623,6 +623,10 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ${PWD}/infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Origin certs (Cloudflare Origin Cert or any PEM pair).
+      # If the secrets dir is empty, Caddy falls back to ACME via Let's
+      # Encrypt — see the Caddyfile for the conditional.
+      - ${PWD}/secrets:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     networks: [echo-internal]

@@ -217,3 +217,7 @@ dist/
 
 # MMDB files
 *.mmdb
+# Production TLS certs / origin certs — never commit
+/secrets/*.pem
+/secrets/*.crt
+/secrets/*.key

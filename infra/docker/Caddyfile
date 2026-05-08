@@ -1,7 +1,10 @@
 # Public reverse proxy for the echo-backend stack.
 #
 # DOMAIN values:
-#   - "api.example.com"  → automatic HTTPS via Let's Encrypt (ACME).
+#   - "api.example.com"  → HTTPS. If /etc/caddy/certs/cert.pem exists,
+#                          Caddy uses that pair (e.g. Cloudflare Origin
+#                          Certificate). Otherwise it falls back to
+#                          Let's Encrypt via ACME.
 #   - ":80"              → plain HTTP on every host (no TLS). Useful for
 #                          first-boot validation against the raw VM IP.
 #
@@ -48,6 +51,13 @@
 {$DOMAIN} {
 	encode zstd gzip
 	import security_headers
+
+	# Use the Cloudflare Origin Cert (or any PEM pair). Files are mounted
+	# read-only via docker-compose.prod.yml from /opt/echo-backend/secrets.
+	# Caddy will refuse to start if these are missing — which is the
+	# behavior we want in production. To switch back to Let's Encrypt,
+	# delete this `tls` line and Caddy reverts to automatic ACME.
+	tls /etc/caddy/certs/cert.pem /etc/caddy/certs/key.pem
 
 	# Caddy's own health endpoint (used by the container healthcheck).
 	handle /caddy-health {
