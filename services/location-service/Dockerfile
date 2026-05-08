@@ -29,7 +29,6 @@ COPY --from=builder /app/services/location-service/main .
 COPY --from=builder /app/services/location-service/data ./data
 
 # Copy environment file
-COPY services/location-service/.env .env
 
 EXPOSE 8090 9092
 

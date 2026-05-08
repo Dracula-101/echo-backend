@@ -29,7 +29,6 @@ COPY --from=builder /app/services/auth-service/main .
 COPY --from=builder /app/services/auth-service/configs ./configs
 
 # Copy environment file
-COPY services/auth-service/.env .env
 
 EXPOSE 8081 9091
 

@@ -29,7 +29,6 @@ COPY --from=builder /app/services/presence-service/main .
 COPY --from=builder /app/services/presence-service/configs ./configs
 
 # Copy environment file
-COPY services/presence-service/.env .env
 
 EXPOSE 8086 9096
 

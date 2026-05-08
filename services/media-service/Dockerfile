@@ -29,7 +29,6 @@ COPY --from=builder /app/services/media-service/main .
 COPY --from=builder /app/services/media-service/configs ./configs
 
 # Copy environment file
-COPY services/media-service/.env .env
 
 EXPOSE 8084
 

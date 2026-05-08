@@ -28,7 +28,6 @@ WORKDIR /app
 COPY --from=builder /app/services/message-service/main .
 
 # Copy environment file
-COPY services/message-service/.env .env
 
 EXPOSE 8083 9093
 
