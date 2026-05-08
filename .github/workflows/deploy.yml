@@ -129,13 +129,21 @@ jobs:
       matrix:
         include:
           - service: api-gateway
+            target: production
           - service: auth-service
+            target: production
           - service: user-service
+            target: production
           - service: message-service
+            target: production
           - service: ws-service
+            target: production
           - service: media-service
+            target: production
           - service: presence-service
+            target: production
           - service: location-service
+            target: production
             # GeoLite2 .mmdb files are gitignored — fetch from a community
             # mirror before docker build so the COPY in the Dockerfile finds
             # them. Switch to MaxMind's official URL + license key if their
@@ -143,7 +151,8 @@ jobs:
             pre_build: geolite
           - service: postgres
             dockerfile: infra/docker/database/Dockerfile
-            no_target: true   # postgres image is single-stage
+            # No `target:` here — postgres image is single-stage. Empty
+            # target on the next step skips the --target flag.
 
     steps:
       - uses: actions/checkout@v4
@@ -189,7 +198,9 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile || format('services/{0}/Dockerfile', matrix.service) }}
-          target: ${{ matrix.no_target && '' || 'production' }}
+          # When matrix.target is unset (postgres), GHA evaluates this to
+          # an empty string; the action skips the --target flag.
+          target: ${{ matrix.target }}
           push: true
           tags: |
             ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
