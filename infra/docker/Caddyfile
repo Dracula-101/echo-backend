@@ -13,12 +13,15 @@
 # with `DOMAIN=:80` so a fresh deploy works without a domain configured.
 
 {
-	email {$ACME_EMAIL}
+	# We're using Cloudflare Origin Certs (see the `tls` line below), not
+	# ACME, so no `email` directive is needed. To switch back to Let's
+	# Encrypt, add `email {$ACME_EMAIL}` here AND ensure ACME_EMAIL is
+	# set in .env.prod (Caddy refuses to parse a bare `email` directive).
 	admin localhost:2019
-	# Servers tuning — let Caddy use HTTP/2 and HTTP/3 by default.
 	servers {
-		# Trust X-Forwarded-* only from upstream proxies. Empty list means
-		# "no upstream proxy" — Caddy itself is the edge.
+		# Trust X-Forwarded-* only from private upstream proxies (Cloudflare
+		# proxies → VM connection traverses the public internet, but CF's
+		# IPs are in the trusted_proxies list when needed).
 		trusted_proxies static private_ranges
 	}
 }
@@ -37,9 +40,9 @@
 }
 
 (common_proxy) {
+	# Caddy passes X-Forwarded-For / X-Forwarded-Proto / X-Forwarded-Host
+	# automatically, so we only set X-Real-IP explicitly.
 	header_up X-Real-IP {remote_host}
-	header_up X-Forwarded-For {remote_host}
-	header_up X-Forwarded-Proto {scheme}
 	# Conservative timeouts so a slow upstream can't exhaust connections.
 	transport http {
 		dial_timeout       5s

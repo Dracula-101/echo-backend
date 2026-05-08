@@ -97,12 +97,19 @@ jobs:
 
       - name: Caddyfile syntax
         env:
-          DOMAIN: ":80"
-          ACME_EMAIL: ""
+          # Real-domain mode is the only mode actually used in prod. The
+          # Caddyfile references /etc/caddy/certs/{cert,key}.pem — generate
+          # a throwaway self-signed pair so `caddy validate` can resolve them.
+          DOMAIN: "echo-app.net"
         run: |
+          mkdir -p ci-certs
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout ci-certs/key.pem -out ci-certs/cert.pem \
+            -days 1 -subj "/CN=ci-validation" >/dev/null 2>&1
           docker run --rm \
-            -e DOMAIN -e ACME_EMAIL \
+            -e DOMAIN \
             -v "$PWD/infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/ci-certs:/etc/caddy/certs:ro" \
             caddy:2-alpine \
             caddy validate --config /etc/caddy/Caddyfile
 
