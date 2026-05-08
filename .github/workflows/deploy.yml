@@ -1,0 +1,57 @@
+name: Deploy to GCP E2 VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false  # don't cancel mid-deploy; risk of half-applied state
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Trigger remote deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_SSH_HOST }}
+          username: ${{ secrets.VM_SSH_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+
+            cd /opt/echo-backend
+            git fetch --all --prune
+            git checkout ${{ github.sha }}
+
+            # docker compose v2 + buildx are installed by deploy/setup-vm.sh.
+            # --build means we rebuild images from source on the VM. Slower on
+            # first deploy; cached on subsequent ones.
+            #
+            # On 2 GB e2-small we run only the essential services. The e2small
+            # overlay tunes JVM heaps + GOMEMLIMIT to fit. Stub services are
+            # omitted from the `up` line, not deleted from the compose.
+            COMPOSE_FILES=( \
+              -f infra/docker/docker-compose.yml \
+              -f infra/docker/docker-compose.prod.yml \
+              -f infra/docker/docker-compose.e2small.yml \
+            )
+            ESSENTIAL_SERVICES=( \
+              postgres redis zookeeper kafka \
+              api-gateway auth-service user-service message-service ws-service \
+            )
+
+            docker compose "${COMPOSE_FILES[@]}" --env-file .env \
+              up -d --build --remove-orphans "${ESSENTIAL_SERVICES[@]}"
+
+            # Show what's running so the workflow log captures it.
+            docker compose "${COMPOSE_FILES[@]}" ps
+
+            # Aggressive cleanup on 30 GB disk — every layer counts.
+            docker image prune -f
+            docker builder prune -f --keep-storage 2GB
